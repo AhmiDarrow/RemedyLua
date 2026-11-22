@@ -1,6 +1,7 @@
 # RemedyLua
 
 [![crates.io](https://img.shields.io/crates/v/remedy-lua.svg)](https://crates.io/crates/remedy-lua)
+[![docs.rs](https://img.shields.io/docsrs/remedy-lua)](https://docs.rs/remedy-lua)
 
 **A Lua 5.4 superset in safe Rust, built to run untrusted scripts inside applications.**
 
