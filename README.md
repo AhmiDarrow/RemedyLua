@@ -40,11 +40,11 @@ and works as a standalone embeddable engine for any Rust host.
 
 ## Quick start
 
-RemedyLua is not yet published to crates.io. Add it as a git dependency:
+Add it from crates.io:
 
 ```toml
 [dependencies]
-remedy-lua = { git = "https://github.com/AhmiDarrow/RemedyLua" }
+remedy-lua = "0.1"
 ```
 
 ```rust
