@@ -1,0 +1,16 @@
+[package]
+name = "remedy-lua-oracle"
+description = "Test-only: the reference C Lua 5.4 (built from the Lua 5.4.7 sources) as an oracle for RemedyLua's differential tests and benchmarks."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "MIT"
+repository.workspace = true
+authors.workspace = true
+publish = false
+
+[build-dependencies]
+cc = "1"
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"

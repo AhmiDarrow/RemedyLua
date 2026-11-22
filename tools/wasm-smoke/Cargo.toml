@@ -1,0 +1,16 @@
+# Proof that RemedyLua runs in a browser's wasm (wasm32-unknown-unknown) with no imports.
+# Not in the workspace. Run: node tools/wasm-smoke/smoke.mjs (it builds first).
+[package]
+name = "remedy-lua-wasm-smoke"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+path = "src/lib.rs"
+
+[dependencies]
+remedy-lua = { path = "../../crates/remedy-lua" }
+
+[workspace]

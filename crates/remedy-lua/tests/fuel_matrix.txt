@@ -1,0 +1,10 @@
+grow fast true: fuel 2127685, 1 calls, 300000 149685 300000
+grow fast false: fuel 2127685, 1 calls, 300000 149685 300000
+mixed fast true: fuel 1599534, 1 calls, 140002 800209938 140001
+mixed fast false: fuel 1599534, 1 calls, 140002 800209938 140001
+ctor fast true: fuel 202755, 1 calls, 120000 200059951 120000
+ctor fast false: fuel 202755, 1 calls, 120000 200059951 120000
+shrink fast true: fuel 1136702, 1 calls, 46690 867791171 0
+shrink fast false: fuel 1136702, 1 calls, 46690 867791171 0
+insert fast true: fuel 2564585, 1 calls, 200000 99860 200000
+insert fast false: fuel 2564585, 1 calls, 200000 99860 200000

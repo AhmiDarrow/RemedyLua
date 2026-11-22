@@ -1,0 +1,13 @@
+-- MAJOR (RemedyLua dialect): interpolated expressions that don't parse.
+-- 1. An expression starting with `#` (`{#t}`, `{#{1, p}}`): "unexpected symbol near
+--    <eof>". The expression text is re-lexed with Lexer::tokens(), which skips a first
+--    line starting with '#' as a shebang (lexer.rs:265-270): the whole expression vanishes.
+-- 2. A long string containing `}` (`{[[}]]}`): the brace scan in lexer.rs interp() skips
+--    short strings but not long brackets (or comments), so it ends the expression early.
+-- Plain twin (fuzz-13-interp-braces-plain.lua): "2x y", "<1>", "<}>".
+local p = 1
+local t = {1}
+local s = `{#{1, p}}x y`
+local u = `<{#t}>`
+local v = `<{[[}]]}>`
+return s, u, v

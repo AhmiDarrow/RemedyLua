@@ -1,0 +1,36 @@
+[package]
+name = "remedy-lua"
+description = "A Lua 5.4 superset in safe Rust for running untrusted scripts: exact fuel, memory and depth limits, an incremental collector, an optional typed dialect and a capability-based host API."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+readme = "../../README.md"
+keywords = ["lua", "scripting", "sandbox", "interpreter", "remedy"]
+categories = ["compilers", "development-tools"]
+autotests = false
+
+[features]
+# The recursive parser and compiler, kept to check the iterative ones against.
+front-oracle = []
+# The segmented storage wasm uses (array parts, slabs) on this build, with small sizes,
+# for its tests (the C Lua differential runs natively).
+segmented-arrays = []
+# A call from the host that pauses at the end of a poll and resumes (`Lua::start_call`):
+# its signature is not settled yet (SEC7-G1).
+unstable-resumable = []
+
+[dependencies]
+
+[dev-dependencies]
+remedy-lua-oracle = { path = "../remedy-lua-oracle" }
+
+
+[lints]
+workspace = true
+
+[[test]]
+name = "all"
+path = "tests/all/main.rs"

@@ -1,0 +1,18 @@
+# The reserve of a growing array part in a browser's wasm (wasm32-unknown-unknown): how long
+# `reserve` takes for a buffer of 16 to 64 MiB, whether it moved (a full copy), and a
+# 2^21 -> 2^22 table growth whole and sliced. Not in the workspace. Run: node
+# tools/wasm-reserve/run.mjs (it builds first, release).
+[package]
+name = "remedy-lua-wasm-reserve"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+path = "src/lib.rs"
+
+[dependencies]
+remedy-lua = { path = "../../crates/remedy-lua" }
+
+[workspace]
