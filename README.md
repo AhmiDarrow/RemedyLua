@@ -1,5 +1,7 @@
 # RemedyLua
 
+[![crates.io](https://img.shields.io/crates/v/remedy-lua.svg)](https://crates.io/crates/remedy-lua)
+
 **A Lua 5.4 superset in safe Rust, built to run untrusted scripts inside applications.**
 
 RemedyLua is a from-scratch implementation of Lua 5.4: lexer, parser, compiler, virtual
