@@ -1,6 +1,6 @@
 # Known issues
 
-The open issues in RemedyLua 0.1.0. Each has an ID that tests and code comments refer to.
+The open issues in RemedyLua 0.1.1. Each has an ID that tests and code comments refer to.
 `docs/reference.md` (Budgets) explains the limits these touch.
 
 `tests/test_lists.rs` reads the status column below: a test marked `[known]` in
