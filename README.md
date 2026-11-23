@@ -86,26 +86,26 @@ cargo run -p remedy-lua --example check -- path/to/file.rlua
 On the 21-program benchmark suite, RemedyLua runs at a geometric mean of about **1.2x
 C Lua 5.4.7's wall time** (faster than C Lua on string concatenation, formatting and table
 churn), with full metering on. Per-benchmark numbers and methodology are in
-[`docs/performance.md`](docs/performance.md).
+[`docs/performance.md`](https://github.com/AhmiDarrow/RemedyLua/blob/main/docs/performance.md).
 
 ## Documentation
 
 | Document | Contents |
 |---|---|
-| [`docs/reference.md`](docs/reference.md) | The language reference: the `.rlua` dialect, the type checker, every difference from Lua 5.4, the standard library and its capabilities, budgets, and the embedding guide with an API index. |
+| [`docs/reference.md`](https://github.com/AhmiDarrow/RemedyLua/blob/main/docs/reference.md) | The language reference: the `.rlua` dialect, the type checker, every difference from Lua 5.4, the standard library and its capabilities, budgets, and the embedding guide with an API index. |
 | API docs | `cargo doc -p remedy-lua --open`. Every public item is documented. |
-| [`docs/known-issues.md`](docs/known-issues.md) | Open issues, their status and workarounds for hosts. |
-| [`docs/performance.md`](docs/performance.md) | Benchmark results against C Lua 5.4.7 and how they were measured. |
-| [`docs/testing.md`](docs/testing.md) | How RemedyLua is tested, the C Lua oracle, and the gate. |
-| [`CHANGELOG.md`](CHANGELOG.md) | Releases and known limitations. |
-| [`CONTRIBUTING.md`](CONTRIBUTING.md) | Project rules, building, testing and where the open work is. |
+| [`docs/known-issues.md`](https://github.com/AhmiDarrow/RemedyLua/blob/main/docs/known-issues.md) | Open issues, their status and workarounds for hosts. |
+| [`docs/performance.md`](https://github.com/AhmiDarrow/RemedyLua/blob/main/docs/performance.md) | Benchmark results against C Lua 5.4.7 and how they were measured. |
+| [`docs/testing.md`](https://github.com/AhmiDarrow/RemedyLua/blob/main/docs/testing.md) | How RemedyLua is tested, the C Lua oracle, and the gate. |
+| [`CHANGELOG.md`](https://github.com/AhmiDarrow/RemedyLua/blob/main/CHANGELOG.md) | Releases and known limitations. |
+| [`CONTRIBUTING.md`](https://github.com/AhmiDarrow/RemedyLua/blob/main/CONTRIBUTING.md) | Project rules, building, testing and where the open work is. |
 
 ## Status
 
 Version **0.1.0**: near release, and ready for general testing. The language, standard
 library, limits and host API are feature-complete and tested against C Lua 5.4.7, including
 differential fuzzing. A few known limitations around collector fuel under very tight
-budgets are listed in [`docs/known-issues.md`](docs/known-issues.md). The resumable host
+budgets are listed in [`docs/known-issues.md`](https://github.com/AhmiDarrow/RemedyLua/blob/main/docs/known-issues.md). The resumable host
 call API (`unstable-resumable` feature) is not yet stable. Feedback and bug reports are
 welcome.
 
@@ -113,5 +113,5 @@ Requires Rust 1.96 or later (edition 2024).
 
 ## License
 
-Licensed under either of [Apache License 2.0](LICENSE-APACHE) or [MIT](LICENSE-MIT), at
+Licensed under either of [Apache License 2.0](https://github.com/AhmiDarrow/RemedyLua/blob/main/LICENSE-APACHE) or [MIT](https://github.com/AhmiDarrow/RemedyLua/blob/main/LICENSE-MIT), at
 your option.

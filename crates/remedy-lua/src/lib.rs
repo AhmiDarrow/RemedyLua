@@ -47,7 +47,7 @@
 //! A stale handle is refused ([`Error::Host`]) or reads as nil; it never reaches another
 //! object, and a handle from another state is refused too. A panic that unwinds through a
 //! call (a host function's, a clock's, a print sink's) poisons the state: every later call
-//! returns [`Error::Host`]. `docs/reference.md` has the full embedding guide.
+//! returns [`Error::Host`]. The [reference](https://github.com/AhmiDarrow/RemedyLua/blob/main/docs/reference.md) has the full embedding guide.
 //!
 //! ```
 //! use remedy_lua::{Lua, Limits, Libs, Value};
@@ -527,7 +527,7 @@ impl Default for DataLimits {
 /// is the only diagnostic (the first one). Otherwise, for `.rlua`, the type errors
 /// (`Severity::Error`, at most 500), and a `Severity::Warning` if the check stopped at its
 /// work or memory bound. A plain `.lua` file has no annotations, so it gets none.
-/// Checking never changes how the program runs (`docs/reference.md`, "The type checker").
+/// Checking never changes how the program runs (see [The type checker](https://github.com/AhmiDarrow/RemedyLua/blob/main/docs/reference.md#the-type-checker)).
 ///
 /// The parse may use 1 KiB per source byte plus 64 MiB ("not enough memory" past it), and
 /// the checker as much again for its own tables; its work is linear in the source.
