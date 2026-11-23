@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.1] - 2026-11-23
+
+### Fixed
+
+- README and API-doc links point at the GitHub repository, so they work on crates.io and docs.rs.
+
 ## [0.1.0] - 2026-11-22
 
 ### Added
