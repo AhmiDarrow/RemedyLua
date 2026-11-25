@@ -102,7 +102,7 @@ churn), with full metering on. Per-benchmark numbers and methodology are in
 
 ## Status
 
-Version **0.1.1**: near release, and ready for general testing. The language, standard
+Version **0.1.2**: near release, and ready for general testing. The language, standard
 library, limits and host API are feature-complete and tested against C Lua 5.4.7, including
 differential fuzzing. A few known limitations around collector fuel under very tight
 budgets are listed in [`docs/known-issues.md`](https://github.com/AhmiDarrow/RemedyLua/blob/main/docs/known-issues.md). The resumable host
