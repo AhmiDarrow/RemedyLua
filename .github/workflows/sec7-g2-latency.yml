@@ -1,0 +1,53 @@
+name: SEC7-G2 independent latency check
+on:
+  push:
+    branches: [validation/sec7-g2-latency]
+permissions:
+  contents: read
+jobs:
+  paired:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      TZ: UTC
+      CARGO_PROFILE_TEST_CODEGEN_UNITS: 1
+    steps:
+      - name: Prepare pinned compiler, Lua oracle and source revisions
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.96.0 --profile minimal
+          curl -fsSLo lua.tar.gz https://www.lua.org/ftp/lua-5.4.7.tar.gz
+          echo '9fbf5e28ef86c69858f6d3d34eccc32e911c1a28b4120ff3e84aaa70cfbf1e30  lua.tar.gz' | sha256sum -c -
+          tar xf lua.tar.gz
+          echo "LUA_SRC=$PWD/lua-5.4.7/src" >> "$GITHUB_ENV"
+          git clone --quiet "https://github.com/$GITHUB_REPOSITORY.git" sources
+          git -C sources worktree add --detach ../baseline 36c02e6a1468f0c19acbc452bd0f767d1e606858
+          git -C sources worktree add --detach ../candidate ef5444f6530ed8abbce7880eb9e3db1cb50b1b30
+          test "$(git -C candidate rev-parse 'HEAD^{tree}')" = 66205c91a5ef3e216d1cf51f045fcfbe28c26192
+      - name: Build both test executables before measuring
+        shell: bash
+        run: |
+          set -euo pipefail
+          for variant in baseline candidate; do
+            (cd "$variant" && cargo +1.96.0 test --locked -p remedy-lua --test all --no-run)
+          done
+      - name: Run the unchanged timing gate three times per revision
+        shell: bash
+        run: |
+          set -euo pipefail
+          failures=0
+          for trial in 1 2 3; do
+            for variant in baseline candidate; do
+              echo "::group::$variant trial $trial"
+              if (cd "$variant" && cargo +1.96.0 test --locked -p remedy-lua --test all -- --exact --test-threads=1 sweep6::s6gc_2e_a_big_table_is_marked_a_chunk_a_step); then
+                result=PASS
+              else
+                result=FAIL
+                if [[ "$variant" == candidate ]]; then failures=$((failures + 1)); fi
+              fi
+              echo "$variant trial $trial $result" >> "$GITHUB_STEP_SUMMARY"
+              echo "::endgroup::"
+            done
+          done
+          test "$failures" = 0
