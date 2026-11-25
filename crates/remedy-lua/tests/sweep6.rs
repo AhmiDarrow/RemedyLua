@@ -1569,6 +1569,66 @@ fn f7_state(seed: u64, fast: bool, n: usize, cap: usize) -> (Lua, remedy_lua::Ro
     (lua, f, wt)
 }
 
+/// Measures newly appended weak values near the cap. Every append in f7_state stores
+/// a fresh table; T is the only strong script owner of those values after a call ends.
+/// The host snapshots contain unrooted, generation-checked handles.
+#[test]
+#[ignore = "SEC8-G3 retention measurement, 800,000 keys and a 512 MiB state"]
+fn sec8_g3_newborn_retention() {
+    use remedy_lua::{TableRef, TraceOp};
+    use std::collections::HashSet;
+
+    fn values(lua: &Lua, table: TableRef) -> HashSet<TableRef> {
+        lua.table_pairs(table).into_iter().filter_map(|(_, value)| value.as_table()).collect()
+    }
+
+    const CAP: usize = 512 << 20;
+    for seed in [1, 7] {
+        let (mut lua, f, weak_table) = f7_state(seed, true, 800_000, CAP >> 20);
+        let strong_table = lua.get_global("T").unwrap().as_table().unwrap();
+        let mut snapshot = None;
+        let mut measured = false;
+        for call in 1..=3300 {
+            let result = lua.call(f.value(), &[]);
+            assert!(matches!(result, Err(remedy_lua::Error::Limit(remedy_lua::LimitKind::Fuel))));
+            let used = lua.memory_used();
+            assert!(used <= CAP);
+            if CAP - used > 32 << 20 {
+                continue;
+            }
+            if snapshot.is_none() {
+                snapshot = Some((call, values(&lua, weak_table)));
+                lua.gc_trace(Some(std::sync::Arc::new(|| std::time::Duration::ZERO)), 1 << 19);
+            }
+            if CAP - used > 1024 {
+                continue;
+            }
+
+            let (first, before) = snapshot.take().unwrap();
+            let (trace, dropped) = lua.gc_trace_take();
+            assert_eq!(dropped, 0);
+            let starts = trace.iter().filter(|r| r.op == TraceOp::Start).count();
+            let strong = values(&lua, strong_table);
+            let weak = values(&lua, weak_table);
+            let new: Vec<_> = weak.difference(&before).copied().collect();
+            let weak_only = new.iter().filter(|v| !strong.contains(v)).count();
+
+            lua.set_limits(lua.limits().fuel(1 << 40));
+            lua.collect_garbage().unwrap();
+            let remaining = values(&lua, weak_table);
+            for v in &new {
+                assert_eq!(remaining.contains(v), strong.contains(v), "seed {seed}, table {v:?}");
+            }
+            println!("seed {seed}, calls {first}..={call}, {starts} incremental cycle starts, {} new, {weak_only} weak-only cleared", new.len());
+            measured = true;
+            break;
+        }
+        if !measured {
+            println!("seed {seed}: the workload stayed outside the final KiB through 3300 calls");
+        }
+    }
+}
+
 /// SEC8-F7's run: the G1 reproducer's core (`n` string keys, the weak `W`, the churn) under a
 /// memory limit of `cap` MiB, `calls` calls of 20,000 units, traced. Per call: its fuel
 /// left, its progress (`#W`) and the collector's fuel (every record but the call's own and
