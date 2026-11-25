@@ -20,6 +20,8 @@
 #           rule 5). Its step runs it and reports its result, but a failure of it alone
 #           does not fail the step. Remove the entry in the commit that closes the
 #           finding; the guard fails while it names a finding that is not open.
+# [known-windows]  [known], for a gate run on Windows only: the finding shows there and
+#           not on the reference system.
 #           Any test the guard finds reading a clock must be in one of these sections:
 #           a direct `thread_cpu(`, `Instant::now`, `.elapsed(`, `set_time_limit(` or
 #           `recv_timeout(`, or a call to a function that does (followed through calls
@@ -302,3 +304,8 @@ sweep5c_open2::probe_far
 sweep6_tables::probe_sizes
 
 [known]
+
+[known-windows]
+sweep6::s6gc_2e_a_big_table_is_marked_a_chunk_a_step SEC8-S2
+sweep6::sec7_g1_growth_report SEC8-S2
+sweep6_gcpart::s6gc_2e_a_step_does_no_more_than_the_call_pays_for SEC8-S2

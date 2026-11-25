@@ -23,7 +23,8 @@
 #   W   the wasm smoke test
 # Lists: crates/remedy-lua/tests/timing.list, kept true by the test_lists guard (in D).
 # A [known] test (tied to an open finding, gate rule 5) runs and is reported where it
-# runs, but a step whose only failures are [known] ones does not fail.
+# runs, but a step whose only failures are [known] ones does not fail. On Windows the
+# [known-windows] tests count as [known] too.
 #
 # Run it on a quiet machine: T and Tn measure time. Everything is built before the
 # first step, and the script reports other test or compiler processes at each step.
@@ -53,6 +54,7 @@ mapfile -t TIMING < <(section timing)
 mapfile -t ENVD < <(section env)
 mapfile -t ORACLE < <(section oracle)
 mapfile -t KNOWN < <(section known)
+case "$(uname -s)" in MINGW* | MSYS* | CYGWIN*) mapfile -t -O "${#KNOWN[@]}" KNOWN < <(section known-windows) ;; esac
 known_finding() { local k; for k in "${KNOWN[@]}"; do [ "${k%% *}" = "$1" ] && { echo "${k#* }"; return 0; }; done; return 1; }
 SKIP=()
 for t in "${TIMING[@]}"; do SKIP+=(--skip "$t"); done
@@ -67,7 +69,7 @@ others() { pgrep -fa 'rustc|cargo|deps/all-' 2>/dev/null | grep -v -e defunct -e
 FAILED=()
 step() {
   local name=$1; shift
-  echo "== $name  $(uptime | sed 's/^ *//')  other processes: $(others)"
+  echo "== $name  $(uptime 2>/dev/null | sed 's/^ *//')  other processes: $(others)"
   "$@" > "$LOGS/$name.log" 2>&1
   local rc=$?
   grep -E '^test result|^error|FAILED|wasm smoke' "$LOGS/$name.log" | sed 's/^/   /' | head -12

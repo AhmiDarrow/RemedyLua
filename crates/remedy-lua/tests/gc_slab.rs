@@ -49,13 +49,20 @@ fn child() {
     let kinds: Vec<&str> = parts.next().unwrap().split(',').collect();
     let fast = parts.next() == Some("fast");
     let seed: u64 = parts.next().unwrap().parse().unwrap();
-    let status = || std::fs::read_to_string("/proc/self/status").unwrap();
+    // (resident, peak resident) in KiB.
+    let resident = || match std::fs::read_to_string("/proc/self/status") {
+        Ok(s) => (kib(&s, "VmRSS:"), kib(&s, "VmHWM:")),
+        Err(_) => {
+            let (now, peak) = remedy_lua_oracle::process_memory();
+            assert!(peak > 0, "no resident memory figure on this system");
+            ((now >> 10) as usize, (peak >> 10) as usize)
+        }
+    };
     let mut lua = Lua::new(Limits::default().memory(LIMIT_MIB << 20).fuel(1 << 34).hash_seed(seed), Libs::ALL);
     lua.set_fast_loop(fast);
-    let h0 = kib(&status(), "VmHWM:");
+    let h0 = resident().1;
     lua.exec(&fill_script(&kinds, LIMIT_MIB), "=fill").unwrap();
-    let end_rss = kib(&status(), "VmRSS:");
-    let peak = kib(&status(), "VmHWM:");
+    let (end_rss, peak) = resident();
     println!(
         "SLAB peak_kib={} end_rss_kib={} counted_kib={} fuel={}",
         peak.saturating_sub(h0),

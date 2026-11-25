@@ -19,7 +19,18 @@ const NUM2STR_FIX: &str =
 const SEED_FIX: &str = "\nunsigned int oracle_seed(void);\n#define luai_makeseed(L) oracle_seed()\n";
 const NEWTHREAD_HOOK: &str = "  L1->hook = L->hook;\n  resethookcount(L1);";
 const NEWTHREAD_HOOK_FIX: &str = "  L1->hook = L->hook;\n  L1->hookcount = 1;  /* oracle: the step limit counts every coroutine */";
-const FIX_C: &str = "#include <stdio.h>\n#include <math.h>\n\
+/// Windows only (`oracle_libc.c` says why).
+const PTR2STR: &str = "#define lua_pointer2str(buff,sz,p)\tl_sprintf(buff,sz,\"%p\",p)";
+const PTR2STR_FIX: &str = "int oracle_ptr2str(char *s, size_t sz, const void *p);\n#define lua_pointer2str(buff,sz,p)\toracle_ptr2str(buff,sz,p)";
+const FMT_FIX: &str = "#include <stdio.h>\nint oracle_fmt(char *s, size_t sz, const char *fmt, ...);\n#define sprintf(s, ...) oracle_fmt((s), 1024, __VA_ARGS__)\n";
+/// `%a` through the C library, as luaconf.h gives every system but Windows (whose C89
+/// build writes hexadecimal floats itself and takes no flags, width or precision).
+const STRX_FIX: &str = "\nint oracle_fmt(char *s, size_t sz, const char *fmt, ...);\n#define lua_number2strx(L,b,sz,f,n) ((void)L, oracle_fmt(b,sz,f,(double)(n)))\n";
+const FMOD: &str = "    lua_pushnumber(L, l_mathop(fmod)(luaL_checknumber(L, 1),\n                                     luaL_checknumber(L, 2)));";
+const FMOD_FIX: &str = "  {\n    lua_Number b = luaL_checknumber(L, 2);\n    lua_pushnumber(L, l_mathop(fmod)(luaL_checknumber(L, 1), b));\n  }";
+/// C99's conversions, as loslib.c gives every system but Windows.
+const STRFTIME_FIX: &str = "#define LUA_STRFTIMEOPTIONS \"aAbBcCdDeFgGhHIjmMnprRStTuUVwWxXyYzZ%\" \"||\" \"EcECExEXEyEY\" \"OdOeOHOIOmOMOSOuOUOVOwOWOy\"\n";
+const FIX_C: &str ="#include <stdio.h>\n#include <math.h>\n\
 int oracle_num2str(char *s, size_t sz, double n) {\n\
   if (n != n) return snprintf(s, sz, \"%s\", signbit(n) ? \"-nan\" : \"nan\");\n\
   return snprintf(s, sz, \"%.14g\", n);\n\
@@ -37,6 +48,7 @@ fn main() {
          e.g.  LUA_SRC=/path/to/lua-5.4.7/src cargo test -p remedy-lua\n",
         src.display()
     );
+    let windows = std::env::var_os("CARGO_CFG_WINDOWS").is_some();
     let out = PathBuf::from(std::env::var("OUT_DIR").unwrap_or_default()).join("lua");
     let _ = std::fs::create_dir_all(&out);
     let mut files = Vec::new();
@@ -49,6 +61,12 @@ fn main() {
             if !fixed.contains("oracle_num2str") {
                 println!("cargo:warning=luaconf.h did not have the expected lua_number2str");
             }
+            let fixed = if windows {
+                assert!(fixed.contains(PTR2STR), "luaconf.h does not have the expected lua_pointer2str");
+                fixed.replace(PTR2STR, PTR2STR_FIX) + STRX_FIX
+            } else {
+                fixed
+            };
             // Before the include guard's closing `#endif`.
             text = match fixed.rfind("#endif") {
                 Some(i) => format!("{}{SEED_FIX}{}", &fixed[..i], &fixed[i..]),
@@ -59,6 +77,23 @@ fn main() {
             let fixed = text.replace("\r\n", "\n");
             assert!(fixed.contains(NEWTHREAD_HOOK), "lstate.c does not have the expected lua_newthread hook setup");
             text = fixed.replace(NEWTHREAD_HOOK, NEWTHREAD_HOOK_FIX);
+        }
+        if windows && name == "lstrlib.c" {
+            // `l` and `L` pack 8 bytes, as on the reference system (`long` is 4 here).
+            assert_eq!(text.matches("sizeof(long)").count(), 2, "lstrlib.c does not have the expected `long` options");
+            text = text.replace("sizeof(long)", "sizeof(long long)");
+            text.insert_str(0, FMT_FIX);
+        }
+        if windows && name == "loslib.c" {
+            text.insert_str(0, STRFTIME_FIX);
+            text.insert_str(0, "#include <locale.h>\nchar *oracle_setlocale(int cat, const char *l);\n#define setlocale oracle_setlocale\n");
+        }
+        if windows && name == "lmathlib.c" {
+            // C leaves the order two arguments are evaluated in to the compiler. The
+            // reference's reads the second first, so with both bad it names the second.
+            let fixed = text.replace("\r\n", "\n");
+            assert!(fixed.contains(FMOD), "lmathlib.c does not have the expected math.fmod");
+            text = fixed.replace(FMOD, FMOD_FIX);
         }
         let _ = std::fs::write(out.join(&name), text);
         if name.ends_with(".c") && name != "lua.c" && name != "luac.c" && name != "onelua.c" {
@@ -77,6 +112,9 @@ fn main() {
     // The memory ceiling for `run` (`oracle_cap`).
     files.push(manifest.join("oracle_mem.c"));
     println!("cargo:rerun-if-changed=oracle_mem.c");
+    // The C library's text as glibc writes it (`oracle_init`).
+    files.push(manifest.join("oracle_libc.c"));
+    println!("cargo:rerun-if-changed=oracle_libc.c");
     // As the stock 5.4 makefile builds it (RemedyLua matches it by default; its strict mode
     // is tested against fixed expectations).
     cc::Build::new().define("LUA_COMPAT_5_3", None).include(&out).files(&files).warnings(false).opt_level(2).compile("lua54oracle");
