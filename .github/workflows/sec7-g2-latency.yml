@@ -40,7 +40,7 @@ jobs:
           for trial in 1 2 3; do
             for variant in baseline candidate; do
               echo "::group::$variant trial $trial"
-              if (cd "$variant" && cargo +1.96.0 test --locked -p remedy-lua --test all -- --exact --test-threads=1 sweep6::s6gc_2e_a_big_table_is_marked_a_chunk_a_step); then
+              if (cd "$variant" && cargo +1.96.0 test --locked -p remedy-lua --test all -- --exact --test-threads=1 sweep6::sec7_g1_growth_report); then
                 result=PASS
               else
                 result=FAIL
