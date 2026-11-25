@@ -18,7 +18,7 @@ The open issues on the development branch. Each has an ID that tests and code co
 ## SEC8-G3 retention at the memory cap
 
 On the 800,000-key workload, the state first came within 32 MiB of the cap on call
-1,892 and within 1 KiB on call 2,188. During those 296 calls the script appended
+1,891 and within 1 KiB on call 2,187. During those 296 calls the script appended
 165,711 distinct new tables to its weak-value table. At the second snapshot, 560
 still had a strong owner. A full collection cleared the other 165,151 and kept all
 560 survivors. Seeds 1 and 7 gave the same counts. The probe stores unrooted
