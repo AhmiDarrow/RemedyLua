@@ -1269,6 +1269,86 @@ pub(crate) enum Gray {
     Thread(u32),
 }
 
+/// Each key names a slab page. Keeping bits instead of individual work items
+/// avoids copying or sifting the full frontier when a large table is scanned.
+#[derive(Default)]
+struct OrderedGray {
+    pages: std::collections::BTreeMap<Gray, Box<GrayPage>>,
+    // Finish the page selected at a dequeue before selecting the next one.
+    // The first discovery in a hash scan must never choose the active page.
+    active: Option<(Gray, Box<GrayPage>)>,
+}
+
+struct GrayPage {
+    words: [u64; 64],
+    nonempty: u64,
+}
+
+impl Gray {
+    fn index(self) -> u32 {
+        match self {
+            Self::Proto(i) | Self::Table(i) | Self::TablePart(i, _) | Self::Func(i)
+            | Self::Upval(i) | Self::Ud(i) | Self::Thread(i) => i,
+        }
+    }
+
+    fn at(self, i: u32) -> Self {
+        match self {
+            Self::Proto(_) => Self::Proto(i),
+            Self::Table(_) => Self::Table(i),
+            Self::TablePart(_, from) => Self::TablePart(i, from),
+            Self::Func(_) => Self::Func(i),
+            Self::Upval(_) => Self::Upval(i),
+            Self::Ud(_) => Self::Ud(i),
+            Self::Thread(_) => Self::Thread(i),
+        }
+    }
+}
+
+impl OrderedGray {
+    fn push(&mut self, g: Gray) {
+        let i = g.index();
+        let base = g.at(i & !4095);
+        let page = match self.active.as_mut() {
+            Some((key, p)) if *key == base => p,
+            _ => self.pages.entry(base).or_insert_with(|| Box::new(GrayPage { words: [0; 64], nonempty: 0 })),
+        };
+        let w = (i >> 6) & 63;
+        if let Some(bits) = page.words.get_mut(w as usize) {
+            *bits |= 1 << (i & 63);
+            page.nonempty |= 1 << w;
+        }
+    }
+
+    fn pop(&mut self) -> Option<Gray> {
+        if self.active.is_none() {
+            self.active = self.pages.pop_last();
+        }
+        let (base, page) = self.active.as_mut()?;
+        let w = page.nonempty.trailing_zeros();
+        let bits = page.words.get_mut(w as usize)?;
+        let i = base.index() + w * 64 + bits.trailing_zeros();
+        *bits &= *bits - 1;
+        if *bits == 0 {
+            page.nonempty &= !(1 << w);
+        }
+        let g = base.at(i);
+        if page.nonempty == 0 {
+            self.active = None;
+        }
+        Some(g)
+    }
+
+    fn is_empty(&self) -> bool {
+        self.active.is_none() && self.pages.is_empty()
+    }
+
+    fn clear(&mut self) {
+        self.pages.clear();
+        self.active = None;
+    }
+}
+
 /// The string interner: an open-addressing set of string slots keyed by content.
 ///
 /// A regrow does not place every string again at once: it sets the slots aside (`old`)
@@ -2145,7 +2225,7 @@ pub(crate) struct Heap {
     /// New objects discovered during a chunked table scan (including intervening
     /// writes) or ephemeron marking. Only their set is stable across hash layouts.
     /// Drain by kind and slab index once the active scan and the stack are done.
-    ordered_gray: std::collections::BinaryHeap<Gray>,
+    ordered_gray: Box<OrderedGray>,
     pub born: Born,
     pub grayagain: Vec<Gray>,
     /// Weak tables met while marking: (table, weak keys, weak values).
@@ -2912,13 +2992,6 @@ impl Heap {
 
     /// Starts traversing table `i` in chunks: the work.
     fn begin_part(&mut self, i: u32) -> usize {
-        // Room in the gray list for what its chunks can mark (two objects a slot, at most
-        // the objects there are), taken now: grown by doubling as they came, it copied 16
-        // MiB in one step (5 ms). Pages not written cost nothing; trimmed when the cycle
-        // ends, as the rest of the collector's scratch.
-        let objects = self.live_objects();
-        let slots = self.tables.at(i as usize).map_or(0, Table::slots);
-        self.ordered_gray.reserve(slots.saturating_mul(2).min(objects.saturating_sub(self.ordered_gray.len())));
         if let Some(c) = self.tables.color.get_mut(i as usize) {
             *c = BLACK;
         }
@@ -3889,9 +3962,6 @@ impl Heap {
     pub(crate) fn trim_scratch(&mut self) {
         trim_vec(&mut self.gray);
         self.ordered_gray.clear();
-        if self.ordered_gray.capacity() * std::mem::size_of::<Gray>() > SCRATCH_KEEP {
-            self.ordered_gray = Default::default();
-        }
         trim_vec(&mut self.born.list);
         trim_vec(&mut self.grayagain);
         trim_vec(&mut self.weak);
@@ -3911,7 +3981,7 @@ impl Heap {
         fn b<T>(v: &Vec<T>) -> usize {
             v.capacity() * std::mem::size_of::<T>()
         }
-        self.ordered_gray.capacity() * std::mem::size_of::<Gray>() + b(&self.gray) + b(&self.grayagain) + b(&self.weak) + b(&self.eph_links) + b(&self.trav_vals) + b(&self.trav_ups) + b(&self.mem.watch.moved) + b(&self.part_queue) + self.eph_waiting.capacity() * 16
+        (self.ordered_gray.pages.len() + usize::from(self.ordered_gray.active.is_some())) * std::mem::size_of::<GrayPage>() + b(&self.gray) + b(&self.grayagain) + b(&self.weak) + b(&self.eph_links) + b(&self.trav_vals) + b(&self.trav_ups) + b(&self.mem.watch.moved) + b(&self.part_queue) + self.eph_waiting.capacity() * 16
     }
 
     fn force_gray(&mut self, g: Gray) {
