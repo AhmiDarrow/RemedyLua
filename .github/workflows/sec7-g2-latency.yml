@@ -22,9 +22,9 @@ jobs:
           tar xf lua.tar.gz
           echo "LUA_SRC=$PWD/lua-5.4.7/src" >> "$GITHUB_ENV"
           git clone --quiet "https://github.com/$GITHUB_REPOSITORY.git" sources
-          git -C sources worktree add --detach ../baseline 36c02e6a1468f0c19acbc452bd0f767d1e606858
-          git -C sources worktree add --detach ../candidate ef5444f6530ed8abbce7880eb9e3db1cb50b1b30
-          test "$(git -C candidate rev-parse 'HEAD^{tree}')" = 66205c91a5ef3e216d1cf51f045fcfbe28c26192
+          git -C sources worktree add --detach ../baseline ef5444f6530ed8abbce7880eb9e3db1cb50b1b30
+          git -C sources worktree add --detach ../candidate 93e71d67c4d0f2dfedee8a2b16b7db586019122b
+          test "$(git -C candidate rev-parse 'HEAD^{tree}')" = a20d4ad3f17a060a68a80e7f3dc56f248bf5ce7b
       - name: Build both test executables before measuring
         shell: bash
         run: |
