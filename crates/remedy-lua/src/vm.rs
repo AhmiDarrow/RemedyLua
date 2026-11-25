@@ -1328,13 +1328,13 @@ impl Lua {
     }
 
     pub(crate) fn new_table(&mut self, arr: usize, hash: usize) -> Result<TableRef, LuaError> {
-        self.new_table_sized(arr, arr, hash)
+        self.new_table_sized::<false>(arr, arr, hash)
     }
 
     /// A table with room for `room` array slots, sized as Lua sizes it (`lua_createtable`
     /// or a constructor): `asize` array slots, `hash` fields (so `#` agrees).
-    pub(crate) fn new_table_sized(&mut self, room: usize, asize: usize, hash: usize) -> Result<TableRef, LuaError> {
-        let t = self.alloc(|h| h.new_table(room, hash))?;
+    pub(crate) fn new_table_sized<const REGISTER: bool>(&mut self, room: usize, asize: usize, hash: usize) -> Result<TableRef, LuaError> {
+        let t = self.alloc(|h| Heap::new_table_in::<REGISTER>(&mut h.mem, &mut h.tables, &mut h.born, (h.phase, h.sweep, h.table_seed), room, hash))?;
         if let Some(tab) = self.heap.tables.get_mut(t.idx) {
             tab.init_sizes(asize, hash);
         }
@@ -1740,7 +1740,21 @@ impl Lua {
         if self.heap.phase != crate::heap::Phase::Pause {
             // (The inverse of `step_budget`: the bytes the budget not given covers.)
             let owed = (unspent as u64).saturating_mul(800) / (self.heap.stepmul.max(1) as u64);
-            self.heap.mem.debt = (-STEP_SIZE).saturating_add(isize::try_from(owed).unwrap_or(isize::MAX));
+            let cap = self.heap.mem.cap;
+            let room = cap.saturating_sub(self.memory_used());
+            let runway = cap / 4;
+            // Even sweeping just the table slab would take more than one host call.
+            // Begin paying sooner while there is room to run the script between steps.
+            let tables = &self.heap.tables;
+            self.heap.born.trace_new_tables = room < runway
+                && ((tables.slots() - tables.free.len()) / WORK_PER_FUEL) as u64 > self.limits.fuel;
+            let interval = if self.heap.born.trace_new_tables {
+                let proportional = ((STEP_SIZE as u128 * room as u128) / runway as u128) as isize;
+                (proportional * proportional / STEP_SIZE).max(STEP_SIZE / 64)
+            } else {
+                STEP_SIZE
+            };
+            self.heap.mem.debt = (-interval).saturating_add(isize::try_from(owed).unwrap_or(isize::MAX));
         }
         // S5C-1: a step stops after the object that passes its budget, so how a cycle's
         // work splits into steps follows the order objects are reached, which follows
@@ -4827,7 +4841,7 @@ impl Lua {
                             gc_step_at!(true);
                         }
                         let (room, asize, hash) = crate::bytecode::newtable_sizes(arr, hash);
-                        let tr = t!(call!(self.new_table_sized(room, asize, hash)));
+                        let tr = t!(call!(self.new_table_sized::<true>(room, asize, hash)));
                         setr!(a, Value::Table(tr));
                     }
                     Instr::Add { a, b, c } => arith_rr!(Add, a, b, c),

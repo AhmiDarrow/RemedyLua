@@ -1214,6 +1214,8 @@ pub(crate) enum Phase {
 /// counted.
 #[derive(Default)]
 pub(crate) struct Born {
+    /// Trace register-owned table constructors from their owners under sustained pressure.
+    pub trace_new_tables: bool,
     pub list: Vec<Gray>,
     /// The work of every object made, and how much of it was charged (`take_work`) and
     /// left to the collector's steps (`take_step`): a marking step leaves the latter of
@@ -2812,12 +2814,12 @@ impl Heap {
     }
 
     pub fn new_table(&mut self, arr: usize, hash: usize) -> Result<TableRef, ()> {
-        Self::new_table_in(&mut self.mem, &mut self.tables, &mut self.born, (self.phase, self.sweep, self.table_seed), arr, hash)
+        Self::new_table_in::<false>(&mut self.mem, &mut self.tables, &mut self.born, (self.phase, self.sweep, self.table_seed), arr, hash)
     }
 
     /// [`Heap::new_table`] on the fields it touches (for the fast loop, which holds the
     /// prototypes borrowed).
-    pub(crate) fn new_table_in(
+    pub(crate) fn new_table_in<const REGISTER: bool>(
         mem: &mut Mem,
         tables: &mut Slab<Table>,
         born: &mut Born,
@@ -2826,6 +2828,10 @@ impl Heap {
         hash: usize,
     ) -> Result<TableRef, ()> {
         let cost = crate::table::new_cost(arr, hash);
+        // A bytecode constructor is in its destination register before collection can
+        // run again. Under pressure its owners (including that stack) trace it like any
+        // other table. Host and native constructors retain their normal birth color.
+        let phase = if REGISTER && born.trace_new_tables && phase == Phase::Propagate { Phase::Pause } else { phase };
         let color = |i| Self::new_color(phase, sweep, 1, i);
         let free = if mem.charge(cost).is_ok() {
             tables.take_free(mem, color)

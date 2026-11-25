@@ -1129,13 +1129,13 @@ fn sec8_g3_full_collections_are_traced() {
     let run = |fast: bool, traced: bool| {
         let mut lua = state(Limits::default().memory(16 << 20).fuel(1 << 40).hash_seed(1), fast);
         let f = lua.load("local j = 0 while true do j = j + 1 local t = {j, j} P = (P or 0) + 1 end", "=churn").unwrap();
-        lua.exec("K = {} for i = 1, 60000 do K[i] = {i} end", "=setup").unwrap();
+        lua.exec("K = {} for i = 1, 60000 do K[i] = {i} end collectgarbage('stop')", "=setup").unwrap();
         lua.set_limits(lua.limits().fuel(20_000));
         if traced {
             lua.gc_trace(Some(std::sync::Arc::new(|| std::time::Duration::ZERO)), 1 << 16);
         }
         let mut seen = Vec::new();
-        for _ in 0..300 {
+        for _ in 0..1200 {
             let r = lua.call(f.value(), &[]);
             assert!(matches!(r, Err(remedy_lua::Error::Limit(remedy_lua::LimitKind::Fuel))), "{r:?}");
             seen.push(lua.fuel_left());
@@ -1569,6 +1569,42 @@ fn f7_state(seed: u64, fast: bool, n: usize, cap: usize) -> (Lua, remedy_lua::Ro
     (lua, f, wt)
 }
 
+/// Under allocation pressure a short call can finish a script store between collector
+/// steps. k2 is the first strong field replaced on every invocation of this workload.
+#[test]
+fn sec8_g3_short_calls_keep_replacing_live_values_under_pressure() {
+    let mut reference = None;
+    for (seed, fast) in [(1, true), (7, false)] {
+        let (mut lua, f, _) = f7_state(seed, fast, F7_N, F7_CAP);
+        let owner = lua.get_global("T").unwrap().as_table().unwrap();
+        let first_key = lua.create_string("k2").unwrap();
+        let counter = lua.create_string("N").unwrap();
+        let mut previous = lua.table_get(owner, first_key);
+        let mut stalled = 0;
+        let mut progress = Vec::new();
+        lua.gc_trace(Some(std::sync::Arc::new(|| std::time::Duration::ZERO)), 1 << 21);
+        for _ in 0..F7_CALLS {
+            let r = lua.call(f.value(), &[]);
+            assert!(matches!(r, Err(remedy_lua::Error::Limit(remedy_lua::LimitKind::Fuel))));
+            assert!(lua.memory_used() <= F7_CAP << 20);
+            let current = lua.table_get(owner, first_key);
+            let table = current.as_table().unwrap();
+            assert!(lua.table_get(table, remedy_lua::Value::Int(1)).as_int().is_some());
+            stalled = if current == previous { stalled + 1 } else { 0 };
+            assert!(stalled <= 120, "{stalled} calls without a store");
+            previous = current;
+            progress.push(lua.table_get(lua.globals(), counter).as_int().unwrap());
+        }
+        let (trace, dropped) = lua.gc_trace_take();
+        assert_eq!(dropped, 0);
+        assert!(trace.iter().all(|r| r.op != remedy_lua::TraceOp::Full));
+        if let Some(expected) = &reference {
+            assert_eq!(&progress, expected);
+        }
+        reference = Some(progress);
+    }
+}
+
 /// Measures newly appended weak values near the cap. Every append in f7_state stores
 /// a fresh table; T is the only strong script owner of those values after a call ends.
 /// The host snapshots contain unrooted, generation-checked handles.
@@ -1637,6 +1673,8 @@ fn sec8_g3_newborn_retention() {
 fn f7_run(seed: u64, fast: bool, n: usize, cap: usize, calls: usize) -> (Vec<(u64, i64, u64)>, usize, [(u64, u64, u64); 2]) {
     use remedy_lua::TraceOp;
     let (mut lua, f, wt) = f7_state(seed, fast, n, cap);
+    // Exercise the emergency path even if incremental collection would avoid the cap.
+    lua.exec("collectgarbage('stop')", "=force-emergency").unwrap();
     lua.gc_trace(Some(std::sync::Arc::new(|| std::time::Duration::ZERO)), 1 << 21);
     let mut out = Vec::new();
     for _ in 0..calls {

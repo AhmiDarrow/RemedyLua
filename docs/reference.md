@@ -879,13 +879,12 @@ collection and tries again once.
 **Known limitation: a stall at the memory limit.** The limit is hard: an allocation goes in
 only when its charge fits. When it does not, the allocation runs a full collection, which
 finishes the cycle under way and then runs a whole new one, charged to the call as it goes.
-Objects made while a cycle marks survive that cycle, so a program that allocates fast
-through a long cycle reaches the limit with garbage that only the next whole cycle can
-free. Under a small per-call fuel, that collection spans many calls. Each of them spends
-its fuel in the collector and the script makes no progress until the collection frees
-enough. Measured on a churn of 800,000 live keys at 512 MiB with 20,000 fuel a call, this
-was about 1,000 calls in a row. The work is charged as it is done, never skipped, and the
-program goes on once memory fits. A host that cannot afford such a run of calls should give
+When less than a quarter of the cap remains and sweeping the table slab alone would exceed
+a call's fuel, the collector shortens the allocation interval between steps. It traces new
+Lua table constructors through their owners, allowing unreachable tables to be reclaimed
+in the current cycle. On the 800,000-key workload at 512 MiB and 20,000 fuel per call,
+the first 8,000 calls needed no emergency collection. Incremental collection can still
+occupy consecutive calls, and other workloads can still reach the hard cap. A host that cannot afford such a run of calls should give
 its state more memory headroom or larger calls. `Lua::collector_status` shows where the
 collector is: its phase, the fuel already owed (`owed_fuel`, exact, charged first by the
 collector's next steps), and a floor on what the cycle under way still needs

@@ -9,6 +9,8 @@
   multi-cycle collector regression.
 - Table constructors can reuse a free slab slot at the memory cap when the net
   allocation fits. This avoids an unnecessary emergency collection.
+- Under memory pressure, fuel-limited calls collect more frequently and can reclaim
+  newly constructed Lua tables within the current marking cycle (SEC8-G3).
 
 ## [0.1.1] - 2026-11-23
 

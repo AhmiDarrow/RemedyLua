@@ -700,7 +700,7 @@ pub(crate) fn run<const W: usize>(heap: &mut Heap, th: &mut ThreadState, top: &m
                 if heap.gc_due() || !heap.mem.fits(crate::table::new_cost(arr, hash)) {
                     break;
                 }
-                let Ok(tr) = Heap::new_table_in(&mut heap.mem, &mut heap.tables, &mut heap.born, (heap.phase, heap.sweep, heap.table_seed), arr, hash) else { break };
+                let Ok(tr) = Heap::new_table_in::<true>(&mut heap.mem, &mut heap.tables, &mut heap.born, (heap.phase, heap.sweep, heap.table_seed), arr, hash) else { break };
                 if let Some(t) = heap.tables.get_mut(tr.idx) {
                     t.init_sizes(asize, hash);
                 }

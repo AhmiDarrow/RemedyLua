@@ -8,7 +8,7 @@ The open issues on the development branch. Each has an ID that tests and code co
 
 | ID | Severity | Summary | Status |
 |---|---|---|---|
-| SEC8-G3 | medium | At the memory limit, an allocation's full collection under a small per-call fuel stalls the program for many calls in a row (about 1,000 calls for 800,000 live keys at 512 MiB with 20,000 fuel a call). The work is charged, never skipped, and the program resumes once memory fits. | open: newly allocated weak values survive the current cycle (measurements below) |
+| SEC8-G3 | medium | At the memory limit, an allocation's full collection under a small per-call fuel stalls the program for many calls in a row when incremental collection cannot free enough memory first. The work is charged, never skipped, and the program resumes once memory fits. | mitigated on the 800,000-key workload; worst-case progress remains open |
 | SEC8-F4-L | low | A table rehash bigger than one call's fuel is done across calls. A host write that changes the table's layout between those calls discards the kept work, so a host that does so often enough keeps the script's write from going in. | open, documented limitation: leave such a table alone between calls, or give the calls more fuel |
 | SEC8-S2 | medium | Native builds: the slab doubling that crosses glibc's mmap threshold copies the slab once, 10 to 14 ms of CPU at about 131,000 tables (18.9 MB). | open: embedder-side remedy (allocator choice or `M_MMAP_THRESHOLD`); a crate-side fix cost 1.86% speed and was declined |
 | SEC8-F2 | low | Clearing the dead part of a thread's stack at the collector's atomic step charges the whole stack even when all of it is live: about a quarter of a fuel per slot on a big live stack. | open |
@@ -17,7 +17,7 @@ The open issues on the development branch. Each has an ID that tests and code co
 
 ## SEC8-G3 retention at the memory cap
 
-On the 800,000-key workload, the state first came within 32 MiB of the cap on call
+Before the pacing change, on the 800,000-key workload, the state first came within 32 MiB of the cap on call
 1,891 and within 1 KiB on call 2,187. During those 296 calls the script appended
 165,711 distinct new tables to its weak-value table. At the second snapshot, 560
 still had a strong owner. A full collection cleared the other 165,151 and kept all
