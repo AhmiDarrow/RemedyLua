@@ -2825,12 +2825,28 @@ impl Heap {
         arr: usize,
         hash: usize,
     ) -> Result<TableRef, ()> {
-        mem.charge(crate::table::new_cost(arr, hash))?;
+        let cost = crate::table::new_cost(arr, hash);
+        let color = |i| Self::new_color(phase, sweep, 1, i);
+        let free = if mem.charge(cost).is_ok() {
+            tables.take_free(mem, color)
+        } else {
+            // Free slab slots are already charged to this state. At the cap a
+            // replacement only needs room for its net growth. Check the final
+            // account before consuming the slot so a refusal changes no handle.
+            let fits = mem.used.checked_sub(tables.slot_bytes)
+                .and_then(|used| used.checked_add(cost))
+                .is_some_and(|used| used <= mem.cap.saturating_add(mem.headroom));
+            if !fits {
+                return Err(());
+            }
+            let slot = tables.take_free(mem, color).ok_or(())?;
+            mem.charge(cost)?;
+            Some(slot)
+        };
         let slots = crate::table::hash_slots(hash);
         let walked = arr + slots;
         let (arr, nodes, live) = (mem.pool_arr(arr), mem.pool_nodes(slots), crate::table::LiveBits::for_len(slots));
-        let color = |i| Self::new_color(phase, sweep, 1, i);
-        let (idx, generation) = match tables.take_free(mem, color) {
+        let (idx, generation) = match free {
             Some((i, generation, t)) => {
                 (t.seed, t.arr, t.nodes, t.live) = (seed, arr.into(), nodes, live);
                 (i, generation)
@@ -4700,6 +4716,37 @@ mod tests {
                 assert_eq!(s.next_used(from), want, "round {round} from {from}");
             }
         }
+    }
+
+    /// At the memory cap the slot recovered by a table constructor counts toward
+    /// that constructor alone. A failed attempt must leave it available for retry.
+    #[test]
+    fn a_reused_table_slot_only_needs_room_for_net_growth() {
+        let mut lua = Lua::new(Limits::default(), Libs::ALL);
+        let old = lua.heap.new_table(0, 0).unwrap();
+        let keep = lua.heap.new_table(0, 0).unwrap();
+        let _root = lua.root(crate::Value::Table(keep));
+        lua.collect_garbage().unwrap();
+        let h = &mut lua.heap;
+        assert!(!h.tables.live(old.idx, old.generation));
+        assert_eq!(h.tables.free.last(), Some(&old.idx));
+
+        let (used, debt, slack) = (h.mem.used, h.mem.debt, h.mem.slack);
+        let cost = crate::table::new_cost(16, 0);
+        let exact = used - h.tables.slot_bytes + cost;
+        h.mem.cap = exact - 1;
+        assert!(h.new_table(16, 0).is_err());
+        assert_eq!((h.mem.used, h.mem.debt, h.mem.slack), (used, debt, slack));
+        assert_eq!(h.tables.free.last(), Some(&old.idx));
+
+        h.mem.cap = exact;
+        let new = h.new_table(16, 0).unwrap();
+        assert_eq!(new.idx, old.idx);
+        assert_ne!(new.generation, old.generation);
+        assert_eq!(h.mem.used, exact);
+        assert_eq!(h.mem.slack, slack - h.tables.slot_bytes);
+        assert_eq!(h.mem.debt, debt + cost as isize);
+        assert!(h.new_table(16, 0).is_err());
     }
 
     /// Dead tables' buffers are reused, and a full collection empties the pool, so the

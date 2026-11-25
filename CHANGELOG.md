@@ -7,6 +7,8 @@
 - Incremental marking visits children of hash tables in a deterministic order (SEC7-G2).
   Overwrites during marking now give the same progress across hash seeds on the
   multi-cycle collector regression.
+- Table constructors can reuse a free slab slot at the memory cap when the net
+  allocation fits. This avoids an unnecessary emergency collection.
 
 ## [0.1.1] - 2026-11-23
 
