@@ -1129,20 +1129,22 @@ fn sec8_g3_full_collections_are_traced() {
     let run = |fast: bool, traced: bool| {
         let mut lua = state(Limits::default().memory(16 << 20).fuel(1 << 40).hash_seed(1), fast);
         let f = lua.load("local j = 0 while true do j = j + 1 local t = {j, j} P = (P or 0) + 1 end", "=churn").unwrap();
-        lua.exec("K = {} for i = 1, 60000 do K[i] = {i} end collectgarbage('stop')", "=setup").unwrap();
-        lua.set_limits(lua.limits().fuel(20_000));
+        lua.exec("K = {} for i = 1, 60000 do K[i] = {i} end", "=setup").unwrap();
+        // Leave a fixed amount of headroom so allocations exercise emergency GC.
+        lua.set_limits(lua.limits().memory(lua.memory_used() + (1 << 20)).fuel(20_000));
         if traced {
             lua.gc_trace(Some(std::sync::Arc::new(|| std::time::Duration::ZERO)), 1 << 16);
         }
         let mut seen = Vec::new();
-        for _ in 0..1200 {
+        for _ in 0..300 {
             let r = lua.call(f.value(), &[]);
             assert!(matches!(r, Err(remedy_lua::Error::Limit(remedy_lua::LimitKind::Fuel))), "{r:?}");
             seen.push(lua.fuel_left());
         }
         // (Read after the calls: a host read finishes a suspended atomic phase first, an
         // entry of its own, SEC7-H2, which would fall between two calls' records.)
-        let recs = lua.gc_trace_take().0;
+        let (recs, dropped) = lua.gc_trace_take();
+        assert_eq!(dropped, 0);
         lua.set_limits(lua.limits().fuel(1 << 40));
         let progress = lua.get_global("P").ok().and_then(|v| v.as_int()).unwrap_or(0);
         ((seen, progress), recs)
