@@ -23,8 +23,8 @@ jobs:
           echo "LUA_SRC=$PWD/lua-5.4.7/src" >> "$GITHUB_ENV"
           git clone --quiet "https://github.com/$GITHUB_REPOSITORY.git" sources
           git -C sources worktree add --detach ../baseline 9d515e2cff1483a66511cc66a5130c0dc60b0fae
-          git -C sources worktree add --detach ../candidate 3cb6192d4ad34402c80b5dc2b4f040a1b05e16b9
-          test "$(git -C candidate rev-parse 'HEAD^{tree}')" = 69df5d2150d51d4dee06b64acc92ff53475f0a3b
+          git -C sources worktree add --detach ../candidate a213f9bd40c8faa49bde39ae657c7179e5d8c80d
+          test "$(git -C candidate rev-parse 'HEAD^{tree}')" = 52cbdb8b10746c58285ae77f4e24d97a57b34f6e
       - name: Build both test executables before measuring
         shell: bash
         run: |
@@ -39,15 +39,15 @@ jobs:
           failures=0
           for trial in 1 2 3; do
             for variant in baseline candidate; do
-              echo "::group::$variant trial $trial"
-              if (cd "$variant" && cargo +1.96.0 test --locked -p remedy-lua --test all -- --exact --test-threads=1 sweep6::sec7_g1_growth_report && cargo +1.96.0 test --locked -p remedy-lua --test all -- --exact --test-threads=1 sweep6::s6gc_2e_a_big_table_is_marked_a_chunk_a_step); then
-                result=PASS
-              else
-                result=FAIL
-                if [[ "$variant" == candidate ]]; then failures=$((failures + 1)); fi
-              fi
-              echo "$variant trial $trial $result" >> "$GITHUB_STEP_SUMMARY"
-              echo "::endgroup::"
+              for name in residuals::res_table_resize_resumes_in_1ms_slices sweep3_sec::lr29_huge_replacements_and_joins_stop_promptly sweep6::s6gc_2e_a_big_table_is_marked_a_chunk_a_step sweep6::s6gc_2e_the_atomic_phase_stops_at_the_fuel_limit sweep6::sec7_g1_growth_report sweep6_gcpart::s6gc_2e_a_step_does_no_more_than_the_call_pays_for; do
+                if (cd "$variant" && cargo +1.96.0 test --locked -p remedy-lua --test all -- --exact --test-threads=1 "$name"); then
+                  result=PASS
+                else
+                  result=FAIL
+                  if [[ "$variant" == candidate ]]; then failures=$((failures + 1)); fi
+                fi
+                echo "$variant trial $trial $name $result" >> "$GITHUB_STEP_SUMMARY"
+              done
             done
           done
           test "$failures" = 0
