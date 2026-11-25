@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- Incremental marking visits children of hash tables in a deterministic order (SEC7-G2).
+  Overwrites during marking now give the same progress across hash seeds on the
+  multi-cycle collector regression.
+
 ## [0.1.1] - 2026-11-23
 
 ### Fixed

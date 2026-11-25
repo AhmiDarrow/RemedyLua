@@ -27,7 +27,6 @@ which files take which. Timing tests run apart from the rest and are listed in
 ## Where the open work is
 
 [`docs/known-issues.md`](docs/known-issues.md) lists every open issue with its ID, severity
-and status. The largest are the collector's fuel following the hash seed (SEC7-G2) and
-the stall at the memory limit under a small per-call fuel (SEC8-G3).
+and status. The collector can stall at the memory limit under a small per-call fuel (SEC8-G3).
 
 Open an issue before a large change, so the design can be agreed first.

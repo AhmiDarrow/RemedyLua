@@ -1497,11 +1497,7 @@ impl Lua {
         // The registry and its loaded-modules table first, so the globals are traversed
         // before them (the gray list is a stack): the libraries in the loaded table are
         // reached through the globals, as they were before that table existed, and the
-        // modules only the loaded table holds right after the globals. (LIBS-1: traversed
-        // before the globals, the loaded table reached the libraries in its own hash order,
-        // a cycle's split into steps followed that order, and so fuel followed the seed far
-        // more often. It still can in rare shapes, as it could before this table existed:
-        // LIBS-8.)
+        // modules only the loaded table holds right after the globals.
         h.mark(Value::Table(self.registry));
         if let Some(l) = self.names.loaded {
             h.mark(Value::Table(l));

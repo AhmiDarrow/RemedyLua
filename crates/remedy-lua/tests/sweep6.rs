@@ -973,12 +973,15 @@ fn g1_growth_polled(
 /// chunk, four and sixty-four, each 200,000-unit call stops at its fuel limit (a tight
 /// limit, every call) with the same fuel left as with no polls, and the program leaves the
 /// same state (how far it got in its fuel, its tables). With polls of one chunk the calls
-/// do pause (more than one poll each). (Across seeds the program's progress differs
-/// before any pause: SEC7-G2.)
+/// do pause (more than one poll each). SEC7-G2: the weak array and the per-call
+/// progress also agree across seeds, even as the hash table grows during marking.
 #[test]
 fn sec7_g1_a_paused_step_is_invisible_to_the_fuel() {
+    let mut reference = None;
     for (fast, seed) in [(true, 1u64), (false, 1), (true, 7), (false, 7), (true, 0xdead_beef), (false, 0xdead_beef)] {
         let (fuel, _, _, (_, left)) = g1_growth_sliced(60_000, seed, fast, 60, None, None);
+        let baseline = reference.get_or_insert_with(|| (fuel.clone(), left.clone()));
+        assert_eq!((&fuel, &left), (&baseline.0, &baseline.1), "fast {fast}, seed {seed}");
         for slots in [4096usize, 4 * 4096, 64 * 4096] {
             let (sf, _, _, (polls, sleft)) = g1_growth_sliced(60_000, seed, fast, 60, None, Some(slots));
             assert_eq!(sf, fuel, "fast {fast}, seed {seed}, polls of {slots} slots: fuel");
@@ -1639,31 +1642,29 @@ fn sec8_f7_per_call_collector_fuel_follows_no_seed() {
     }
 }
 
-/// SEC7-G2, across cycles: what a cycle marked is the heap the next one starts from, so
-/// the next one's charge (`mark_total`, by what is alive when it starts) holds the garbage
-/// the last one floated, and which garbage floated followed the order objects were
-/// reached in. Small tables under a table of string keys, their values overwritten while
-/// marking: the cycle after the first charges by the seed (cycle 4 of this program: T
-/// 18,313 under seed 1, 18,401 under seed 7). Open with SEC7-G2: kept
-/// running, `[known]` in timing.list until the marked set itself does not follow the seed.
+/// Overwrite children of a string-keyed table while marking. Which old children
+/// survive affects the next cycle's fuel. Exercise both a whole table and one
+/// that spans several collector steps, comparing progress at every call boundary.
 #[test]
 fn sec7_g2_the_next_cycle_charges_the_same_whatever_the_seed() {
-    let mut seen = Vec::new();
-    for (fast, seed) in [(true, 1u64), (false, 1), (true, 7), (false, 7), (true, 0xdead_beef), (true, 42)] {
-        let mut lua = state(Limits::default().memory(512 << 20).fuel(1 << 40).hash_seed(seed), fast);
-        lua.exec("S = {} for i = 1, 500 do S['k' .. i] = {v = {i}} end", "=setup").unwrap();
-        let f = lua.load("J = J or 0 while true do J = J + 1 local i = J * 37 % 500 + 1 S['k' .. i].v = {J} end", "=churn").unwrap();
-        lua.set_limits(lua.limits().fuel(100_000));
-        let mut progress = Vec::new();
-        for _ in 0..20 {
-            let r = lua.call(f.value(), &[]);
-            assert!(matches!(r, Err(remedy_lua::Error::Limit(remedy_lua::LimitKind::Fuel))), "{r:?}");
-            progress.push(lua.get_global("J").unwrap());
+    for (entries, calls) in [(500, 20), (9_000, 100)] {
+        let mut seen = Vec::new();
+        for (fast, seed) in [(true, 1u64), (false, 1), (true, 7), (false, 7), (true, 0xdead_beef), (true, 42)] {
+            let mut lua = state(Limits::default().memory(512 << 20).fuel(1 << 40).hash_seed(seed), fast);
+            lua.exec(&format!("S = {{}} for i = 1, {entries} do S['k' .. i] = {{v = {{i}}}} end"), "=setup").unwrap();
+            let f = lua.load(&format!("J = J or 0 while true do J = J + 1 local i = J * 37 % {entries} + 1 S['k' .. i].v = {{J}} end"), "=churn").unwrap();
+            lua.set_limits(lua.limits().fuel(100_000));
+            let mut progress = Vec::new();
+            for _ in 0..calls {
+                let r = lua.call(f.value(), &[]);
+                assert!(matches!(r, Err(remedy_lua::Error::Limit(remedy_lua::LimitKind::Fuel))), "{r:?}");
+                progress.push(lua.get_global("J").unwrap());
+            }
+            seen.push(((fast, seed), progress));
         }
-        seen.push(((fast, seed), progress));
-    }
-    for s in &seen {
-        assert_eq!(s.1, seen[0].1, "{:?} against {:?}: J after each call", s.0, seen[0].0);
+        for s in &seen {
+            assert_eq!(s.1, seen[0].1, "{entries} entries, {:?} against {:?}: J after each call", s.0, seen[0].0);
+        }
     }
 }
 

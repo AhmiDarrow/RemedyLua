@@ -1257,7 +1257,7 @@ impl Born {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum Gray {
     Proto(u32),
     Table(u32),
@@ -2141,7 +2141,11 @@ pub(crate) struct Heap {
     /// Keys of host-tracked userdata collected since the host last drained them.
     pub collected: Vec<u64>,
     pub phase: Phase,
-    pub gray: Vec<Gray>,
+    gray: Vec<Gray>,
+    /// New objects discovered during a chunked table scan (including intervening
+    /// writes) or ephemeron marking. Only their set is stable across hash layouts.
+    /// Drain by kind and slab index once the active scan and the stack are done.
+    ordered_gray: std::collections::BinaryHeap<Gray>,
     pub born: Born,
     pub grayagain: Vec<Gray>,
     /// Weak tables met while marking: (table, weak keys, weak values).
@@ -2364,6 +2368,7 @@ impl Heap {
             collected: Vec::new(),
             phase: Phase::Pause,
             gray: Vec::new(),
+            ordered_gray: Default::default(),
             born: Born::default(),
             grayagain: Vec::new(),
             weak: Vec::new(),
@@ -2913,7 +2918,7 @@ impl Heap {
         // ends, as the rest of the collector's scratch.
         let objects = self.live_objects();
         let slots = self.tables.at(i as usize).map_or(0, Table::slots);
-        self.gray.reserve(slots.saturating_mul(2).min(objects));
+        self.ordered_gray.reserve(slots.saturating_mul(2).min(objects.saturating_sub(self.ordered_gray.len())));
         if let Some(c) = self.tables.color.get_mut(i as usize) {
             *c = BLACK;
         }
@@ -3137,8 +3142,20 @@ impl Heap {
             && *c == WHITE
         {
             *c = GRAY;
-            self.gray.push(g);
+            if self.part == NO_PART && !self.eph_active {
+                self.gray.push(g);
+            } else {
+                self.ordered_gray.push(g);
+            }
         }
+    }
+
+    fn pop_gray(&mut self) -> Option<Gray> {
+        self.gray.pop().or_else(|| self.ordered_gray.pop())
+    }
+
+    fn gray_empty(&self) -> bool {
+        self.gray.is_empty() && self.ordered_gray.is_empty()
     }
 
     fn is_marked(&self, v: Value) -> bool {
@@ -3210,7 +3227,17 @@ impl Heap {
         };
         let to = from.saturating_add(chunk).min(total);
         let (nodes_from, nodes_to) = (from.saturating_sub(alen), to.saturating_sub(alen));
+        let gray_start = self.gray.len();
         self.mark_slots::<false>(i, (from, to), (alen, total), (wk, wv));
+        // Children of a whole hash table must enter the stack in a stable order:
+        // a mutator write between two child traversals can change which old value
+        // survives this cycle (SEC7-G2). Whole tables span at most TABLE_CHUNK
+        // slots. Array-only scans already visit their entries in index order.
+        if total > alen && self.gray.len() > gray_start + 1
+            && let Some(children) = self.gray.get_mut(gray_start..)
+        {
+            children.sort_unstable();
+        }
         self.most_at_once = self.most_at_once.max(to.saturating_sub(from));
         self.scanned = self.scanned.wrapping_add(to.saturating_sub(from));
         if to < total {
@@ -3510,6 +3537,7 @@ impl Heap {
         self.end_part();
         self.part_queue.clear();
         self.gray.clear();
+        self.ordered_gray.clear();
         self.born.list.clear();
         self.grayagain.clear();
         self.weak.clear();
@@ -3587,7 +3615,7 @@ impl Heap {
                     self.paused = true;
                     return (false, done, false, slots, pre);
                 }
-            } else if let Some(g) = self.gray.pop() {
+            } else if let Some(g) = self.pop_gray() {
                 let at = self.scanned;
                 done += self.obj_work + self.traverse(g, None);
                 slots += self.scanned.wrapping_sub(at);
@@ -3607,7 +3635,7 @@ impl Heap {
                 return (true, done, false, slots, pre);
             }
         }
-        (self.gray.is_empty() && self.part == NO_PART && self.part_queue.is_empty(), done, false, slots, pre)
+        (self.gray_empty() && self.part == NO_PART && self.part_queue.is_empty(), done, false, slots, pre)
     }
 
     /// Whether a step that may pause (`pause_ok`) is at the end of the host's poll: its
@@ -3706,7 +3734,7 @@ impl Heap {
                 // 18 ms in a call (SEC7-G1).
                 // (Its own count: the clearing below looks by its work alone.)
                 let (scanned, mut looked, mut mark_next) = if saved.is_some() { (saved_scanned, saved_looked, saved_next) } else { (self.scanned, self.scanned, next) };
-                while let Some(g) = self.gray.pop() {
+                while let Some(g) = self.pop_gray() {
                     work += self.obj_work + self.traverse(g, None);
                     self.poll_objs += 1;
                     let seen = self.scanned.wrapping_sub(scanned);
@@ -3732,7 +3760,7 @@ impl Heap {
                     }
                     // At the end of the host's poll, at a look, after the allowance's test
                     // (as it stood, the resume goes on with the next object: SEC7-G1).
-                    if look && self.poll_over() && !self.gray.is_empty() {
+                    if look && self.poll_over() && !self.gray_empty() {
                         self.atomic_stage = Some(AtomicStage::Mark);
                         self.atomic_saved = Some([work, next, mark_next, scanned, looked]);
                         return Atomic::Paused;
@@ -3841,6 +3869,7 @@ impl Heap {
         self.end_part();
         self.part_queue.clear();
         self.gray.clear();
+        self.ordered_gray.clear();
         self.born.list.clear();
         self.grayagain.clear();
         self.weak.clear();
@@ -3859,6 +3888,10 @@ impl Heap {
     /// cycle over a table of 2^23 slots).
     pub(crate) fn trim_scratch(&mut self) {
         trim_vec(&mut self.gray);
+        self.ordered_gray.clear();
+        if self.ordered_gray.capacity() * std::mem::size_of::<Gray>() > SCRATCH_KEEP {
+            self.ordered_gray = Default::default();
+        }
         trim_vec(&mut self.born.list);
         trim_vec(&mut self.grayagain);
         trim_vec(&mut self.weak);
@@ -3878,7 +3911,7 @@ impl Heap {
         fn b<T>(v: &Vec<T>) -> usize {
             v.capacity() * std::mem::size_of::<T>()
         }
-        b(&self.gray) + b(&self.grayagain) + b(&self.weak) + b(&self.eph_links) + b(&self.trav_vals) + b(&self.trav_ups) + b(&self.mem.watch.moved) + b(&self.part_queue) + self.eph_waiting.capacity() * 16
+        self.ordered_gray.capacity() * std::mem::size_of::<Gray>() + b(&self.gray) + b(&self.grayagain) + b(&self.weak) + b(&self.eph_links) + b(&self.trav_vals) + b(&self.trav_ups) + b(&self.mem.watch.moved) + b(&self.part_queue) + self.eph_waiting.capacity() * 16
     }
 
     fn force_gray(&mut self, g: Gray) {
