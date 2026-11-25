@@ -80,6 +80,8 @@ Policy:
   [`known-issues.md`](known-issues.md). It runs and its result is printed, but a step whose
   only failures are `[known]` tests does not fail. The entry goes in the commit that fixes
   the issue.
+- `[known-windows]`: the same, counted only when the gate runs on Windows, for an issue
+  that shows there and not on Linux.
 
 The `test_lists` guard (in D) fails when a listed name is not a test, a name is in two
 classes, an `[env]` name is not in `[timing]`, a `[known]` entry names an issue that is not

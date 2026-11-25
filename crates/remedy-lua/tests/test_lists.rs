@@ -311,7 +311,7 @@ fn finding_open(id: &str) -> bool {
     open
 }
 
-/// Every [known] entry (a test tied to an open issue, run and reported but
+/// Every [known] and [known-windows] entry (a test tied to an open issue, run and reported but
 /// not failing its step) names a test and a finding that is still open. When the finding
 /// closes, this fails until the entry goes, so the test counts again.
 #[test]
@@ -319,7 +319,7 @@ fn known_entries_name_open_findings() {
     let secs = sections();
     let (funcs, _) = functions();
     let tests: BTreeSet<&str> = funcs.iter().filter_map(|f| f.test.as_deref()).collect();
-    for entry in secs.get("known").into_iter().flatten() {
+    for entry in ["known", "known-windows"].into_iter().filter_map(|s| secs.get(s)).flatten() {
         let mut parts = entry.split_whitespace();
         let (Some(name), Some(id), None) = (parts.next(), parts.next(), parts.next()) else {
             panic!("timing.list [known]: {entry:?} is not `module::fn FINDING`");

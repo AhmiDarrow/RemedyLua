@@ -1,6 +1,6 @@
 -- `NAME` and `NAME2` are files that do not exist yet: temporary files in C Lua, the host's
 -- in-memory files in RemedyLua. Every result is shown with its type; names are scrubbed.
-local out = {}
+local out = {} local Q, Q2 = ("%q"):format(NAME):sub(2, -2), ("%q"):format(NAME2):sub(2, -2) -- as `show` writes them
 local function clean(v)
   if type(v) == "string" then
     v = v:gsub(NAME2, "<f2>", 1, true) -- (plain: names are not patterns)
@@ -10,13 +10,13 @@ end
 local function scrub(s)
   local i = 1
   while true do
-    local a, b = s:find(NAME, i, true)
+    local a, b = s:find(Q, i, true)
     if not a then break end
     s = s:sub(1, a - 1) .. "<f>" .. s:sub(b + 1)
     i = a + 3
   end
   while true do
-    local a, b = s:find(NAME2, 1, true)
+    local a, b = s:find(Q2, 1, true)
     if not a then break end
     s = s:sub(1, a - 1) .. "<f2>" .. s:sub(b + 1)
   end

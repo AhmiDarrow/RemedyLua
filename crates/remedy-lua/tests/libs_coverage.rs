@@ -40,7 +40,10 @@ return table.concat(out, "\n")
 /// The program for a probe set.
 pub fn probe_program(probes: &str) -> String {
     let mut s = String::from("PROBES = {\n");
-    for line in probes.lines().filter(|l| !l.trim().is_empty() && !l.starts_with("--")) {
+    // `--#glibc <probe>`: the answer is the C library's and Windows' has none to compare
+    // (no date before 1970 or past the year 3000), so the probe does not run there.
+    let glibc = |l| str::strip_prefix(l, "--#glibc ").map_or(Some(l), |p| (!cfg!(windows)).then_some(p));
+    for line in probes.lines().filter_map(glibc).filter(|l| !l.trim().is_empty() && !l.starts_with("--")) {
         assert!(!line.contains("]===]"), "{line}");
         s.push_str("[===[");
         s.push_str(line);
@@ -277,7 +280,11 @@ fn io_matches_c_lua() {
     let (ours, c) = io_both(include_str!("libs_coverage/io.lua"));
     let (ours, c) = (ours.unwrap(), c.unwrap());
     let (ol, cl): (Vec<_>, Vec<_>) = (ours.lines().collect(), c.lines().collect());
-    let diffs: Vec<String> = ol.iter().zip(&cl).filter(|(a, b)| a != b).map(|(a, b)| format!("ours: {a}\n   C: {b}")).collect();
+    // The error code is the C library's: Windows' sets none for a read from a file opened
+    // to write, and calls an empty name an invalid argument.
+    let errno = |l: &&str| cfg!(windows) && ["read from write-only =>", "io.output missing =>"].iter().any(|p| l.starts_with(p));
+    let diffs: Vec<String> =
+        ol.iter().zip(&cl).filter(|(a, b)| a != b && !errno(a)).map(|(a, b)| format!("ours: {a}\n   C: {b}")).collect();
     assert!(diffs.is_empty() && ol.len() == cl.len(), "{} of {} differ:\n{}", diffs.len(), ol.len(), diffs.join("\n"));
 }
 

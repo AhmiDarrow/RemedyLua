@@ -166,8 +166,11 @@ pub const SMALL_STACK_CAP: usize = 24 << 10;
 /// a script's data (SEC4-9: an ephemeron chain marked recursively) then overflows here,
 /// in a test, instead of in production with its larger stacks. A panic in `f` is passed on.
 pub fn small_stack<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> T {
+    // Windows keeps the end of every stack back for its overflow handler (20 KiB that
+    // Rust's runtime asks for, and a guard page), so a thread gets that much on top there.
+    let kept = if cfg!(windows) { 24 << 10 } else { 0 };
     let h = std::thread::Builder::new()
-        .stack_size(SMALL_STACK)
+        .stack_size(SMALL_STACK + kept)
         .spawn(move || {
             remedy_lua::set_test_stack_cap(Some(SMALL_STACK_CAP));
             f()

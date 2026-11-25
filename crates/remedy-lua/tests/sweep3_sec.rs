@@ -1454,7 +1454,7 @@ fn prop_bound() -> f64 {
 }
 
 /// Runs `body` in a loop until `fuel` is spent: the thread's CPU time per unit of fuel used
-/// (`remedy_lua_oracle::thread_cpu`: cycles on Windows, else ns). Not wall time, which
+/// (`remedy_lua_oracle::thread_cpu`, in nanoseconds). Not wall time, which
 /// counts other processes' load as ours. Only ratios to the median are compared.
 /// The libraries of the families' states: every one, the opt-in ones included.
 const FAMILY_LIBS: Libs = super::common::ALL_OPT_IN.union(Libs::ENV).union(Libs::IO);

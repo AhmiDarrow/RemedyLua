@@ -37,12 +37,21 @@ pub const MEMORY_CAP: i64 = 2 << 30;
 /// `run`'s error when the state reached [`MEMORY_CAP`].
 pub const MEMORY_LIMIT: &str = "oracle memory limit";
 
-/// CPU time the calling thread has run so far, in the platform's unit: cycles on Windows,
-/// nanoseconds elsewhere. Only differences and ratios mean anything. For timing tests:
+/// CPU time the calling thread has run so far, in nanoseconds (on Windows, its cycle count
+/// scaled by the measured cycle rate). Only differences mean anything. For timing tests:
 /// unlike wall time, it does not grow while other processes have the CPU.
 pub fn thread_cpu() -> u64 {
     // SAFETY: a C function without arguments that only reads this thread's own counter.
     unsafe { imp::oracle_thread_cpu() }
+}
+
+/// The process's resident memory now and at its peak, in bytes, on Windows (zeros
+/// elsewhere, where tests read /proc).
+pub fn process_memory() -> (u64, u64) {
+    let (mut now, mut peak) = (0, 0);
+    // SAFETY: a C function that only writes the two counters it is given.
+    unsafe { imp::oracle_process_memory(&mut now, &mut peak) };
+    (now, peak)
 }
 
 /// A state kept across runs (for benchmarks): load once, call many times.
@@ -75,6 +84,7 @@ mod imp {
     type L = *mut LuaState;
     type Hook = unsafe extern "C" fn(L, *mut c_void);
     unsafe extern "C" {
+        fn oracle_init();
         fn luaL_newstate() -> L;
         fn luaL_openlibs(l: L);
         fn oracle_cap(l: L, cap: i64) -> c_int;
@@ -89,6 +99,7 @@ mod imp {
         fn lua_error(l: L) -> c_int;
         fn lua_pushstring(l: L, s: *const c_char) -> *const c_char;
         pub(super) fn oracle_thread_cpu() -> u64;
+        pub(super) fn oracle_process_memory(now: *mut u64, peak: *mut u64);
     }
 
     /// The hook's period. Every coroutine inherits the hook (`lua_newthread`) with a fresh
@@ -129,6 +140,9 @@ mod imp {
 
     impl State {
         pub fn new() -> Option<State> {
+            static INIT: std::sync::Once = std::sync::Once::new();
+            // SAFETY: a C function without arguments, run once before any state exists.
+            INIT.call_once(|| unsafe { oracle_init() });
             // SAFETY: plain state creation.
             let l = unsafe { luaL_newstate() };
             if l.is_null() {
