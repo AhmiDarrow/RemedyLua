@@ -69,13 +69,27 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
-      - run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal --component rustfmt,clippy
+      - name: Pinned compiler and the Lua 5.4.7 oracle sources
+        run: |
+          set -euo pipefail
+          rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal --component rustfmt,clippy
+          curl -fsSLo lua.tar.gz https://www.lua.org/ftp/lua-5.4.7.tar.gz
+          echo '9fbf5e28ef86c69858f6d3d34eccc32e911c1a28b4120ff3e84aaa70cfbf1e30  lua.tar.gz' | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/lua"
+          mv lua.tar.gz "$RUNNER_TEMP/lua/"
+          (cd "$RUNNER_TEMP/lua" && tar xzf lua.tar.gz && rm lua.tar.gz)
+          test -f "$RUNNER_TEMP/lua/lua-5.4.7/src/lua.h"
+          echo "LUA_SRC=$RUNNER_TEMP/lua/lua-5.4.7/src" >> "$GITHUB_ENV"
       - uses: Swatinem/rust-cache@v2
       - name: cargo fmt
         run: cargo fmt --all --check
-      # Shipped code only for now; test targets still carry style lints.
-      - name: cargo clippy
+      # Shipped code: every warning is an error.
+      - name: cargo clippy (lib, bins)
         run: cargo clippy --workspace --lib --bins --locked -- -D warnings
+      # Tests, examples, benches: the deny-level lints (Cargo.toml) hold everywhere;
+      # style warnings in test code are reported, not fatal, for now.
+      - name: cargo clippy (all targets, deny lints)
+        run: cargo clippy --workspace --all-targets --locked
   docs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20

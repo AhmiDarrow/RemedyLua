@@ -1,7 +1,7 @@
 //! Front-end interrupt latency: a host `load` of a few MB of hostile source, interrupted at
 //! many points along it; how late each stops (the worst is what matters).
 //! `cargo run --release --example frontstop -p remedy-lua [-- CASE [POINTS]]`
-#![allow(clippy::unwrap_used, missing_docs, clippy::print_stdout)]
+#![allow(clippy::unwrap_used, clippy::panic, missing_docs, clippy::print_stdout)]
 
 use std::time::{Duration, Instant};
 

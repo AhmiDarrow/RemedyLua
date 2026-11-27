@@ -597,6 +597,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[allow(clippy::approx_constant)] // a Lua-printed literal, not meant as PI
     fn floats_print_like_lua() {
         assert_eq!(fmt_float(1.0), "1.0");
         assert_eq!(fmt_float(0.1), "0.1");

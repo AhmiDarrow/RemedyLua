@@ -1,0 +1,6 @@
+# The deny-level panic lints (Cargo.toml [workspace.lints.clippy]) guard shipped code.
+# Test code may unwrap, index and panic: a failing assertion is the point there.
+allow-unwrap-in-tests = true
+allow-expect-in-tests = true
+allow-panic-in-tests = true
+allow-indexing-slicing-in-tests = true

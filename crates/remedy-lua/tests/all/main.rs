@@ -1,6 +1,6 @@
 //! Every integration suite in one test binary, so a change links once.
 //! Run one suite or test with a filter: `cargo test -p remedy-lua --test all sweep1_sandbox::s9`.
-#![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::panic, missing_docs)]
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing, clippy::panic, missing_docs)]
 
 #[path = "../common/mod.rs"]
 mod common;

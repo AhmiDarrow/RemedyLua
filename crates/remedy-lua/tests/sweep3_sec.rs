@@ -600,7 +600,7 @@ fn fuel_slices_do_not_change_what_a_call_uses() {
     let src = "local t = {} for i = 1, 30000 do t[i] = tostring(i) .. 'x' end table.sort(t) \
                local n = 0 for w in table.concat(t, ' '):gmatch('%d+') do n = n + 1 end collectgarbage() return n";
     let mut used = Vec::new();
-    for fuel in [5_000_000u64, 1 << 20 + 3, 1 << 40, u64::MAX] {
+    for fuel in [5_000_000u64, (1 << 20) + 3, 1 << 40, u64::MAX] {
         for fast in [true, false] {
             let mut lua = Lua::new(Limits::default().fuel(fuel).hash_seed(5), Libs::ALL);
             lua.set_fast_loop(fast);

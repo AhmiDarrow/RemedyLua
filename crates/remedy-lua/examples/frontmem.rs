@@ -1,7 +1,7 @@
 //! Front-end memory: peak resident memory (Linux `VmHWM`) of one load of a file against
 //! the memory limit it ran under. Each run is its own process, so the peak is the load's.
 //! `cargo run --release --example frontmem -p remedy-lua -- FILE LIMIT_BYTES [host|call|check]`
-#![allow(clippy::unwrap_used, missing_docs, clippy::print_stdout)]
+#![allow(clippy::unwrap_used, clippy::indexing_slicing, missing_docs, clippy::print_stdout)]
 
 use remedy_lua::{Libs, Limits, Lua};
 
