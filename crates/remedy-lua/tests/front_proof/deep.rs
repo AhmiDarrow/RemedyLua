@@ -232,7 +232,8 @@ pub fn run(src: &str, name: &str) -> Result<String, String> {
 pub static BIG: Mutex<()> = Mutex::new(());
 
 pub fn check(kind: Kind, n: usize) {
-    let _big = (n > 10_000).then(|| (crate::common::memory_heavy(), BIG.lock().unwrap_or_else(|e| e.into_inner())));
+    let _big =
+        (n > 10_000).then(|| (crate::common::memory_heavy(), BIG.lock().unwrap_or_else(|e| e.into_inner())));
     let (src, want) = program(kind, n);
     let ours = run(&src, chunk(kind));
     assert_eq!(ours.as_deref(), Ok(want.as_str()), "{kind:?} {n} deep");

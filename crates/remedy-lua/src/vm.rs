@@ -375,7 +375,10 @@ impl Cont {
     /// Whether the machine called a metamethod for an instruction with this continuation
     /// (for `debug.getinfo`'s "metamethod" names).
     pub(crate) fn is_metamethod(self) -> bool {
-        matches!(self, Cont::Store(_) | Cont::Discard | Cont::Cond { .. } | Cont::Concat { .. } | Cont::Closing { .. })
+        matches!(
+            self,
+            Cont::Store(_) | Cont::Discard | Cont::Cond { .. } | Cont::Concat { .. } | Cont::Closing { .. }
+        )
     }
 }
 
@@ -431,8 +434,11 @@ pub(crate) fn pcall_levels(kind: FrameKind) -> usize {
 #[inline]
 fn under_pairs(kind: FrameKind) -> bool {
     match kind {
-        FrameKind::Cont(Cont::Three { .. }) | FrameKind::Protected { cont: Some(Cont::Three { .. }), .. } => true,
-        FrameKind::Cont(Cont::Nest { bits, .. }) | FrameKind::Protected { cont: Some(Cont::Nest { bits, .. }), .. } => bits.three(),
+        FrameKind::Cont(Cont::Three { .. }) | FrameKind::Protected { cont: Some(Cont::Three { .. }), .. } => {
+            true
+        }
+        FrameKind::Cont(Cont::Nest { bits, .. })
+        | FrameKind::Protected { cont: Some(Cont::Nest { bits, .. }), .. } => bits.three(),
         _ => false,
     }
 }
@@ -514,7 +520,11 @@ pub(crate) enum FrameKind {
     Normal,
     /// Called by `pcall`: results go to `dest` after `true`; a `pcall` used as a
     /// metamethod passes its status on through `cont`.
-    Protected { dest: usize, wanted: i32, cont: Option<Cont> },
+    Protected {
+        dest: usize,
+        wanted: i32,
+        cont: Option<Cont>,
+    },
     Cont(Cont),
 }
 
@@ -646,6 +656,9 @@ const FULL_GC_CHUNK: usize = 1 << 14;
 /// Fuel for writing a float as text (`%.14g` and friends cost about as much as eight
 /// instructions; calibrated: `examples/fuelcal.rs`).
 pub(crate) const FLOAT_TEXT_FUEL: u64 = 8;
+
+/// Where the host sends `print`'s output instead of stdout (`Lua::set_print`).
+pub(crate) type PrintSink = Box<dyn FnMut(&str) + Send>;
 
 /// What runs scripts: a RemedyLua state with its globals, heap and limits. One thread
 /// uses it at a time; it may move between threads (`Send`).
@@ -820,7 +833,7 @@ pub struct Lua {
     pub(crate) deadline: Option<std::time::Duration>,
     /// The host's own data, by type.
     pub(crate) app_data: std::collections::HashMap<std::any::TypeId, Box<dyn std::any::Any + Send>>,
-    pub(crate) print_sink: Option<Box<dyn FnMut(&str) + Send>>,
+    pub(crate) print_sink: Option<PrintSink>,
     /// Host calls in progress (fuel resets only at the outermost).
     pub(crate) entry: u32,
     /// A panic (a host function's, or a bug) unwound through a call: the machine may be
@@ -918,7 +931,6 @@ pub(crate) fn compact_values(v: &mut Vec<Value>, from: usize) -> usize {
     v.len() - from.min(v.len())
 }
 
-
 /// A cheap hasher for `compact_values`' keys (an object's kind, slot and generation, which
 /// a script does not choose): a splitmix64 finish over the words written. SipHash made the
 /// compaction cost about a hundred instructions per value kept.
@@ -971,8 +983,10 @@ impl Lua {
         let main_ref = heap.new_thread(ThreadState::default()).unwrap_or(ThreadRef { idx: 0, generation: 0 });
         let globals = heap.new_table(0, 64).unwrap_or(TableRef { idx: 0, generation: 0 });
         let registry = heap.new_table(0, 8).unwrap_or(TableRef { idx: 0, generation: 0 });
-        let tm_names: Vec<StrRef> =
-            TM_NAMES.iter().map(|n| heap.intern(n.as_bytes()).unwrap_or(StrRef { idx: 0, generation: 0 })).collect();
+        let tm_names: Vec<StrRef> = TM_NAMES
+            .iter()
+            .map(|n| heap.intern(n.as_bytes()).unwrap_or(StrRef { idx: 0, generation: 0 }))
+            .collect();
         heap.mode_key = tm_names.get(Tm::Mode as usize).copied();
         let names = crate::stdlib::Names::new(&mut heap);
         // Not `mix_seed(base, 3)`: that is invertible, and `math.random(0)` returns the
@@ -1186,7 +1200,9 @@ impl Lua {
     fn memory_error(&mut self, own: bool) -> LuaError {
         let e = if self.c_levels().0 > C_HANDLER_LEVELS {
             LuaError::msg("C stack overflow")
-        } else if self.cur.stack.len() > 1_000_000 || own && self.cur.mem_size().saturating_mul(4) >= self.heap.mem.cap {
+        } else if self.cur.stack.len() > 1_000_000
+            || own && self.cur.mem_size().saturating_mul(4) >= self.heap.mem.cap
+        {
             LuaError::msg("stack overflow")
         } else {
             return LuaError::Limit(LimitKind::Memory);
@@ -1243,7 +1259,9 @@ impl Lua {
         if let Ok(v) = f(&mut self.heap) {
             return Ok(v);
         }
-        if self.release_held()? && let Ok(v) = f(&mut self.heap) {
+        if self.release_held()?
+            && let Ok(v) = f(&mut self.heap)
+        {
             return Ok(v);
         }
         Err(self.memory_error(false))
@@ -1333,8 +1351,22 @@ impl Lua {
 
     /// A table with room for `room` array slots, sized as Lua sizes it (`lua_createtable`
     /// or a constructor): `asize` array slots, `hash` fields (so `#` agrees).
-    pub(crate) fn new_table_sized<const REGISTER: bool>(&mut self, room: usize, asize: usize, hash: usize) -> Result<TableRef, LuaError> {
-        let t = self.alloc(|h| Heap::new_table_in::<REGISTER>(&mut h.mem, &mut h.tables, &mut h.born, (h.phase, h.sweep, h.table_seed), room, hash))?;
+    pub(crate) fn new_table_sized<const REGISTER: bool>(
+        &mut self,
+        room: usize,
+        asize: usize,
+        hash: usize,
+    ) -> Result<TableRef, LuaError> {
+        let t = self.alloc(|h| {
+            Heap::new_table_in::<REGISTER>(
+                &mut h.mem,
+                &mut h.tables,
+                &mut h.born,
+                (h.phase, h.sweep, h.table_seed),
+                room,
+                hash,
+            )
+        })?;
         if let Some(tab) = self.heap.tables.get_mut(t.idx) {
             tab.init_sizes(asize, hash);
         }
@@ -1342,7 +1374,12 @@ impl Lua {
         Ok(t)
     }
 
-    pub(crate) fn new_native(&mut self, f: NativeFn, name: &'static str, upvals: Vec<Value>) -> Result<Value, LuaError> {
+    pub(crate) fn new_native(
+        &mut self,
+        f: NativeFn,
+        name: &'static str,
+        upvals: Vec<Value>,
+    ) -> Result<Value, LuaError> {
         let up: Box<[Value]> = upvals.into_boxed_slice();
         let size = crate::heap::FUNC_BASE + crate::heap::boxed(up.len() * 16);
         self.charge_mem(size)?;
@@ -1565,7 +1602,14 @@ impl Lua {
         let r = self.gc_step_now();
         let used = fuel.saturating_sub(self.fuel.max(-1).saturating_add(self.reserve.max(0)));
         if let (Some(t), Some((start, step))) = (self.heap.mem.trace.as_mut(), start) {
-            t.note(op, step, self.heap.scanned.wrapping_sub(scanned) as u64, 0, u64::try_from(used).unwrap_or(0), start);
+            t.note(
+                op,
+                step,
+                self.heap.scanned.wrapping_sub(scanned) as u64,
+                0,
+                u64::try_from(used).unwrap_or(0),
+                start,
+            );
         }
         r
     }
@@ -1606,7 +1650,11 @@ impl Lua {
         // A suspended atomic phase's work done past the last call's fuel is this step's
         // (charged with it, as far as the call's fuel goes, the rest owed again: in the
         // step's own trace record, SEC8-F7).
-        let mut work = if resumed.is_none() && self.heap.atomic_suspended() { std::mem::take(&mut self.atomic_owed) } else { 0 };
+        let mut work = if resumed.is_none() && self.heap.atomic_suspended() {
+            std::mem::take(&mut self.atomic_owed)
+        } else {
+            0
+        };
         match self.heap.phase {
             crate::heap::Phase::Pause => {
                 // Work done and not yet charged when the last cycle ended (a full collection
@@ -1627,7 +1675,10 @@ impl Lua {
                 // A suspended atomic phase goes on where it stopped.
                 let stop = crate::heap::Stop {
                     interrupt: &self.interrupt,
-                    deadline: self.deadline.filter(|_| self.entry > 0).zip(self.time_limit.as_ref().map(|(clock, _)| clock)),
+                    deadline: self
+                        .deadline
+                        .filter(|_| self.entry > 0)
+                        .zip(self.time_limit.as_ref().map(|(clock, _)| clock)),
                 };
                 let mut stopped = false;
                 let done = if self.heap.atomic_suspended() {
@@ -1696,7 +1747,10 @@ impl Lua {
                     work = pre;
                     let stop = crate::heap::Stop {
                         interrupt: &self.interrupt,
-                        deadline: self.deadline.filter(|_| self.entry > 0).zip(self.time_limit.as_ref().map(|(clock, _)| clock)),
+                        deadline: self
+                            .deadline
+                            .filter(|_| self.entry > 0)
+                            .zip(self.time_limit.as_ref().map(|(clock, _)| clock)),
                     };
                     match self.heap.atomic(&stop, allow) {
                         crate::heap::Atomic::Paused => {
@@ -1710,15 +1764,22 @@ impl Lua {
                             self.charge_gc((work + w) / WORK_PER_FUEL)?;
                             return Err(LuaError::Limit(LimitKind::Interrupted));
                         }
-                        crate::heap::Atomic::Suspended(w) => return self.atomic_suspended(work + w, LimitKind::Fuel),
-                        crate::heap::Atomic::TimedOut(w) => return self.atomic_suspended(work + w, LimitKind::Time),
+                        crate::heap::Atomic::Suspended(w) => {
+                            return self.atomic_suspended(work + w, LimitKind::Fuel);
+                        }
+                        crate::heap::Atomic::TimedOut(w) => {
+                            return self.atomic_suspended(work + w, LimitKind::Time);
+                        }
                     }
                 }
             }
             crate::heap::Phase::Sweep => {
                 let stop = crate::heap::Stop {
                     interrupt: &self.interrupt,
-                    deadline: self.deadline.filter(|_| self.entry > 0).zip(self.time_limit.as_ref().map(|(clock, _)| clock)),
+                    deadline: self
+                        .deadline
+                        .filter(|_| self.entry > 0)
+                        .zip(self.time_limit.as_ref().map(|(clock, _)| clock)),
                 };
                 let (done, w, cut) = self.heap.sweep_step(budget, &stop);
                 work += w;
@@ -1849,7 +1910,11 @@ impl Lua {
     /// Why a collector step stopped part-way (`heap::Stop`): the interrupt, else the deadline.
     #[cold]
     fn stop_kind(&self) -> LimitKind {
-        if self.interrupt.load(std::sync::atomic::Ordering::Relaxed) { LimitKind::Interrupted } else { LimitKind::Time }
+        if self.interrupt.load(std::sync::atomic::Ordering::Relaxed) {
+            LimitKind::Interrupted
+        } else {
+            LimitKind::Time
+        }
     }
 
     /// Finishes a suspended atomic phase before a call from the host runs any script code
@@ -1940,7 +2005,10 @@ impl Lua {
     /// Gives back stack the running thread no longer uses (after deep recursion), as C
     /// Lua's collector does.
     fn shrink_stack(&mut self) {
-        let frame_top = self.cur.frames.last().map_or(0, |f| f.base + self.proto(f.proto).map_or(WINDOW, |p| p.window().max(p.frame_size())));
+        let frame_top =
+            self.cur.frames.last().map_or(0, |f| {
+                f.base + self.proto(f.proto).map_or(WINDOW, |p| p.window().max(p.frame_size()))
+            });
         let mut live = frame_top.max(self.top).max(self.ntop);
         if let Some(&(i, _)) = self.cur.open_upvals.last() {
             live = live.max(i + 1);
@@ -2002,7 +2070,14 @@ impl Lua {
         let r = self.full_gc_now();
         let used = fuel.saturating_sub(self.fuel.max(-1).saturating_add(self.reserve.max(0)));
         if let (Some(t), Some((start, step))) = (self.heap.mem.trace.as_mut(), start) {
-            t.note(crate::gctrace::TraceOp::Full, step, self.heap.scanned.wrapping_sub(scanned) as u64, began, u64::try_from(used).unwrap_or(0), start);
+            t.note(
+                crate::gctrace::TraceOp::Full,
+                step,
+                self.heap.scanned.wrapping_sub(scanned) as u64,
+                began,
+                u64::try_from(used).unwrap_or(0),
+                start,
+            );
         }
         r
     }
@@ -2014,7 +2089,10 @@ impl Lua {
         // Marking work steps did past their budgets and did not charge yet (`gc_mark_over`)
         // is charged here: dropped, the fuel followed where the steps before had stopped
         // in the order objects are reached, so the seed.
-        let mut work = self.clear_dead_stack() + std::mem::take(&mut self.gc_mark_over) + std::mem::take(&mut self.atomic_owed) + self.heap.born.take_work();
+        let mut work = self.clear_dead_stack()
+            + std::mem::take(&mut self.gc_mark_over)
+            + std::mem::take(&mut self.atomic_owed)
+            + self.heap.born.take_work();
         let mut charged = 0;
         let mut cycles = 0;
         // Finish the current cycle, then run a whole new one, charged as it goes so a big
@@ -2033,7 +2111,10 @@ impl Lua {
                 crate::heap::Phase::Propagate => {
                     let stop = crate::heap::Stop {
                         interrupt: &self.interrupt,
-                        deadline: self.deadline.filter(|_| self.entry > 0).zip(self.time_limit.as_ref().map(|(clock, _)| clock)),
+                        deadline: self
+                            .deadline
+                            .filter(|_| self.entry > 0)
+                            .zip(self.time_limit.as_ref().map(|(clock, _)| clock)),
                     };
                     let done = if self.heap.atomic_suspended() {
                         true
@@ -2054,7 +2135,10 @@ impl Lua {
                         let allow = self.gc_allow(work - charged * WORK_PER_FUEL);
                         let stop = crate::heap::Stop {
                             interrupt: &self.interrupt,
-                            deadline: self.deadline.filter(|_| self.entry > 0).zip(self.time_limit.as_ref().map(|(clock, _)| clock)),
+                            deadline: self
+                                .deadline
+                                .filter(|_| self.entry > 0)
+                                .zip(self.time_limit.as_ref().map(|(clock, _)| clock)),
                         };
                         match self.heap.atomic(&stop, allow) {
                             crate::heap::Atomic::Done(w) => work += w,
@@ -2066,10 +2150,12 @@ impl Lua {
                                 return Err(LuaError::Limit(LimitKind::Interrupted));
                             }
                             crate::heap::Atomic::Suspended(w) => {
-                                return self.atomic_suspended(work + w - charged * WORK_PER_FUEL, LimitKind::Fuel);
+                                return self
+                                    .atomic_suspended(work + w - charged * WORK_PER_FUEL, LimitKind::Fuel);
                             }
                             crate::heap::Atomic::TimedOut(w) => {
-                                return self.atomic_suspended(work + w - charged * WORK_PER_FUEL, LimitKind::Time);
+                                return self
+                                    .atomic_suspended(work + w - charged * WORK_PER_FUEL, LimitKind::Time);
                             }
                         }
                     }
@@ -2077,7 +2163,10 @@ impl Lua {
                 crate::heap::Phase::Sweep => {
                     let stop = crate::heap::Stop {
                         interrupt: &self.interrupt,
-                        deadline: self.deadline.filter(|_| self.entry > 0).zip(self.time_limit.as_ref().map(|(clock, _)| clock)),
+                        deadline: self
+                            .deadline
+                            .filter(|_| self.entry > 0)
+                            .zip(self.time_limit.as_ref().map(|(clock, _)| clock)),
                     };
                     let piece = FULL_GC_CHUNK.min(self.gc_allow(work - charged * WORK_PER_FUEL).max(1));
                     let (done, w, cut) = self.heap.sweep_step(piece, &stop);
@@ -2098,7 +2187,10 @@ impl Lua {
         self.heap.mem.drain_pool();
         let stop = crate::heap::Stop {
             interrupt: &self.interrupt,
-            deadline: self.deadline.filter(|_| self.entry > 0).zip(self.time_limit.as_ref().map(|(clock, _)| clock)),
+            deadline: self
+                .deadline
+                .filter(|_| self.entry > 0)
+                .zip(self.time_limit.as_ref().map(|(clock, _)| clock)),
         };
         if self.heap.trim_slabs(&stop) {
             return Err(LuaError::Limit(self.stop_kind()));
@@ -2117,7 +2209,11 @@ impl Lua {
     /// coroutine resumed from Lua under it, so the call can be resumed as it stands (a
     /// step inside a library function, `collectgarbage` among them, runs to its end).
     fn gc_step_pausable(&mut self) -> Result<(), LuaError> {
-        self.heap.pause_ok = self.heap.poll_allow.is_some() && self.entry == 1 && self.c_depth == 1 && self.native_depth == 0 && self.resume_depth == 0;
+        self.heap.pause_ok = self.heap.poll_allow.is_some()
+            && self.entry == 1
+            && self.c_depth == 1
+            && self.native_depth == 0
+            && self.resume_depth == 0;
         let r = self.gc_step();
         // A step ended past the end of the host's poll pauses the call there too: its work
         // all done and charged, nothing of it pending (steps of one object each never
@@ -2182,7 +2278,11 @@ impl Lua {
     /// userdata's `__name` (a string), else the plain type name. Other types' metatables
     /// (the strings' one) are not looked at.
     pub(crate) fn obj_type_name(&self, v: Value) -> String {
-        if matches!(v, Value::Table(_) | Value::UserData(_)) { self.named_type(v) } else { v.type_name().to_owned() }
+        if matches!(v, Value::Table(_) | Value::UserData(_)) {
+            self.named_type(v)
+        } else {
+            v.type_name().to_owned()
+        }
     }
 
     /// The type name for a library's "expected, got" messages, as C's `luaL_typeerror` (and
@@ -2310,7 +2410,11 @@ impl Lua {
                 if *thread == self.cur_ref {
                     self.st(*idx)
                 } else {
-                    self.heap.threads.get(thread.idx).and_then(|t| t.stack.get(*idx).copied()).unwrap_or_default()
+                    self.heap
+                        .threads
+                        .get(thread.idx)
+                        .and_then(|t| t.stack.get(*idx).copied())
+                        .unwrap_or_default()
                 }
             }
             None => Value::Nil,
@@ -2404,7 +2508,13 @@ impl Lua {
             if matches!(mm, Value::Func(f) if matches!(self.heap.funcs.get(f.idx), Some(Func::Lua { .. }))) {
                 let pos = self.call_top();
                 let called = self.place_call(pos, mm, &[v, err]).and_then(|()| {
-                    self.precall_event(Some("close"), pos, 2, 0, FrameKind::Cont(Cont::ErrClosing { frame: i }))
+                    self.precall_event(
+                        Some("close"),
+                        pos,
+                        2,
+                        0,
+                        FrameKind::Cont(Cont::ErrClosing { frame: i }),
+                    )
                 });
                 match called {
                     Ok(_) => return Ok(()),
@@ -2526,7 +2636,13 @@ impl Lua {
 
     /// A protected call whose callee could not be called: `false` and the error (through
     /// `handler`) as its results at `dest`.
-    fn pcall_failed(&mut self, e: LuaError, handler: Option<Value>, dest: usize, wanted: i32) -> Result<(), LuaError> {
+    fn pcall_failed(
+        &mut self,
+        e: LuaError,
+        handler: Option<Value>,
+        dest: usize,
+        wanted: i32,
+    ) -> Result<(), LuaError> {
         let mut ev = self.normalize(c_level(e))?;
         if let Some(h) = handler {
             ev = self.call_handler(h, ev)?;
@@ -2576,8 +2692,10 @@ impl Lua {
             };
             return match k {
                 K::Lua(proto) => self.push_frame(f, proto, func, nargs, nres, kind, from_lua),
-                K::Native(nf, name) => self.call_native(func, nargs, nres, kind, from_lua, name, |l, a| nf(l, a)),
-                K::Host(hf, name) => self.call_native(func, nargs, nres, kind, from_lua, name, |l, a| hf(l, a)),
+                K::Native(nf, name) => self.call_native(func, nargs, nres, kind, from_lua, name, nf),
+                K::Host(hf, name) => {
+                    self.call_native(func, nargs, nres, kind, from_lua, name, |l, a| hf(l, a))
+                }
             };
         }
         Err(LuaError::msg("'__call' chain too long; possible loop"))
@@ -2759,12 +2877,23 @@ impl Lua {
     /// the same results, fuel, memory and stack. None when it cannot: `call_native` makes
     /// the call then, from the start (`in_place` leaves nothing done).
     #[inline(never)]
-    fn call_in_place(&mut self, op: u8, func: usize, nargs: usize, nres: i32) -> Option<Result<Called, LuaError>> {
+    fn call_in_place(
+        &mut self,
+        op: u8,
+        func: usize,
+        nargs: usize,
+        nres: i32,
+    ) -> Option<Result<Called, LuaError>> {
         let want = usize::try_from(nres).unwrap_or(0);
         // The stack `call_native` makes sure of, room for two results and the nils wanted
         // (more than 16 are paid: SEC-M7), and no limit hit pending (it stops the call).
         // (Off with the fast loop: the tests' reference path is `call_native`.)
-        if !self.fast || self.limit_hit.is_some() || nargs > 4 || want > 16 || self.cur.stack.len() < (func + 1 + nargs + EXTRA_STACK).max(func + want.max(2) + 2) {
+        if !self.fast
+            || self.limit_hit.is_some()
+            || nargs > 4
+            || want > 16
+            || self.cur.stack.len() < (func + 1 + nargs + EXTRA_STACK).max(func + want.max(2) + 2)
+        {
             return None;
         }
         let mut args = [Value::Nil; 4];
@@ -2772,7 +2901,15 @@ impl Lua {
             *a = self.st(func + 1 + i);
         }
         // (Its fuel is the fuel in hand before the call's step.)
-        let (r, n, cost) = crate::stdlib::string::in_place(&mut self.heap, self.names.types(), &mut self.match_state, usize::from(op - 1), args.get(..nargs)?, self.fuel + 1, self.limits.string_len)?;
+        let (r, n, cost) = crate::stdlib::string::in_place(
+            &mut self.heap,
+            self.names.types(),
+            &mut self.match_state,
+            usize::from(op - 1),
+            args.get(..nargs)?,
+            self.fuel + 1,
+            self.limits.string_len,
+        )?;
         self.pending_event = None;
         self.fuel -= cost;
         for i in 0..n.max(want) {
@@ -2872,7 +3009,12 @@ impl Lua {
     /// A native's error, given its position and name while the native is still the
     /// running function; the call state is put back.
     #[cold]
-    fn native_failed(&mut self, e: LuaError, saved: (usize, bool, &'static str), (under_pcall, c_levels): (usize, usize)) -> LuaError {
+    fn native_failed(
+        &mut self,
+        e: LuaError,
+        saved: (usize, bool, &'static str),
+        (under_pcall, c_levels): (usize, usize),
+    ) -> LuaError {
         // A long result list an error cut short is not kept: past the call it was outside
         // the account for good (SEC7-1: 39 MiB after a stopped `table.unpack`).
         clear_list(&mut self.rets);
@@ -2896,7 +3038,14 @@ impl Lua {
 
     /// What a native asked for besides returning to a plain call: results through a
     /// protected or continued frame, a protected call, a yield or a resume.
-    fn native_flow(&mut self, flow: Flow, func: usize, nres: i32, kind: FrameKind, from_lua: bool) -> Result<Called, LuaError> {
+    fn native_flow(
+        &mut self,
+        flow: Flow,
+        func: usize,
+        nres: i32,
+        kind: FrameKind,
+        from_lua: bool,
+    ) -> Result<Called, LuaError> {
         match flow {
             Flow::Return => {
                 let n = self.rets.len();
@@ -2916,7 +3065,8 @@ impl Lua {
                 // stack. (The enclosing calls' slots are `dest`, `dest + 1`, ..., `func`.)
                 let pkind = FrameKind::Protected { dest: func, wanted: -1, cont: Some(nest) };
                 // `precall` calls it (not here: the callee may be a protected call too).
-                self.nested_pending = Some(NestedCall { func: func + 1, nargs: fnargs, kind: pkind, handler });
+                self.nested_pending =
+                    Some(NestedCall { func: func + 1, nargs: fnargs, kind: pkind, handler });
                 Ok(Called::Done)
             }
             Flow::PCall { handler, nargs: fnargs } if matches!(kind, FrameKind::Protected { .. }) => {
@@ -2980,17 +3130,30 @@ impl Lua {
                     FrameKind::Protected { dest, wanted, cont: None } => {
                         Some(FrameKind::Protected { dest, wanted, cont: Some(Cont::Three { wanted }) })
                     }
-                    FrameKind::Protected { dest, wanted, cont: Some(Cont::Nest { dest: d, bits, wanted: w, back, n }) } => {
+                    FrameKind::Protected {
+                        dest,
+                        wanted,
+                        cont: Some(Cont::Nest { dest: d, bits, wanted: w, back, n }),
+                    } => {
                         // (Never `three` already: that kind is a Lua `__pairs` frame's.)
                         let nest = Cont::Nest { dest: d, bits: bits.with_three(), wanted: w, back, n };
                         Some(FrameKind::Protected { dest, wanted, cont: Some(nest) })
                     }
-                    FrameKind::Protected { dest, wanted, cont: Some(c) } => pack_then(c, dest).and_then(|(then, back, n)| {
-                        let nest = Cont::Nest { dest, bits: NestBits::new(0, then, true)?, wanted, back, n };
-                        Some(FrameKind::Protected { dest, wanted: -1, cont: Some(nest) })
-                    }),
+                    FrameKind::Protected { dest, wanted, cont: Some(c) } => {
+                        pack_then(c, dest).and_then(|(then, back, n)| {
+                            let nest =
+                                Cont::Nest { dest, bits: NestBits::new(0, then, true)?, wanted, back, n };
+                            Some(FrameKind::Protected { dest, wanted: -1, cont: Some(nest) })
+                        })
+                    }
                     FrameKind::Cont(c) => pack_then(c, func).and_then(|(then, back, n)| {
-                        let nest = Cont::Nest { dest: func, bits: NestBits::new(0, then, true)?, wanted: nres, back, n };
+                        let nest = Cont::Nest {
+                            dest: func,
+                            bits: NestBits::new(0, then, true)?,
+                            wanted: nres,
+                            back,
+                            n,
+                        };
                         Some(FrameKind::Cont(nest))
                     }),
                     FrameKind::Normal => None,
@@ -3020,9 +3183,8 @@ impl Lua {
         // Frames C Lua calls from C: protected calls, and metamethods, `__close` and
         // `__pairs` (continued frames here).
         // (Frames a resume after a yield unrolled count no more, as in C Lua.)
-        let protected = |t: &ThreadState| {
-            t.frames.iter().skip(t.unrolled).map(|f| c_calls(f.kind)).sum::<usize>()
-        };
+        let protected =
+            |t: &ThreadState| t.frames.iter().skip(t.unrolled).map(|f| c_calls(f.kind)).sum::<usize>();
         let mut walked = self.cur.frames.len();
         let mut level = self.c_depth + self.protected_natives + HANDLER_BASE_LEVELS + protected(&self.cur);
         let mut next = self.cur.resumer;
@@ -3033,7 +3195,8 @@ impl Lua {
             let Some(t) = self.heap.threads.get(r.idx) else { break };
             // A `pcall` of the resuming function itself (`pcall(coroutine.wrap(f))`) has no
             // frame of its own: it is the pending resume's kind.
-            let pcall_of_resume = t.resume_pending.as_ref().map_or(0, |p| if p.from_lua { 0 } else { c_calls(p.kind) });
+            let pcall_of_resume =
+                t.resume_pending.as_ref().map_or(0, |p| if p.from_lua { 0 } else { c_calls(p.kind) });
             level += RESUME_LEVELS + protected(t) + pcall_of_resume;
             walked += t.frames.len();
             next = t.resumer;
@@ -3094,7 +3257,10 @@ impl Lua {
             _ => None,
         };
         let saved = std::mem::replace(&mut self.handler_native, raised);
-        let watch = std::mem::replace(&mut self.handler_raise, HandlerWatch { thread: Some(self.cur_ref), ..HandlerWatch::default() });
+        let watch = std::mem::replace(
+            &mut self.handler_raise,
+            HandlerWatch { thread: Some(self.cur_ref), ..HandlerWatch::default() },
+        );
         let r = self.call_handler_at(h, err);
         self.handler_native = saved;
         self.handler_raise = watch;
@@ -3153,7 +3319,13 @@ impl Lua {
 
     /// Copies `n` results from `src` to `dst`, adjusted to `wanted` (-1: all, setting the
     /// top).
-    pub(crate) fn move_results(&mut self, dst: usize, src: usize, n: usize, wanted: i32) -> Result<(), LuaError> {
+    pub(crate) fn move_results(
+        &mut self,
+        dst: usize,
+        src: usize,
+        n: usize,
+        wanted: i32,
+    ) -> Result<(), LuaError> {
         let want = if wanted < 0 { n } else { wanted as usize };
         // The values moved, or the nils written up to what the caller wants when more
         // (SEC-M7: a call adjusted to 30,000 results wrote them all for one unit).
@@ -3191,7 +3363,9 @@ impl Lua {
             FrameKind::Normal => self.move_results(func, src, n, nres),
             FrameKind::Protected { dest, wanted, cont } => {
                 // `pcall(pairs, t)` with a Lua `__pairs`: its results cut to three.
-                let n = if matches!(cont, Some(Cont::Three { .. })) || matches!(cont, Some(Cont::Nest { bits, .. }) if bits.three()) {
+                let n = if matches!(cont, Some(Cont::Three { .. }))
+                    || matches!(cont, Some(Cont::Nest { bits, .. }) if bits.three())
+                {
                     self.move_results(dest + 1, src, n.min(3), 3)?;
                     3
                 } else {
@@ -3269,9 +3443,15 @@ impl Lua {
                         let Some(&Frame { proto, pc, base, .. }) = self.cur.frames.last() else {
                             return Err(ErrorKind::Type { op, ty, operand }.into());
                         };
-                        let r = u16::try_from((a + usize::from(operand)).saturating_sub(base)).unwrap_or(u16::MAX);
+                        let r = u16::try_from((a + usize::from(operand)).saturating_sub(base))
+                            .unwrap_or(u16::MAX);
                         let at = pc.saturating_sub(1);
-                        return Err(self.annotate(ErrorKind::Type { op, ty, operand: 0 }.into(), proto, at, &[crate::debug::Operand::Reg(r)]));
+                        return Err(self.annotate(
+                            ErrorKind::Type { op, ty, operand: 0 }.into(),
+                            proto,
+                            at,
+                            &[crate::debug::Operand::Reg(r)],
+                        ));
                     }
                     Err(e) => return Err(e.into()),
                 }
@@ -3297,9 +3477,13 @@ impl Lua {
             // Not callable (gone, or never a function): the message names the event, with
             // a position, as C Lua's on a normal exit.
             if !matches!(mm, Value::Func(_)) && self.tm(mm, Tm::Call).is_nil() {
-                return Err(LuaError::msg(format!("attempt to call a {} value (metamethod 'close')", self.obj_type_name(mm))));
+                return Err(LuaError::msg(format!(
+                    "attempt to call a {} value (metamethod 'close')",
+                    self.obj_type_name(mm)
+                )));
             }
-            let is_lua = matches!(mm, Value::Func(f) if matches!(self.heap.funcs.get(f.idx), Some(Func::Lua { .. })));
+            let is_lua =
+                matches!(mm, Value::Func(f) if matches!(self.heap.funcs.get(f.idx), Some(Func::Lua { .. })));
             if is_lua {
                 let pos = self.call_top().max(floor);
                 self.place_call(pos, mm, &[v, Value::Nil])?;
@@ -3341,7 +3525,11 @@ impl Lua {
         let Some(frame) = self.cur.frames.pop() else { return Ok(()) };
         self.finish_call(frame.kind, frame.func, src, n, frame.nresults, true)?;
         // Not a callback's return to a native body (`nny`: SEC7-V1, `wrap(table.sort)`).
-        if self.cur.frames.is_empty() && self.cur_ref != self.main_ref && self.cur.resumer.is_some() && self.cur.nny == 0 {
+        if self.cur.frames.is_empty()
+            && self.cur_ref != self.main_ref
+            && self.cur.resumer.is_some()
+            && self.cur.nny == 0
+        {
             self.finish_coroutine()?;
         }
         Ok(())
@@ -3457,8 +3645,10 @@ impl Lua {
             // the running Lua function, none when a library function is running (LIBS-5:
             // a `require` cycle said "t:2: stack overflow (too many nested calls from
             // library functions)" where C Lua says "C stack overflow").
-            let native_on_top =
-                self.native_stack.last().is_some_and(|&(t, d, ..)| t == self.cur_ref && d == self.cur.frames.len());
+            let native_on_top = self
+                .native_stack
+                .last()
+                .is_some_and(|&(t, d, ..)| t == self.cur_ref && d == self.cur.frames.len());
             return Err(if native_on_top {
                 LuaError::Plain("C stack overflow".into())
             } else {
@@ -3467,7 +3657,9 @@ impl Lua {
         }
         let pos = self.call_top();
         self.ensure_stack(pos + args.len() + 1 + EXTRA_STACK)?;
-        if let Some((slot, rest)) = self.cur.stack.get_mut(pos..pos + 1 + args.len()).and_then(|s| s.split_first_mut()) {
+        if let Some((slot, rest)) =
+            self.cur.stack.get_mut(pos..pos + 1 + args.len()).and_then(|s| s.split_first_mut())
+        {
             *slot = f;
             for (d, a) in rest.iter_mut().zip(args) {
                 *d = *a;
@@ -3492,9 +3684,17 @@ impl Lua {
             Ok(Called::Lua) => {
                 // The fast loop first, as `run`'s first step would take it (the frame was just
                 // pushed with its window): a callback it finishes needs no `run` at all.
-                if self.fast && self.cur.frames.last().and_then(|f| self.proto(f.proto)).is_some_and(|p| !p.wide()) {
+                if self.fast
+                    && self.cur.frames.last().and_then(|f| self.proto(f.proto)).is_some_and(|p| !p.wide())
+                {
                     let ctx = crate::fast::Ctx { cur: bthread, stop_depth: bdepth, ..self.fast_ctx() };
-                    crate::fast::run::<WINDOW>(&mut self.heap, &mut self.cur, &mut self.top, &ctx, &mut self.fuel);
+                    crate::fast::run::<WINDOW>(
+                        &mut self.heap,
+                        &mut self.cur,
+                        &mut self.top,
+                        &ctx,
+                        &mut self.fuel,
+                    );
                 }
                 if self.cur.frames.len() > bdepth { self.execute(bthread, bdepth) } else { Ok(()) }
             }
@@ -3846,7 +4046,8 @@ impl Lua {
                 LuaError::Msg(format!("attempt to {op} a {ty} value{info}"))
             }
             ErrorKind::Call { ty } => {
-                let info = operands.first().map(|o| crate::debug::var_info(self, proto, pc, *o)).unwrap_or_default();
+                let info =
+                    operands.first().map(|o| crate::debug::var_info(self, proto, pc, *o)).unwrap_or_default();
                 LuaError::Msg(format!("attempt to call a {ty} value{info}"))
             }
             ErrorKind::IntRepr { operand } => {
@@ -3882,7 +4083,11 @@ impl Lua {
         let mut s = String::from("stack traceback:");
         for &(src, line, defined) in &trace {
             let Some(source) = self.trace_sources.get(src) else { continue };
-            let what = if defined == 0 { "in main chunk".to_owned() } else { format!("in function <{source}:{defined}>") };
+            let what = if defined == 0 {
+                "in main chunk".to_owned()
+            } else {
+                format!("in function <{source}:{defined}>")
+            };
             s.push_str(&format!("\n\t{source}:{line}: {what}"));
         }
         self.trace_sources.clear();
@@ -3910,9 +4115,9 @@ impl Lua {
         let mut first = true;
         loop {
             let min = if self.cur_ref == bthread { bdepth } else { 0 };
-            let found = (min..self.cur.frames.len())
-                .rev()
-                .find(|&i| matches!(self.cur.frames.get(i).map(|f| f.kind), Some(FrameKind::Protected { .. })));
+            let found = (min..self.cur.frames.len()).rev().find(|&i| {
+                matches!(self.cur.frames.get(i).map(|f| f.kind), Some(FrameKind::Protected { .. }))
+            });
             // S6-7: under a message handler, where this error was raised, unless something
             // catches it (the first, deepest raise of an error that escapes).
             if std::mem::take(&mut first) && self.handler_raise.thread == Some(self.cur_ref) {
@@ -3929,7 +4134,8 @@ impl Lua {
                         return Err(e);
                     }
                     self.handler_raise.raised = Some(level);
-                    self.handler_raise.pos = self.handler_raise.cross.and_then(|(from, at)| self.cross_where(from, at));
+                    self.handler_raise.pos =
+                        self.handler_raise.cross.and_then(|(from, at)| self.cross_where(from, at));
                 }
             }
             if let Some(i) = found {
@@ -4102,7 +4308,10 @@ impl Lua {
         // are pointer swaps (moving the states themselves was most of a switch's cost).
         let (from, into) = (self.cur_ref.idx as usize, to.idx as usize);
         let threads = &mut self.heap.threads;
-        if from != into && from < threads.slots() && let Some(slot) = threads.at_mut(into) {
+        if from != into
+            && from < threads.slots()
+            && let Some(slot) = threads.at_mut(into)
+        {
             std::mem::swap(&mut self.cur, slot);
             threads.swap_slots(from, into);
         } else {
@@ -4207,12 +4416,11 @@ impl Lua {
         // reaches the limit (charged as `call_handler` charges the walk).
         let pcall_of_resume = if from_lua { 0 } else { c_calls(kind) };
         let here = pcall_of_resume + self.c_bound_here(func);
-        if self.c_depth + self.protected_natives + (HANDLER_BASE_LEVELS - 1) + here >= C_HANDLER_LEVELS
-            || self.resume_depth + 1 > self.limits.native_depth
+        if (self.c_depth + self.protected_natives + (HANDLER_BASE_LEVELS - 1) + here >= C_HANDLER_LEVELS
+            || self.resume_depth + 1 > self.limits.native_depth)
+            && let Some(done) = self.resume_refused(func, nres, co, wrap, from_lua, kind, pcall_of_resume)?
         {
-            if let Some(done) = self.resume_refused(func, nres, co, wrap, from_lua, kind, pcall_of_resume)? {
-                return Ok(done);
-            }
+            return Ok(done);
         }
         // Its first resume maps its register window (LR-8); charged once the resume is
         // known to run, so a refused resume leaves the coroutine as it was.
@@ -4400,7 +4608,12 @@ impl Lua {
             return;
         }
         let Some(t) = self.heap.threads.get_mut(co.idx) else { return };
-        if t.status != CoStatus::Dead || t.fresh || !t.frames.is_empty() || !t.tbc.is_empty() || !t.open_upvals.is_empty() {
+        if t.status != CoStatus::Dead
+            || t.fresh
+            || !t.frames.is_empty()
+            || !t.tbc.is_empty()
+            || !t.open_upvals.is_empty()
+        {
             return;
         }
         let mut stack = std::mem::take(&mut t.stack);
@@ -4448,7 +4661,10 @@ impl Lua {
     /// indexed by their 8-bit numbers without checks; fuel lives in a local, written back
     /// before anything that looks at it.
     #[allow(clippy::too_many_lines, reason = "the interpreter's dispatch is one match")]
-    #[allow(clippy::indexing_slicing, reason = "a u8 register into the 256-slot window cannot be out of bounds")]
+    #[allow(
+        clippy::indexing_slicing,
+        reason = "a u8 register into the 256-slot window cannot be out of bounds"
+    )]
     fn run(&mut self, bthread: ThreadRef, bdepth: usize) -> Result<(), LuaError> {
         use crate::debug::Operand as O;
         let mut ctx = self.fast_ctx();
@@ -4534,6 +4750,9 @@ impl Lua {
                 // (Both uses reload the frame, and the fuel with it, right after.)
                 ($e:expr) => {{
                     save!();
+                    // Not `?`: its `From` round-trip grows `run`'s frame in debug builds,
+                    // and every nested host level pays it (S6-STK-1).
+                    #[allow(clippy::question_mark)]
                     if let Err(e) = $e {
                         return Err(e);
                     }
@@ -4573,7 +4792,11 @@ impl Lua {
             }
             macro_rules! kv {
                 ($k:expr) => {
-                    self.heap.protos.at(pidx as usize).and_then(|p: &Proto| p.consts.get(($k) as usize).copied()).unwrap_or(Value::Nil)
+                    self.heap
+                        .protos
+                        .at(pidx as usize)
+                        .and_then(|p: &Proto| p.consts.get(($k) as usize).copied())
+                        .unwrap_or(Value::Nil)
                 };
             }
             macro_rules! rk {
@@ -4606,12 +4829,24 @@ impl Lua {
             // `arith!` on two registers, or on a register and a constant.
             macro_rules! arith_rr {
                 ($op:ident, $a:expr, $b:expr, $c:expr) => {
-                    arith!(ArithOp::$op, $a, reg!(usize::from($b)), reg!(usize::from($c)), [O::Reg($b), O::Reg($c)])
+                    arith!(
+                        ArithOp::$op,
+                        $a,
+                        reg!(usize::from($b)),
+                        reg!(usize::from($c)),
+                        [O::Reg($b), O::Reg($c)]
+                    )
                 };
             }
             macro_rules! arith_rk {
                 ($op:ident, $a:expr, $b:expr, $k:expr) => {
-                    arith!(ArithOp::$op, $a, reg!(usize::from($b)), kv!($k), [O::Reg($b), O::Rk(Rk::konst($k))])
+                    arith!(
+                        ArithOp::$op,
+                        $a,
+                        reg!(usize::from($b)),
+                        kv!($k),
+                        [O::Reg($b), O::Rk(Rk::konst($k))]
+                    )
                 };
             }
 
@@ -4631,9 +4866,21 @@ impl Lua {
                 save!();
                 let moved = fast_now
                     && if wide {
-                        crate::fast::run::<WIDE_WINDOW>(&mut self.heap, &mut self.cur, &mut self.top, &ctx, &mut self.fuel)
+                        crate::fast::run::<WIDE_WINDOW>(
+                            &mut self.heap,
+                            &mut self.cur,
+                            &mut self.top,
+                            &ctx,
+                            &mut self.fuel,
+                        )
                     } else {
-                        crate::fast::run::<WINDOW>(&mut self.heap, &mut self.cur, &mut self.top, &ctx, &mut self.fuel)
+                        crate::fast::run::<WINDOW>(
+                            &mut self.heap,
+                            &mut self.cur,
+                            &mut self.top,
+                            &ctx,
+                            &mut self.fuel,
+                        )
                     };
                 if moved {
                     fast_tried = Some(wide);
@@ -4658,7 +4905,8 @@ impl Lua {
                     }
                     fuel = self.fuel;
                 }
-                let Some(ins) = self.heap.protos.at(pidx as usize).and_then(|p| p.code.get(pc)).copied() else {
+                let Some(ins) = self.heap.protos.at(pidx as usize).and_then(|p| p.code.get(pc)).copied()
+                else {
                     save!();
                     return Err(LuaError::msg("internal: ran past the end of the code"));
                 };
@@ -4671,7 +4919,9 @@ impl Lua {
                         if self.cur.stack.len() < base + width {
                             t!(call!(self.ensure_window(base, width)));
                         }
-                        let Some(next) = self.heap.protos.at(pidx as usize).and_then(|p| p.code.get(pc)).copied() else {
+                        let Some(next) =
+                            self.heap.protos.at(pidx as usize).and_then(|p| p.code.get(pc)).copied()
+                        else {
                             save!();
                             return Err(LuaError::msg("internal: ran past the end of the code"));
                         };
@@ -4685,7 +4935,8 @@ impl Lua {
                     Instr::MoveAbs { a, b, b_hi } => {
                         // (The source counts from the window: `base` is `frame_base` unless a
                         // `Window` came first.)
-                        let (dst, src) = (frame_base + a as usize, base + (usize::from(b) | usize::from(b_hi) << 16));
+                        let (dst, src) =
+                            (frame_base + a as usize, base + (usize::from(b) | usize::from(b_hi) << 16));
                         if self.cur.stack.len() <= dst.max(src) {
                             t!(call!(self.ensure_window(dst.max(src), 1)));
                         }
@@ -4740,13 +4991,16 @@ impl Lua {
                     Instr::GetTabUp { a, u, k } => {
                         let t = self.upval_get(closure, u);
                         let key = kv!(k);
-                        if let Value::Table(tr) = t {
-                            if let Some(v) = self.get_field_cached(tr, key, pidx, pc - 1) {
-                                setr!(a, v);
-                                continue;
-                            }
+                        if let Value::Table(tr) = t
+                            && let Some(v) = self.get_field_cached(tr, key, pidx, pc - 1)
+                        {
+                            setr!(a, v);
+                            continue;
                         }
-                        match ta!(call!(self.index(t, key, Cont::Store(base + usize::from(a)))), [O::Upval(u)]) {
+                        match ta!(
+                            call!(self.index(t, key, Cont::Store(base + usize::from(a)))),
+                            [O::Upval(u)]
+                        ) {
                             Some(v) => setr!(a, v),
                             None => reload!(),
                         }
@@ -4779,7 +5033,8 @@ impl Lua {
                                 continue;
                             }
                         }
-                        match ta!(call!(self.index(t, key, Cont::Store(base + usize::from(a)))), [O::Reg(b)]) {
+                        match ta!(call!(self.index(t, key, Cont::Store(base + usize::from(a)))), [O::Reg(b)])
+                        {
                             Some(v) => setr!(a, v),
                             None => reload!(),
                         }
@@ -4793,7 +5048,8 @@ impl Lua {
                             setr!(a, v);
                             continue;
                         }
-                        match ta!(call!(self.index(t, key, Cont::Store(base + usize::from(a)))), [O::Reg(b)]) {
+                        match ta!(call!(self.index(t, key, Cont::Store(base + usize::from(a)))), [O::Reg(b)])
+                        {
                             Some(v) => setr!(a, v),
                             None => reload!(),
                         }
@@ -4804,7 +5060,8 @@ impl Lua {
                         let key = kv!(k);
                         // (The fast loop finds methods; here, the general lookup, which
                         // charges each `__index` link as the fast loop does.)
-                        match ta!(call!(self.index(t, key, Cont::Store(base + usize::from(a)))), [O::Reg(b)]) {
+                        match ta!(call!(self.index(t, key, Cont::Store(base + usize::from(a)))), [O::Reg(b)])
+                        {
                             Some(v) => setr!(a, v),
                             None => reload!(),
                         }
@@ -4859,11 +5116,18 @@ impl Lua {
                     Instr::Arith { op, a, b, c } => {
                         let x = rk!(b);
                         let y = rk!(c);
-                        let fast = if op == ArithOp::Sub && c.is_const() { crate::fast::sub_k(x, y) } else { crate::fast::arith(op, x, y) };
+                        let fast = if op == ArithOp::Sub && c.is_const() {
+                            crate::fast::sub_k(x, y)
+                        } else {
+                            crate::fast::arith(op, x, y)
+                        };
                         match fast {
                             Some(v) => setr!(a, v),
                             None => {
-                                match ta!(call!(self.arith(op, x, y, Cont::Store(base + usize::from(a)))), [O::Rk(b), O::Rk(c)]) {
+                                match ta!(
+                                    call!(self.arith(op, x, y, Cont::Store(base + usize::from(a)))),
+                                    [O::Rk(b), O::Rk(c)]
+                                ) {
                                     Some(v) => setr!(a, v),
                                     None => reload!(),
                                 }
@@ -4875,7 +5139,10 @@ impl Lua {
                         match x {
                             Value::Int(i) => setr!(usize::from(a), Value::Int(i.wrapping_neg())),
                             Value::Num(f) => setr!(usize::from(a), Value::Num(-f)),
-                            _ => match ta!(call!(self.unary(Tm::Unm, x, Cont::Store(base + usize::from(a)))), [O::Reg(b)]) {
+                            _ => match ta!(
+                                call!(self.unary(Tm::Unm, x, Cont::Store(base + usize::from(a)))),
+                                [O::Reg(b)]
+                            ) {
                                 Some(v) => setr!(a, v),
                                 None => reload!(),
                             },
@@ -4885,7 +5152,10 @@ impl Lua {
                         let x = reg!(usize::from(b));
                         match x {
                             Value::Int(i) => setr!(usize::from(a), Value::Int(!i)),
-                            _ => match ta!(call!(self.unary(Tm::BNot, x, Cont::Store(base + usize::from(a)))), [O::Reg(b)]) {
+                            _ => match ta!(
+                                call!(self.unary(Tm::BNot, x, Cont::Store(base + usize::from(a)))),
+                                [O::Reg(b)]
+                            ) {
                                 Some(v) => setr!(a, v),
                                 None => reload!(),
                             },
@@ -4899,14 +5169,19 @@ impl Lua {
                                 let n = self.heap.str_bytes(s).len() as i64;
                                 setr!(a, Value::Int(n));
                             }
-                            Value::Table(tr) if self.heap.tables.get(tr.idx).is_some_and(|t| t.meta.is_none()) => {
+                            Value::Table(tr)
+                                if self.heap.tables.get(tr.idx).is_some_and(|t| t.meta.is_none()) =>
+                            {
                                 let n = self.raw_len(tr);
                                 setr!(a, Value::Int(n));
                             }
-                            _ => match ta!(call!(self.len(x, Cont::Store(base + usize::from(a)))), [O::Reg(b)]) {
-                                Some(v) => setr!(a, v),
-                                None => reload!(),
-                            },
+                            _ => {
+                                match ta!(call!(self.len(x, Cont::Store(base + usize::from(a)))), [O::Reg(b)])
+                                {
+                                    Some(v) => setr!(a, v),
+                                    None => reload!(),
+                                }
+                            }
                         }
                     }
                     Instr::Concat { a, n } => {
@@ -4921,7 +5196,12 @@ impl Lua {
                                 let e = match e.into_kind() {
                                     ErrorKind::Type { op, ty, operand } => {
                                         let r = a.saturating_add(u16::from(operand));
-                                        self.annotate(ErrorKind::Type { op, ty, operand: 0 }.into(), pidx, pc - 1, &[O::Reg(r)])
+                                        self.annotate(
+                                            ErrorKind::Type { op, ty, operand: 0 }.into(),
+                                            pidx,
+                                            pc - 1,
+                                            &[O::Reg(r)],
+                                        )
                                     }
                                     other => other.into(),
                                 };
@@ -4944,7 +5224,13 @@ impl Lua {
                     }
                     Instr::Jmp { off, close } => {
                         pc = (pc as i64 + i64::from(off)) as usize;
-                        if close > 0 && !t!(call!(self.close_async(base + usize::from(close) - 1, AfterClose::Nothing, 0))) {
+                        if close > 0
+                            && !t!(call!(self.close_async(
+                                base + usize::from(close) - 1,
+                                AfterClose::Nothing,
+                                0
+                            )))
+                        {
                             reload!();
                         }
                     }
@@ -4954,8 +5240,20 @@ impl Lua {
                         match crate::fast::arith(ArithOp::Add, x, Value::Int(i64::from(i))) {
                             Some(v) => setr!(a, v),
                             None => {
-                                let (op, y) = if sub { (ArithOp::Sub, -i64::from(i)) } else { (ArithOp::Add, i64::from(i)) };
-                                match ta!(call!(self.arith(op, x, Value::Int(y), Cont::Store(base + usize::from(a)))), [O::Reg(b)]) {
+                                let (op, y) = if sub {
+                                    (ArithOp::Sub, -i64::from(i))
+                                } else {
+                                    (ArithOp::Add, i64::from(i))
+                                };
+                                match ta!(
+                                    call!(self.arith(
+                                        op,
+                                        x,
+                                        Value::Int(y),
+                                        Cont::Store(base + usize::from(a))
+                                    )),
+                                    [O::Reg(b)]
+                                ) {
                                     Some(v) => setr!(a, v),
                                     None => reload!(),
                                 }
@@ -4990,7 +5288,10 @@ impl Lua {
                             pc += 1;
                         }
                     }
-                    Instr::LtI { a, i, k } | Instr::LeI { a, i, k } | Instr::GtI { a, i, k } | Instr::GeI { a, i, k } => {
+                    Instr::LtI { a, i, k }
+                    | Instr::LeI { a, i, k }
+                    | Instr::GtI { a, i, k }
+                    | Instr::GeI { a, i, k } => {
                         // Written with the immediate on the right (`<`, `<=`) or on the left.
                         let (r, n) = (reg!(usize::from(a)), Value::Int(i64::from(i)));
                         let (tm, x, y, le) = match ins {
@@ -5018,7 +5319,8 @@ impl Lua {
                         } else {
                             match (x, y) {
                                 (Value::Str(sa), Value::Str(sb)) => t!(call!(self.str_eq(sa, sb))),
-                                (Value::Table(_), Value::Table(_)) | (Value::UserData(_), Value::UserData(_)) => {
+                                (Value::Table(_), Value::Table(_))
+                                | (Value::UserData(_), Value::UserData(_)) => {
                                     match t!(call!(self.eq_slow(x, y, Cont::Cond { k }))) {
                                         Some(r) => r,
                                         None => reload!(),
@@ -5084,7 +5386,8 @@ impl Lua {
                     }
                     Instr::Call { a, b, c } => {
                         let func = base + usize::from(a);
-                        let nargs = if b == MULTI { self.top.saturating_sub(func + 1) } else { usize::from(b) };
+                        let nargs =
+                            if b == MULTI { self.top.saturating_sub(func + 1) } else { usize::from(b) };
                         let nres = if c == MULTI { -1 } else { i32::from(c) };
                         // A Lua function: a new frame, run here. A library function: called
                         // straight away.
@@ -5092,10 +5395,23 @@ impl Lua {
                             Value::Func(f) => match self.heap.funcs.get(f.idx) {
                                 Some(Func::Lua { proto, .. }) => {
                                     let proto = *proto;
-                                    ta!(call!(self.push_frame(f, proto, func, nargs, nres, FrameKind::Normal, true)), [O::Reg(a)]);
+                                    ta!(
+                                        call!(self.push_frame(
+                                            f,
+                                            proto,
+                                            func,
+                                            nargs,
+                                            nres,
+                                            FrameKind::Normal,
+                                            true
+                                        )),
+                                        [O::Reg(a)]
+                                    );
                                     continue 'reload;
                                 }
-                                Some(Func::Native { .. }) if Some(f) == self.names.yield_fn && self.limit_hit.is_none() => {
+                                Some(Func::Native { .. })
+                                    if Some(f) == self.names.yield_fn && self.limit_hit.is_none() =>
+                                {
                                     call!(self.yield_from_lua(func, nargs, nres))
                                 }
                                 // `collectgarbage('step')`: its step first, here, where the
@@ -5104,7 +5420,10 @@ impl Lua {
                                 // resume, its step done, as an instruction that steps before
                                 // its work does (`gc_step_at!`).
                                 Some(Func::Native { f: nf, name, .. })
-                                    if Some(f) == self.names.collect_fn && self.limit_hit.is_none() && self.gc_call_before.is_none() && self.basic_step_call(func, nargs) =>
+                                    if Some(f) == self.names.collect_fn
+                                        && self.limit_hit.is_none()
+                                        && self.gc_call_before.is_none()
+                                        && self.basic_step_call(func, nargs) =>
                                 {
                                     let (nf, name) = (*nf, *name);
                                     if let Err(e) = call!(self.collect_step()) {
@@ -5120,13 +5439,33 @@ impl Lua {
                                         }
                                         return Err(e);
                                     }
-                                    call!(self.call_native(func, nargs, nres, FrameKind::Normal, true, name, nf))
+                                    call!(self.call_native(
+                                        func,
+                                        nargs,
+                                        nres,
+                                        FrameKind::Normal,
+                                        true,
+                                        name,
+                                        nf
+                                    ))
                                 }
                                 Some(Func::Native { f: nf, name, in_place, .. }) => {
                                     let (nf, name, op) = (*nf, *name, *in_place);
-                                    call!(match if op > 0 { self.call_in_place(op, func, nargs, nres) } else { None } {
+                                    call!(match if op > 0 {
+                                        self.call_in_place(op, func, nargs, nres)
+                                    } else {
+                                        None
+                                    } {
                                         Some(r) => r,
-                                        None => self.call_native(func, nargs, nres, FrameKind::Normal, true, name, nf),
+                                        None => self.call_native(
+                                            func,
+                                            nargs,
+                                            nres,
+                                            FrameKind::Normal,
+                                            true,
+                                            name,
+                                            nf
+                                        ),
                                     })
                                 }
                                 _ => call!(self.precall(func, nargs, nres, FrameKind::Normal, true)),
@@ -5144,7 +5483,8 @@ impl Lua {
                     }
                     Instr::TailCall { a, b } => {
                         let func = base + usize::from(a);
-                        let mut nargs = if b == MULTI { self.top.saturating_sub(func + 1) } else { usize::from(b) };
+                        let mut nargs =
+                            if b == MULTI { self.top.saturating_sub(func + 1) } else { usize::from(b) };
                         // A callable object: its `__call` handler goes first, and the call stays
                         // a tail call when the handler is a Lua function.
                         let mut tries = 0;
@@ -5167,7 +5507,8 @@ impl Lua {
                             tpop!(self.tail_call(func, nargs));
                             continue 'reload;
                         }
-                        match ta!(call!(self.precall(func, nargs, -1, FrameKind::Normal, true)), [O::Reg(a)]) {
+                        match ta!(call!(self.precall(func, nargs, -1, FrameKind::Normal, true)), [O::Reg(a)])
+                        {
                             Called::Done => {}
                             Called::Lua | Called::Switched => continue 'reload,
                         }
@@ -5187,8 +5528,8 @@ impl Lua {
                             && let Some(f) = self.cur.frames.last()
                             && (f.from_lua || self.cur.frames.len() > 1)
                             && matches!(f.kind, FrameKind::Normal)
-                            && !self.cur.open_upvals.last().is_some_and(|(i, _)| *i >= base)
-                            && !self.cur.tbc.last().is_some_and(|i| *i >= base)
+                            && self.cur.open_upvals.last().is_none_or(|(i, _)| *i < base)
+                            && self.cur.tbc.last().is_none_or(|i| *i < base)
                         {
                             let (func, wanted) = (f.func, f.nresults);
                             let want = if wanted < 0 { n } else { wanted as usize };
@@ -5259,14 +5600,28 @@ impl Lua {
                             && let Some(Func::Lua { proto, .. }) = self.heap.funcs.get(f.idx)
                         {
                             let proto = *proto;
-                            ta!(call!(self.push_frame(f, proto, func, 2, tfor_wanted(c), FrameKind::Normal, true)), [O::Reg(a)]);
+                            ta!(
+                                call!(self.push_frame(
+                                    f,
+                                    proto,
+                                    func,
+                                    2,
+                                    tfor_wanted(c),
+                                    FrameKind::Normal,
+                                    true
+                                )),
+                                [O::Reg(a)]
+                            );
                             continue 'reload;
                         }
                         // C Lua names the callee of this call "for iterator" whatever it is.
-                        let r = call!(self.precall(func, 2, tfor_wanted(c), FrameKind::Normal, true)).map_err(|e| match e.into_kind() {
-                            ErrorKind::Call { ty } => LuaError::Msg(format!("attempt to call a {ty} value (for iterator 'for iterator')")),
-                            e => e.into(),
-                        });
+                        let r = call!(self.precall(func, 2, tfor_wanted(c), FrameKind::Normal, true))
+                            .map_err(|e| match e.into_kind() {
+                                ErrorKind::Call { ty } => LuaError::Msg(format!(
+                                    "attempt to call a {ty} value (for iterator 'for iterator')"
+                                )),
+                                e => e.into(),
+                            });
                         match ta!(r, [O::Reg(a)]) {
                             Called::Done => {}
                             Called::Lua | Called::Switched => continue 'reload,
@@ -5282,7 +5637,11 @@ impl Lua {
                     }
                     Instr::SetList { a, n, off } => {
                         let ra = base + usize::from(a);
-                        let count = if n == crate::bytecode::SETLIST_MULTI { self.top.saturating_sub(ra + 1) } else { usize::from(n) };
+                        let count = if n == crate::bytecode::SETLIST_MULTI {
+                            self.top.saturating_sub(ra + 1)
+                        } else {
+                            usize::from(n)
+                        };
                         if let Value::Table(tr) = self.st(ra) {
                             save!();
                             // The table the collector traverses in chunks (S6GC-2e): the
@@ -5312,7 +5671,11 @@ impl Lua {
                             if part {
                                 for j in 0..count {
                                     let v = self.cur.stack.get(ra + 1 + j).copied().unwrap_or_default();
-                                    self.heap.part_written(tr.idx, Value::Int((off as usize + j + 1) as i64), if res.is_ok() { v } else { Value::Nil });
+                                    self.heap.part_written(
+                                        tr.idx,
+                                        Value::Int((off as usize + j + 1) as i64),
+                                        if res.is_ok() { v } else { Value::Nil },
+                                    );
                                 }
                             }
                             if let Err(e) = res {
@@ -5322,7 +5685,10 @@ impl Lua {
                                 let k = match e {
                                     SetError::Stopped(k) => {
                                         let heap = &mut self.heap;
-                                        let units = heap.tables.get_mut(tr.idx).map_or(0, |tab| tab.take_units(&heap.mem));
+                                        let units = heap
+                                            .tables
+                                            .get_mut(tr.idx)
+                                            .map_or(0, |tab| tab.take_units(&heap.mem));
                                         let _ = self.charge(units);
                                         k
                                     }
@@ -5336,7 +5702,8 @@ impl Lua {
                             }
                             self.heap.barrier_table(tr);
                             let heap = &mut self.heap;
-                            let resized = heap.tables.get_mut(tr.idx).map_or(0, |tab| tab.take_resized(&heap.mem));
+                            let resized =
+                                heap.tables.get_mut(tr.idx).map_or(0, |tab| tab.take_resized(&heap.mem));
                             if resized >= 16 {
                                 t!(call!(self.charge(resized as u64 / 16)));
                             }
@@ -5351,7 +5718,8 @@ impl Lua {
                         setr!(a, f);
                     }
                     Instr::VarArg { a, n } => {
-                        let (vstart, vcount) = self.cur.frames.last().map_or((0, 0), |f| (f.vstart, f.vcount));
+                        let (vstart, vcount) =
+                            self.cur.frames.last().map_or((0, 0), |f| (f.vstart, f.vcount));
                         let ra = base + usize::from(a);
                         if n == MULTI {
                             t!(call!(self.charge(vcount as u64 / 8)));
@@ -5381,7 +5749,9 @@ impl Lua {
                                     .proto(pidx)
                                     .and_then(|p| crate::debug::local_name(p, pc - 1, a))
                                     .unwrap_or_else(|| "?".into());
-                                return Err(LuaError::msg(format!("variable '{name}' got a non-closable value")));
+                                return Err(LuaError::msg(format!(
+                                    "variable '{name}' got a non-closable value"
+                                )));
                             }
                             self.cur.tbc.push(base + usize::from(a));
                         }
@@ -5396,7 +5766,8 @@ impl Lua {
     #[inline]
     fn get_field_cached(&mut self, t: TableRef, key: Value, pidx: u32, pc: usize) -> Option<Value> {
         let tab = self.heap.tables.get(t.idx)?;
-        let hint = self.heap.protos.at(pidx as usize).and_then(|p| p.hints.get(pc)).map_or(0, std::cell::Cell::get);
+        let hint =
+            self.heap.protos.at(pidx as usize).and_then(|p| p.hints.get(pc)).map_or(0, std::cell::Cell::get);
         let (v, slot) = tab.get_hinted(key, hint);
         if let Some(slot) = slot
             && slot != hint
@@ -5406,8 +5777,6 @@ impl Lua {
         }
         if !v.is_nil() || tab.meta.is_none() { Some(v) } else { None }
     }
-
-
 
     /// `t[key] = val` in place when the key exists and nothing intercepts (no metatable, or
     /// the field is there already): true when done.
@@ -5449,7 +5818,8 @@ impl Lua {
         }
         if let Some(f) = self.cur.frames.last_mut()
             && handler.is_some()
-            && let (FrameKind::Protected { dest, .. }, FrameKind::Protected { dest: was, .. }) = (f.kind, kind)
+            && let (FrameKind::Protected { dest, .. }, FrameKind::Protected { dest: was, .. }) =
+                (f.kind, kind)
             && dest == was
         {
             f.handler = handler;
@@ -5457,9 +5827,23 @@ impl Lua {
         r.map(|_| ())
     }
 
-    fn make_closure(&mut self, parent: u32, closure: FuncRef, base: usize, p: usize) -> Result<Value, LuaError> {
+    fn make_closure(
+        &mut self,
+        parent: u32,
+        closure: FuncRef,
+        base: usize,
+        p: usize,
+    ) -> Result<Value, LuaError> {
         loop {
-            match new_closure(&mut self.heap, &mut self.cur.open_upvals, self.cur_ref, parent, closure, base, p) {
+            match new_closure(
+                &mut self.heap,
+                &mut self.cur.open_upvals,
+                self.cur_ref,
+                parent,
+                closure,
+                base,
+                p,
+            ) {
                 Ok((v, extra)) => {
                     // Its upvalues (S5B-WALK-5; `charge` does not collect).
                     if extra > 0 {
@@ -5490,7 +5874,8 @@ impl Lua {
                 other => match self.tonumber_charged(other)? {
                     Some(Value::Int(l)) => l,
                     Some(Value::Num(f)) => {
-                        match if s < 0 { number::float_ceil_to_int(f) } else { number::float_floor_to_int(f) } {
+                        match if s < 0 { number::float_ceil_to_int(f) } else { number::float_floor_to_int(f) }
+                        {
                             Some(l) => l,
                             None => {
                                 if (f > 0.0) == (s < 0) {
@@ -5524,7 +5909,10 @@ impl Lua {
         let f = |v: Value, what: &str, s: &mut Self| -> Result<f64, LuaError> {
             match s.tonumber_charged(v)?.and_then(Value::as_num) {
                 Some(f) => Ok(f),
-                None => Err(LuaError::msg(format!("bad 'for' {what} (number expected, got {})", s.obj_type_name(v)))),
+                None => Err(LuaError::msg(format!(
+                    "bad 'for' {what} (number expected, got {})",
+                    s.obj_type_name(v)
+                ))),
             }
         };
         let l = f(limit, "limit", self)?;
@@ -5578,13 +5966,22 @@ impl Lua {
     fn call_meta(&mut self, ev: Tm, f: Value, args: &[Value], cont: Cont) -> Result<Option<Value>, LuaError> {
         if !matches!(f, Value::Func(_)) && self.tm(f, Tm::Call).is_nil() {
             let name = TM_NAMES.get(ev as usize).map_or("?", |n| n.get(2..).unwrap_or(n));
-            return Err(LuaError::msg(format!("attempt to call a {} value (metamethod '{name}')", self.obj_type_name(f))));
+            return Err(LuaError::msg(format!(
+                "attempt to call a {} value (metamethod '{name}')",
+                self.obj_type_name(f)
+            )));
         }
         let pos = self.call_top();
         self.place_call(pos, f, args)?;
         let saved_ntop = self.ntop;
         self.ntop = self.ntop.max(pos + 1 + args.len());
-        let r = self.precall_event(TM_NAMES.get(ev as usize).and_then(|n| n.get(2..)), pos, args.len(), 1, FrameKind::Cont(cont));
+        let r = self.precall_event(
+            TM_NAMES.get(ev as usize).and_then(|n| n.get(2..)),
+            pos,
+            args.len(),
+            1,
+            FrameKind::Cont(cont),
+        );
         self.ntop = saved_ntop;
         match r? {
             // A Lua frame (or `pcall` of one) delivers its result through `cont`; so does a
@@ -5699,7 +6096,10 @@ impl Lua {
             } else {
                 let mm = self.tm(t, Tm::Index);
                 if mm.is_nil() {
-                    return Err(LuaError::Plain(format!("attempt to index a {} value", self.obj_type_name(t))));
+                    return Err(LuaError::Plain(format!(
+                        "attempt to index a {} value",
+                        self.obj_type_name(t)
+                    )));
                 }
                 mm
             };
@@ -5733,7 +6133,10 @@ impl Lua {
                 _ => {
                     let mm = self.tm(t, Tm::NewIndex);
                     if mm.is_nil() {
-                        return Err(LuaError::Plain(format!("attempt to index a {} value", self.obj_type_name(t))));
+                        return Err(LuaError::Plain(format!(
+                            "attempt to index a {} value",
+                            self.obj_type_name(t)
+                        )));
                     }
                     mm
                 }
@@ -5788,10 +6191,19 @@ impl Lua {
     }
 
     /// Arithmetic with coercion and metamethods.
-    pub(crate) fn arith(&mut self, op: ArithOp, x: Value, y: Value, cont: Cont) -> Result<Option<Value>, LuaError> {
+    pub(crate) fn arith(
+        &mut self,
+        op: ArithOp,
+        x: Value,
+        y: Value,
+        cont: Cont,
+    ) -> Result<Option<Value>, LuaError> {
         // A string operand: whatever the string metatable says (its own `__add` … is done
         // here directly; a script's replacement is called).
-        if !is_bitwise(op) && self.string_meta.is_some() && (matches!(x, Value::Str(_)) || matches!(y, Value::Str(_))) {
+        if !is_bitwise(op)
+            && self.string_meta.is_some()
+            && (matches!(x, Value::Str(_)) || matches!(y, Value::Str(_)))
+        {
             let ev = arith_tm(op);
             let mm = self.tm2(x, y, ev);
             if mm.is_nil() {
@@ -5874,7 +6286,11 @@ impl Lua {
         let mm = if matches!(y, Value::Str(_)) { Value::Nil } else { self.tm(y, ev) };
         if mm.is_nil() {
             let name = TM_NAMES.get(ev as usize).map_or("?", |n| n.get(2..).unwrap_or(n));
-            return Err(LuaError::msg(format!("attempt to {name} a '{}' with a '{}'", x.type_name(), y.type_name())));
+            return Err(LuaError::msg(format!(
+                "attempt to {name} a '{}' with a '{}'",
+                x.type_name(),
+                y.type_name()
+            )));
         }
         self.call_nested1(mm, &[x, y])
     }
@@ -5907,7 +6323,12 @@ impl Lua {
             if let Value::Num(_) = x {
                 return Err(ErrorKind::IntRepr { operand: 0 }.into());
             }
-            return Err(ErrorKind::Type { op: "perform bitwise operation on", ty: self.obj_type_name(x), operand: 0 }.into());
+            return Err(ErrorKind::Type {
+                op: "perform bitwise operation on",
+                ty: self.obj_type_name(x),
+                operand: 0,
+            }
+            .into());
         }
         Err(ErrorKind::Type { op: "perform arithmetic on", ty: self.obj_type_name(x), operand: 0 }.into())
     }
@@ -6095,7 +6516,12 @@ impl Lua {
             if mm.is_nil() {
                 let culprit = if stringable(x) { n - 1 } else { n - 2 };
                 let v = if stringable(x) { y } else { x };
-                return Err(ErrorKind::Type { op: "concatenate", ty: self.obj_type_name(v), operand: culprit as u8 }.into());
+                return Err(ErrorKind::Type {
+                    op: "concatenate",
+                    ty: self.obj_type_name(v),
+                    operand: culprit as u8,
+                }
+                .into());
             }
             match self.call_meta(Tm::Concat, mm, &[x, y], Cont::Concat { a, n: n - 1 })? {
                 Some(v) => {
@@ -6236,7 +6662,11 @@ fn float_arith(op: ArithOp, f: f64, g: f64) -> Option<Value> {
         ArithOp::Mul => f * g,
         ArithOp::Div => f / g,
         ArithOp::Pow => {
-            if g == 2.0 { f * f } else { f.powf(g) }
+            if g == 2.0 {
+                f * f
+            } else {
+                f.powf(g)
+            }
         }
         ArithOp::IDiv => (f / g).floor(),
         ArithOp::Mod => number::float_mod(f, g),
@@ -6273,7 +6703,9 @@ fn int_arith(op: ArithOp, i: i64, j: i64) -> Result<i64, LuaError> {
 /// Arithmetic on two numbers.
 pub(crate) fn arith_values(op: ArithOp, a: Value, b: Value) -> Result<Value, LuaError> {
     match (a, b) {
-        (Value::Int(i), Value::Int(j)) if !matches!(op, ArithOp::Div | ArithOp::Pow) => Ok(Value::Int(int_arith(op, i, j)?)),
+        (Value::Int(i), Value::Int(j)) if !matches!(op, ArithOp::Div | ArithOp::Pow) => {
+            Ok(Value::Int(int_arith(op, i, j)?))
+        }
         _ => {
             let (f, g) = (a.as_num().unwrap_or(0.0), b.as_num().unwrap_or(0.0));
             if is_bitwise(op) {
@@ -6383,7 +6815,9 @@ pub(crate) fn new_closure(
     };
     let fresh = descs
         .iter()
-        .filter(|(in_stack, idx)| *in_stack && open.binary_search_by(|(i, _)| i.cmp(&(base + *idx as usize))).is_err())
+        .filter(|(in_stack, idx)| {
+            *in_stack && open.binary_search_by(|(i, _)| i.cmp(&(base + *idx as usize))).is_err()
+        })
         .count();
     let size = crate::heap::FUNC_BASE + crate::heap::boxed(descs.len() * 8) + fresh * UPVAL_SIZE;
     // S5B-WALK-5: a closure's upvalues (up to 255, each found among the open ones or made)
@@ -6404,7 +6838,10 @@ pub(crate) fn new_closure(
             match open.binary_search_by(|(i, _)| i.cmp(&at)) {
                 Ok(k) => {
                     let r = open.get(k).map_or(0, |(_, r)| *r);
-                    ups.push(FuncRef { idx: r, generation: heap.upvals.gens.get(r as usize).copied().unwrap_or(0) });
+                    ups.push(FuncRef {
+                        idx: r,
+                        generation: heap.upvals.gens.get(r as usize).copied().unwrap_or(0),
+                    });
                 }
                 Err(k) => {
                     let r = heap.new_upval_charged(Upval::Open { thread: cur, idx: at });
@@ -6431,7 +6868,6 @@ pub(crate) fn new_closure(
     let f = heap.new_func_charged(Func::Lua { proto: child, upvals: ups.into_boxed_slice() });
     Ok((Value::Func(f), extra))
 }
-
 
 /// Empties a result list, giving back its room when it is long (`NATIVE_CHUNK` values or
 /// more): only lists being placed are counted (SEC-M15), so a long one kept was outside

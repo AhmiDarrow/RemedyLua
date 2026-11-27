@@ -12,7 +12,9 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing, clippy::panic, missing_docs)]
 
 use super::common::{TEST_SEED, oracle, remedy};
-use super::sweep5b_open::{CHAIN_FREE, PAIR_FULL, aimed_floats, baseline, homes, list, measured, ns_per_unit, table_seeds};
+use super::sweep5b_open::{
+    CHAIN_FREE, PAIR_FULL, aimed_floats, baseline, homes, list, measured, ns_per_unit, table_seeds,
+};
 
 /// `m` `__index` chains of 1,999 distinct tables, each holding the same `n` float keys (all
 /// tables have the state's seed): keys aimed at both homes of one pair of 32 slots
@@ -198,7 +200,10 @@ fn s5c_open2_steps_past_the_bound_are_fuel_in_every_table() {
         let (r1, f_aimed, _) = measured(&prog(format!("{k:?}")), TEST_SEED, fast);
         let (r2, f_plain, _) = measured(&prog("0.125".into()), TEST_SEED, fast);
         assert_eq!((r1.as_str(), r2.as_str()), ("4000", "4000"));
-        assert!(f_aimed >= f_plain + 4000, "fast {fast}: aimed {f_aimed}, plain {f_plain} ({CHAIN_FREE} steps free)");
+        assert!(
+            f_aimed >= f_plain + 4000,
+            "fast {fast}: aimed {f_aimed}, plain {f_plain} ({CHAIN_FREE} steps free)"
+        );
     }
 }
 
@@ -270,6 +275,10 @@ fn probe_far() {
         let base = baseline(fast);
         let p = ns_per_unit(&setup(-0.375), &body, 3_000_000, fast);
         let a = ns_per_unit(&setup(k), &body, 3_000_000, fast);
-        println!("fast {fast} 2^{bits} x{m}: plain {:.1}x ({p:.1} ns/unit), aimed far {:.1}x ({a:.1} ns/unit)", p / base, a / base);
+        println!(
+            "fast {fast} 2^{bits} x{m}: plain {:.1}x ({p:.1} ns/unit), aimed far {:.1}x ({a:.1} ns/unit)",
+            p / base,
+            a / base
+        );
     }
 }

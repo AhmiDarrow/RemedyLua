@@ -70,7 +70,12 @@ pub fn remedy_measured(program: &str, fuel: u64, fast: bool) -> (Result<String, 
 pub const ALL_OPT_IN: Libs = Libs::ALL.union(Libs::DEBUG_INFO).union(Libs::REQUIRE);
 
 /// [`remedy_measured`] with the libraries `libs`.
-pub fn remedy_measured_libs(program: &str, fuel: u64, fast: bool, libs: Libs) -> (Result<String, String>, u64, usize) {
+pub fn remedy_measured_libs(
+    program: &str,
+    fuel: u64,
+    fast: bool,
+    libs: Libs,
+) -> (Result<String, String>, u64, usize) {
     let mut lua = Lua::new(Limits::default().fuel(fuel).memory(256 << 20).hash_seed(TEST_SEED), libs);
     lua.set_fast_loop(fast);
     let r = match lua.exec(wrap(program), "=wrapper") {
@@ -242,7 +247,8 @@ pub static MEMORY_HEAVY: std::sync::RwLock<()> = std::sync::RwLock::new(());
 /// thread (a measuring test calling `ns_per_unit`), only the outermost takes the lock.
 pub fn measuring() -> Measuring {
     thread_local!(static DEPTH: std::cell::Cell<usize> = const { std::cell::Cell::new(0) });
-    let lock = (DEPTH.get() == 0).then(|| MEMORY_HEAVY.write().unwrap_or_else(std::sync::PoisonError::into_inner));
+    let lock =
+        (DEPTH.get() == 0).then(|| MEMORY_HEAVY.write().unwrap_or_else(std::sync::PoisonError::into_inner));
     DEPTH.set(DEPTH.get() + 1);
     Measuring { _lock: lock, depth: &DEPTH }
 }
@@ -282,7 +288,10 @@ impl MemoryFiles {
         MemoryFiles { files: Default::default(), limit }
     }
     pub fn insert(&self, name: &str, contents: impl Into<Vec<u8>>) {
-        self.files.lock().unwrap().insert(name.to_owned(), std::sync::Arc::new(std::sync::Mutex::new(contents.into())));
+        self.files
+            .lock()
+            .unwrap()
+            .insert(name.to_owned(), std::sync::Arc::new(std::sync::Mutex::new(contents.into())));
     }
     pub fn get(&self, name: &str) -> Option<Vec<u8>> {
         Some(self.files.lock().unwrap().get(name)?.lock().unwrap().clone())
@@ -305,7 +314,14 @@ impl MemoryFiles {
             data.lock().unwrap().clear();
         }
         let plus = mode.contains('+');
-        Ok(Box::new(MemoryStream { data, pos: 0, read: kind == b'r' || plus, write: kind != b'r' || plus, append: kind == b'a', files: self.clone() }))
+        Ok(Box::new(MemoryStream {
+            data,
+            pos: 0,
+            read: kind == b'r' || plus,
+            write: kind != b'r' || plus,
+            append: kind == b'a',
+            files: self.clone(),
+        }))
     }
 }
 
@@ -380,7 +396,14 @@ pub fn thread_stat() -> ThreadStat {
     let Ok(t) = std::fs::read_to_string("/proc/thread-self/stat") else { return ThreadStat::default() };
     // After the command's closing parenthesis: state, ppid, pgrp, session, tty, tpgid,
     // flags, minflt, cminflt, majflt, cmajflt, utime, stime.
-    let f: Vec<u64> = t.rsplit(')').next().unwrap_or("").split_whitespace().skip(1).map(|x| x.parse().unwrap_or(0)).collect();
+    let f: Vec<u64> = t
+        .rsplit(')')
+        .next()
+        .unwrap_or("")
+        .split_whitespace()
+        .skip(1)
+        .map(|x| x.parse().unwrap_or(0))
+        .collect();
     let at = |i: usize| f.get(i - 1).copied().unwrap_or(0);
     ThreadStat { minflt: at(7), majflt: at(9), utime: at(11), stime: at(12) }
 }
@@ -388,7 +411,8 @@ pub fn thread_stat() -> ThreadStat {
 /// The trace's slowest record of `op` and the records around it, as text (for a failing
 /// assert's message).
 pub fn slowest_around(recs: &[remedy_lua::TraceRecord], op: remedy_lua::TraceOp, around: usize) -> String {
-    let Some((i, _)) = recs.iter().enumerate().filter(|(_, r)| r.op == op).max_by_key(|(_, r)| r.wall()) else {
+    let Some((i, _)) = recs.iter().enumerate().filter(|(_, r)| r.op == op).max_by_key(|(_, r)| r.wall())
+    else {
         return "no records".into();
     };
     let mut out = String::new();

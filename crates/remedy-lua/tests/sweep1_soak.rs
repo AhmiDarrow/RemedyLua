@@ -14,7 +14,7 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use remedy_lua::{Data, Error, LimitKind, Libs, Limits, Lua, Value};
+use remedy_lua::{Data, Error, Libs, LimitKind, Limits, Lua, Value};
 
 // ---- harness ----
 
@@ -115,7 +115,11 @@ impl Curve {
         let t = self.start.elapsed().as_secs_f64();
         if t - self.last_print >= 1.0 || proc.is_some() {
             self.last_print = t;
-            println!("SOAK,{},{t:.1},{iter},{mem},{}", self.name, proc.map_or(String::new(), |p| p.to_string()));
+            println!(
+                "SOAK,{},{t:.1},{iter},{mem},{}",
+                self.name,
+                proc.map_or(String::new(), |p| p.to_string())
+            );
         }
         let x = (iter, mem, proc);
         let (acc, n) = match self.pending.take() {
@@ -149,7 +153,11 @@ impl Curve {
         let (mid, last) = (&samples[n / 3..2 * n / 3], &samples[2 * n / 3..]);
         let peak = |s: &[(u64, usize, Option<u64>)]| s.iter().map(|x| x.1).max().unwrap_or(0);
         let (m, l) = (peak(mid), peak(last));
-        assert!(l <= m + m / 50 + (32 << 10), "{}: VM memory creeps: middle peak {m}, last peak {l}", self.name);
+        assert!(
+            l <= m + m / 50 + (32 << 10),
+            "{}: VM memory creeps: middle peak {m}, last peak {l}",
+            self.name
+        );
         let procs: Vec<u64> = samples[n / 3..].iter().filter_map(|x| x.2).collect();
         if procs.len() >= 4 {
             let half = procs.len() / 2;
@@ -390,8 +398,15 @@ fn churn_soak(b: Budget, name: &'static str, script: &str) {
     curve.assert_plateau();
     // The same steps in C Lua give the same checksum.
     if !b.is_long() {
-        let src = format!("local churn = (function() {script} end)() local t = 0 for i = 1, {} do t = t + churn(i) end return t", i - 1);
-        assert_eq!(remedy_lua_oracle::run(&src, u64::MAX >> 2), Ok(total.to_string()), "checksum differs from C Lua");
+        let src = format!(
+            "local churn = (function() {script} end)() local t = 0 for i = 1, {} do t = t + churn(i) end return t",
+            i - 1
+        );
+        assert_eq!(
+            remedy_lua_oracle::run(&src, u64::MAX >> 2),
+            Ok(total.to_string()),
+            "checksum differs from C Lua"
+        );
     }
 }
 
@@ -467,7 +482,10 @@ const ATTACKS: [(&str, LimitKind); 9] = [
     ("local s = 'x' while true do s = s .. s end", LimitKind::Memory),
     ("local t = {} while true do t[#t + 1] = {} end", LimitKind::Memory),
     ("pcall(function() while true do end end) return 'escaped'", LimitKind::Fuel),
-    ("local ok = pcall(function() local t = {} while true do t[#t + 1] = 'v' .. #t end end) return ok", LimitKind::Memory),
+    (
+        "local ok = pcall(function() local t = {} while true do t[#t + 1] = 'v' .. #t end end) return ok",
+        LimitKind::Memory,
+    ),
     ("local co = coroutine.wrap(function() while true do end end) co()", LimitKind::Fuel),
     ("local t = {3, 2, 1} table.sort(t, function(a, b) while true do end end)", LimitKind::Fuel),
     (
@@ -494,7 +512,8 @@ fn limits_repeated(b: Budget, name: &'static str) {
         .unwrap();
     lua.set_global("spin", host_cb).unwrap();
     let attacks: Vec<_> = ATTACKS.iter().map(|(src, k)| (lua.load(src, "=attack").unwrap(), *k)).collect();
-    let host_attack = (lua.load("spin(function() while true do end end)", "=hostattack").unwrap(), LimitKind::Fuel);
+    let host_attack =
+        (lua.load("spin(function() while true do end end)", "=hostattack").unwrap(), LimitKind::Fuel);
     let probe = lua.load(PROBE, "=probe").unwrap();
     let mut base = usize::MAX;
     gc_mem(&mut lua);
@@ -745,7 +764,10 @@ fn long_emergency_collections_at_the_cap() {
 fn from_data_without_calls_does_not_pile_up() {
     let mut lua = Lua::new(Limits::default().memory(1 << 20), Libs::STANDARD);
     for i in 0..50_000 {
-        let d = Data::Table(vec![(Data::Str("payload".into()), Data::Str(format!("event number {i} with some text")))]);
+        let d = Data::Table(vec![(
+            Data::Str("payload".into()),
+            Data::Str(format!("event number {i} with some text")),
+        )]);
         let v = lua.from_data(&d).unwrap_or_else(|e| panic!("event {i}: {e:?}"));
         lua.set_global("event", v).unwrap();
     }
@@ -848,7 +870,10 @@ fn stack_shrinks_after_deep_recursion() {
     let mut lua = Lua::new(Limits::default(), Libs::STANDARD);
     lua.exec("return 1", "=warm").unwrap();
     let base = gc_mem(&mut lua);
-    let r = lua.exec("local function f(n) if n == 0 then return 0 end return 1 + f(n - 1) end return f(1900)", "=deep");
+    let r = lua.exec(
+        "local function f(n) if n == 0 then return 0 end return 1 + f(n - 1) end return f(1900)",
+        "=deep",
+    );
     assert_eq!(r, Ok(vec![Value::Int(1900)]));
     let after = gc_mem(&mut lua);
     assert!(after <= base + (8 << 10), "stack kept after deep recursion: {base} -> {after}");
@@ -875,7 +900,8 @@ fn soak_curve_is_bounded_and_keeps_peaks() {
     let all = c.all();
     assert!(all.len() <= CURVE_CAP, "{} samples", all.len());
     assert!(all.len() >= CURVE_CAP / 4, "{} samples", all.len());
-    let peak = |from: u64, to: u64| all.iter().filter(|s| s.0 >= from && s.0 < to).map(|s| s.1).max().unwrap_or(0);
+    let peak =
+        |from: u64, to: u64| all.iter().filter(|s| s.0 >= from && s.0 < to).map(|s| s.1).max().unwrap_or(0);
     assert_eq!(peak(300_001, 300_001 + 2 * n / CURVE_CAP as u64), 5_000);
     assert_eq!(peak(600_001, 600_001 + 2 * n / CURVE_CAP as u64), 7_000);
     assert_eq!(all.iter().map(|s| s.1).max(), Some(9_000));

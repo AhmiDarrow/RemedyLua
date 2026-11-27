@@ -60,6 +60,10 @@
 // Some items are used only by the `front-oracle` feature or by tests.
 #![allow(dead_code)]
 
+#[cfg(feature = "front-oracle")]
+#[doc(hidden)]
+#[path = "front.rs"]
+pub mod __front;
 mod ast;
 mod bytecode;
 mod check;
@@ -68,13 +72,9 @@ mod debug;
 mod diag;
 mod fast;
 mod fmt;
-mod gctrace;
-#[cfg(feature = "front-oracle")]
-#[doc(hidden)]
-#[path = "front.rs"]
-pub mod __front;
 #[cfg(feature = "front-oracle")]
 mod front_oracle;
+mod gctrace;
 mod heap;
 mod lexer;
 mod number;
@@ -86,22 +86,23 @@ mod value;
 mod vm;
 
 use std::any::Any;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 pub use diag::{Diagnostic, Pos, Severity};
-pub use value::{FuncRef, StrRef, TableRef, ThreadRef, UdRef, Value};
-pub use stdlib::io::{IoError, Stream};
-pub use vm::Lua;
 #[doc(hidden)]
 pub use gctrace::{FULL_BEGAN_MARK, FULL_BEGAN_PAUSE, FULL_BEGAN_SWEEP, TraceOp, TraceRecord};
+pub use stdlib::io::{IoError, Stream};
+pub use value::{FuncRef, StrRef, TableRef, ThreadRef, UdRef, Value};
+pub use vm::Lua;
 
 /// What `io.open` asks for a file (`Lua::set_file_opener`): the name and the mode.
-pub(crate) type IoOpener = std::sync::Arc<dyn Fn(&str, &str) -> Result<Box<dyn Stream>, IoError> + Send + Sync>;
+pub(crate) type IoOpener =
+    std::sync::Arc<dyn Fn(&str, &str) -> Result<Box<dyn Stream>, IoError> + Send + Sync>;
 
-use vm::{Args, Flow, LuaError};
 use lexer::Text;
 use stdlib::base::Src;
+use vm::{Args, Flow, LuaError};
 
 /// Which language a source is in.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -372,7 +373,8 @@ pub type Clock = std::sync::Arc<dyn Fn() -> std::time::Duration + Send + Sync>;
 #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 pub(crate) fn default_os_clocks() -> (Option<Clock>, Option<Clock>) {
     let start = std::time::Instant::now();
-    let wall: Clock = Arc::new(|| std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default());
+    let wall: Clock =
+        Arc::new(|| std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default());
     (Some(wall), Some(Arc::new(move || start.elapsed())))
 }
 
@@ -495,7 +497,9 @@ impl Data {
     /// The value under string key `key`, for tables.
     pub fn get(&self, key: &str) -> Option<&Data> {
         match self {
-            Data::Table(pairs) => pairs.iter().find(|(k, _)| matches!(k, Data::Str(s) if s == key)).map(|(_, v)| v),
+            Data::Table(pairs) => {
+                pairs.iter().find(|(k, _)| matches!(k, Data::Str(s) if s == key)).map(|(_, v)| v)
+            }
             _ => None,
         }
     }
@@ -579,6 +583,8 @@ impl Drop for Lua {
 impl Lua {
     /// A host function's error, as the script sees it: the very error object when it is
     /// one that just came out of the state (`lua.call` from the host function).
+    // (A conversion that needs the state; tests and fault notes cite the name.)
+    #[allow(clippy::wrong_self_convention)]
     fn from_host_error(&mut self, e: Error) -> LuaError {
         match e {
             Error::Limit(k) => LuaError::Limit(k),
@@ -637,7 +643,11 @@ impl Lua {
             return Err(Error::Host("a panic in an earlier call left this state unusable".into()));
         }
         self.not_pending()?;
-        if self.heap.is_live(v) { Ok(()) } else { Err(Error::Host("a value whose object was collected".into())) }
+        if self.heap.is_live(v) {
+            Ok(())
+        } else {
+            Err(Error::Host("a value whose object was collected".into()))
+        }
     }
 
     /// While a call is paused at a collector step the state is in the middle of it:
@@ -657,7 +667,11 @@ impl Lua {
 
     /// `enter`; `fresh` false: a paused call resumed, which keeps its fuel, its deadline
     /// (the absolute one it started with) and what it carried: it is the same call.
-    fn enter_as<T>(&mut self, fresh: bool, f: impl FnOnce(&mut Lua) -> Result<T, LuaError>) -> Result<T, Error> {
+    fn enter_as<T>(
+        &mut self,
+        fresh: bool,
+        f: impl FnOnce(&mut Lua) -> Result<T, LuaError>,
+    ) -> Result<T, Error> {
         if self.poisoned {
             return Err(Error::Host("a panic in an earlier call left this state unusable".into()));
         }
@@ -769,7 +783,12 @@ impl Lua {
     }
 
     /// [`Lua::load`] in a given dialect.
-    pub fn load_with(&mut self, source: impl AsRef<[u8]>, name: &str, dialect: Dialect) -> Result<Root, Error> {
+    pub fn load_with(
+        &mut self,
+        source: impl AsRef<[u8]>,
+        name: &str,
+        dialect: Dialect,
+    ) -> Result<Root, Error> {
         // Compiling allocates (and may collect) outside `enter`: refused like every other
         // entry once a panic left the state mid-instruction.
         if self.poisoned {
@@ -808,7 +827,11 @@ impl Lua {
         }
         if source.bytes().first() == Some(&0x1b) {
             // Named as every other message names the chunk (it said `=t:1:`; S5C-FRONT-8).
-            let d = Diagnostic::error(&vm::chunk_id(name), Pos { line: 1, col: 1 }, "attempt to load a binary chunk (bytecode is not accepted)");
+            let d = Diagnostic::error(
+                &vm::chunk_id(name),
+                Pos { line: 1, col: 1 },
+                "attempt to load a binary chunk (bytecode is not accepted)",
+            );
             return Err(CompileError::Syntax(d));
         }
         // The host's interrupt stops a long compile too, and so does the running call's
@@ -820,13 +843,15 @@ impl Lua {
         // Inside a call, the compiler's scan work is fuel (`diag::compile_work`); a load
         // from the host outside any call has no fuel, only the interrupt.
         let in_call = self.entry > 0;
-        let max_work = if in_call { self.fuel_left().saturating_mul(COMPILE_WORK_PER_FUEL) } else { u64::MAX };
+        let max_work =
+            if in_call { self.fuel_left().saturating_mul(COMPILE_WORK_PER_FUEL) } else { u64::MAX };
         let (r, stop, work) =
             crate::diag::watched(watch, max_work, || self.compile_watched(source, name, dialect, env));
         self.adopt_deferred();
         if in_call
             && work >= COMPILE_WORK_PER_FUEL
-            && let Some(k) = self.charge(work / COMPILE_WORK_PER_FUEL).err().as_ref().and_then(vm::LuaError::limit)
+            && let Some(k) =
+                self.charge(work / COMPILE_WORK_PER_FUEL).err().as_ref().and_then(vm::LuaError::limit)
         {
             return Err(CompileError::Limit(k));
         }
@@ -853,11 +878,19 @@ impl Lua {
             return;
         }
         let flag = std::sync::Arc::clone(&self.interrupt);
-        let released = crate::diag::free_deferred(&mut self.deferred, || flag.load(std::sync::atomic::Ordering::Relaxed));
+        let released = crate::diag::free_deferred(&mut self.deferred, || {
+            flag.load(std::sync::atomic::Ordering::Relaxed)
+        });
         self.heap.mem.release(released);
     }
 
-    fn compile_watched(&mut self, source: &mut Src<'_>, name: &str, dialect: Dialect, env: Value) -> Result<Value, CompileError> {
+    fn compile_watched(
+        &mut self,
+        source: &mut Src<'_>,
+        name: &str,
+        dialect: Dialect,
+        env: Value,
+    ) -> Result<Value, CompileError> {
         // From the host, what the compile built is freed at its next call, a piece at a
         // time, watching the interrupt (S6-FRONT-4); inside a call, at once.
         let host = self.entry == 0;
@@ -867,7 +900,14 @@ impl Lua {
         r
     }
 
-    fn compile_parsed(&mut self, source: &mut Src<'_>, name: &str, dialect: Dialect, env: Value, host: bool) -> Result<Value, CompileError> {
+    fn compile_parsed(
+        &mut self,
+        source: &mut Src<'_>,
+        name: &str,
+        dialect: Dialect,
+        env: Value,
+        host: bool,
+    ) -> Result<Value, CompileError> {
         let display = vm::chunk_id(name);
         // (The table buffer pool's bytes are room too: the charge after the parse gives
         // them back if it needs them, `Mem::fits`.)
@@ -883,10 +923,19 @@ impl Lua {
                     self.heap.mem.used = self.heap.mem.used.saturating_add(held);
                     let more = crate::stdlib::base::read_piece(self, st, b);
                     self.heap.mem.used = self.heap.mem.used.saturating_sub(held);
-                    crate::diag::parse_reading((None, Some(self.heap.mem.cap.saturating_sub(self.heap.mem.used))));
+                    crate::diag::parse_reading((
+                        None,
+                        Some(self.heap.mem.cap.saturating_sub(self.heap.mem.used)),
+                    ));
                     more
                 };
-                let (r, text) = parser::parse_counted(Text::Read(std::mem::take(*buf), Some(&mut pull)), &display, dialect, room, host);
+                let (r, text) = parser::parse_counted(
+                    Text::Read(std::mem::take(*buf), Some(&mut pull)),
+                    &display,
+                    dialect,
+                    room,
+                    host,
+                );
                 **buf = text.take();
                 r
             }
@@ -917,7 +966,9 @@ impl Lua {
                     // Inside a call: now, a node at a time between looks (a 6 MB source's
                     // tree took up to 120 ms to drop in one go).
                     // (Told to stop, the rest is deferred and charged as the host path's is.)
-                    crate::diag::free_watched(crate::ast::Dropper::of_block(block).with_bytes(parser::tree_bytes()));
+                    crate::diag::free_watched(
+                        crate::ast::Dropper::of_block(block).with_bytes(parser::tree_bytes()),
+                    );
                 }
                 p
             }
@@ -926,12 +977,19 @@ impl Lua {
                     // Freed later, so the stopped compile returns at once (S5C-FRONT-12).
                     crate::diag::defer_tree(block, parser::tree_bytes());
                 }
-                return Err(if d.message == "not enough memory" { CompileError::Memory } else { CompileError::Syntax(d) });
+                return Err(if d.message == "not enough memory" {
+                    CompileError::Memory
+                } else {
+                    CompileError::Syntax(d)
+                });
             }
         };
         self.heap.blocked += 1;
         let r = (|| {
-            self.heap.mem.charge(heap::UPVAL_SIZE + heap::FUNC_BASE + heap::boxed(8)).map_err(|()| CompileError::Memory)?;
+            self.heap
+                .mem
+                .charge(heap::UPVAL_SIZE + heap::FUNC_BASE + heap::boxed(8))
+                .map_err(|()| CompileError::Memory)?;
             let up = self.heap.new_upval_charged(heap::Upval::Closed(env));
             Ok(self.heap.new_func_charged(heap::Func::Lua { proto, upvals: vec![up].into_boxed_slice() }))
         })();
@@ -943,7 +1001,14 @@ impl Lua {
 
     /// The error C Lua reports for `source`, which has the syntax error `syntax`: C Lua
     /// compiles as it parses, so a compile error before that point comes first.
-    fn first_error(&mut self, source: &[u8], name: &str, dialect: Dialect, room: usize, syntax: Diagnostic) -> Diagnostic {
+    fn first_error(
+        &mut self,
+        source: &[u8],
+        name: &str,
+        dialect: Dialect,
+        room: usize,
+        syntax: Diagnostic,
+    ) -> Diagnostic {
         let Some((block, cut, follow)) = parser::prefix(source, name, dialect, room) else { return syntax };
         match compiler::compile_prefix(&block, name, &mut self.heap, cut, follow) {
             Err(d) if d.message != "not enough memory" && d.line <= syntax.line => d,
@@ -1063,7 +1128,12 @@ impl Lua {
     /// took. A pause is invisible to the script and to the fuel: the result, the fuel and
     /// where a tight limit stops it are those of `call`.
     #[doc(hidden)]
-    pub fn gc_sliced_call(&mut self, f: Value, args: &[Value], slots: usize) -> (Result<Vec<Value>, Error>, u32) {
+    pub fn gc_sliced_call(
+        &mut self,
+        f: Value,
+        args: &[Value],
+        slots: usize,
+    ) -> (Result<Vec<Value>, Error>, u32) {
         self.heap.poll_allow = Some(slots.max(1));
         let mut r = self.call(f, args);
         let mut polls = 1;
@@ -1167,6 +1237,7 @@ impl Lua {
     /// - `remaining_fuel_at_least`: a floor on the fuel the cycle under way still needs
     ///   past that. Not an estimate of the cost: marking finds the objects it must mark as
     ///   it goes, so while it runs (`more_may_be_found`) the rest is not known ahead.
+    ///
     /// A full collection (`collectgarbage()`, `collect_garbage`, or the one an allocation
     /// makes at the memory limit) finishes the cycle under way and then runs a whole new
     /// one, which neither figure includes. Reading it enters nothing and charges nothing.
@@ -1235,7 +1306,11 @@ impl Lua {
     }
 
     /// Runs `f` with `vals` kept alive (the operands of a host call while it allocates).
-    fn with_held<T>(&mut self, vals: &[Value], f: impl FnOnce(&mut Lua) -> Result<T, LuaError>) -> Result<T, LuaError> {
+    fn with_held<T>(
+        &mut self,
+        vals: &[Value],
+        f: impl FnOnce(&mut Lua) -> Result<T, LuaError>,
+    ) -> Result<T, LuaError> {
         let mark = self.scratch.len();
         self.scratch.extend_from_slice(vals);
         let r = f(self);
@@ -1350,7 +1425,9 @@ impl Lua {
         if !self.heap.is_live(Value::Table(t)) {
             return Vec::new();
         }
-        crate::table::host_side(|| self.heap.tables.get(t.idx).map(|t| t.entries().collect()).unwrap_or_default())
+        crate::table::host_side(|| {
+            self.heap.tables.get(t.idx).map(|t| t.entries().collect()).unwrap_or_default()
+        })
     }
 
     /// A new empty table.
@@ -1480,7 +1557,10 @@ impl Lua {
         // LR-17: its closure's `Arc` (counts, the captured state rounded to 16, the header)
         // and its name's (likewise), not a flat 32.
         let round = |n: usize| n.div_ceil(16) * 16;
-        let bytes = round(16 + std::mem::size_of_val(&*host)) + heap::ALLOC_OVERHEAD + round(16 + name.len()) + heap::ALLOC_OVERHEAD;
+        let bytes = round(16 + std::mem::size_of_val(&*host))
+            + heap::ALLOC_OVERHEAD
+            + round(16 + name.len())
+            + heap::ALLOC_OVERHEAD;
         let name: Arc<str> = Arc::from(name);
         let v = self.enter(|l| {
             l.charge_mem(heap::FUNC_BASE + bytes)?;
@@ -1528,9 +1608,13 @@ impl Lua {
         let f = std::sync::Mutex::new(f);
         self.create_function(name, move |lua, args| match f.try_lock() {
             Ok(mut f) => f(lua, args),
-            Err(std::sync::TryLockError::WouldBlock) => Err(Error::runtime("a host function was called again while it ran")),
+            Err(std::sync::TryLockError::WouldBlock) => {
+                Err(Error::runtime("a host function was called again while it ran"))
+            }
             // A panic in it poisoned the state too: nothing runs here again.
-            Err(std::sync::TryLockError::Poisoned(_)) => Err(Error::Host("a panic in an earlier call left this state unusable".into())),
+            Err(std::sync::TryLockError::Poisoned(_)) => {
+                Err(Error::Host("a panic in an earlier call left this state unusable".into()))
+            }
         })
     }
 
@@ -1558,7 +1642,11 @@ impl Lua {
     /// `__index`; a `__gc` field never runs). It counts `size_of::<T>()` plus a small
     /// header against the memory limit; declare what `T` owns on the heap (a `Vec`'s
     /// buffer) with [`Lua::set_userdata_size`].
-    pub fn create_userdata<T: Any + Send>(&mut self, data: T, meta: Option<TableRef>) -> Result<Value, Error> {
+    pub fn create_userdata<T: Any + Send>(
+        &mut self,
+        data: T,
+        meta: Option<TableRef>,
+    ) -> Result<Value, Error> {
         self.new_userdata_value(Box::new(data), std::mem::size_of::<T>(), meta, None)
     }
 
@@ -1606,7 +1694,9 @@ impl Lua {
     /// allocation there is): [`Error::Limit`]`(Memory)` and nothing changes (inside a host
     /// function, return the error, so the call stops).
     pub fn set_userdata_size(&mut self, v: Value, bytes: usize) -> Result<(), Error> {
-        let Value::UserData(u) = v else { return Err(Error::Host("set_userdata_size takes a userdata".into())) };
+        let Value::UserData(u) = v else {
+            return Err(Error::Host("set_userdata_size takes a userdata".into()));
+        };
         self.check_live(v)?;
         self.enter(|l| {
             // S5API-5: no allocation is this big, and with an unlimited memory cap a size
@@ -1634,7 +1724,12 @@ impl Lua {
     /// [`Lua::take_collected`]. For host objects that must be released when scripts drop
     /// their handles; no Lua code runs at collection (there is no `__gc`). It counts 8 bytes
     /// more than an untracked one: the room its key takes in that queue.
-    pub fn create_userdata_tracked<T: Any + Send>(&mut self, data: T, meta: Option<TableRef>, key: u64) -> Result<Value, Error> {
+    pub fn create_userdata_tracked<T: Any + Send>(
+        &mut self,
+        data: T,
+        meta: Option<TableRef>,
+        key: u64,
+    ) -> Result<Value, Error> {
         self.new_userdata_value(Box::new(data), std::mem::size_of::<T>(), meta, Some(key))
     }
 
@@ -1668,7 +1763,13 @@ impl Lua {
         crate::table::host_side(|| self.to_data_inner(v, 0, limits.depth.min(MAX_DATA_DEPTH), &mut budget))
     }
 
-    fn to_data_inner(&self, v: Value, depth: usize, max: usize, budget: &mut (usize, usize)) -> Result<Data, Error> {
+    fn to_data_inner(
+        &self,
+        v: Value,
+        depth: usize,
+        max: usize,
+        budget: &mut (usize, usize),
+    ) -> Result<Data, Error> {
         if depth > max {
             return Err(Error::Host("table nested too deeply".into()));
         }
@@ -1693,7 +1794,8 @@ impl Lua {
                 let mut out = Vec::new();
                 // Read in place: copying every entry first allocated the whole table natively
                 // (uncharged) before the node budget could stop it.
-                let Some(tab) = self.heap.tables.get(t.idx).filter(|_| self.heap.is_live(Value::Table(t))) else {
+                let Some(tab) = self.heap.tables.get(t.idx).filter(|_| self.heap.is_live(Value::Table(t)))
+                else {
                     return Ok(Data::Table(out));
                 };
                 for (k, v) in tab.entries() {
@@ -1710,7 +1812,10 @@ impl Lua {
     /// Makes a value from owned [`Data`] (nil and NaN keys are skipped), nested at most 64
     /// deep; its size is bounded by the memory limit only. [`Lua::from_data_with`] bounds it.
     pub fn from_data(&mut self, d: &Data) -> Result<Value, Error> {
-        self.from_data_with(d, DataLimits { depth: MAX_FROM_DATA_DEPTH, nodes: usize::MAX, bytes: usize::MAX })
+        self.from_data_with(
+            d,
+            DataLimits { depth: MAX_FROM_DATA_DEPTH, nodes: usize::MAX, bytes: usize::MAX },
+        )
     }
 
     /// [`Lua::from_data`] within `limits`, checked before anything is made: deeper (than
@@ -1727,7 +1832,8 @@ impl Lua {
             budget.0 -= 1;
             match d {
                 Data::Str(s) => {
-                    budget.1 = budget.1.checked_sub(s.len()).ok_or_else(|| Error::Host("too much data".into()))?;
+                    budget.1 =
+                        budget.1.checked_sub(s.len()).ok_or_else(|| Error::Host("too much data".into()))?;
                 }
                 Data::Table(pairs) => {
                     for (k, v) in pairs {
@@ -1747,16 +1853,14 @@ impl Lua {
             l.native_depth += 1;
             let r = l.from_data_inner(d, 0);
             l.native_depth -= 1;
-            let r = r.map(|v| {
-                l.scratch.truncate(base);
-                v
-            });
+            let r = r.inspect(|_| l.scratch.truncate(base));
             l.scratch.truncate(base);
             r
         })
         .map(|v| self.keep(v))
     }
 
+    #[allow(clippy::wrong_self_convention)] // (`from_data`'s worker: it builds in the state.)
     fn from_data_inner(&mut self, d: &Data, depth: usize) -> Result<Value, LuaError> {
         if depth > MAX_FROM_DATA_DEPTH {
             return Err(LuaError::msg("data nested too deeply"));
@@ -2067,7 +2171,10 @@ impl Lua {
     /// byte; one that is not UTF-8 is never asked for) and a mode `io.open` accepted (C's
     /// `[rwa]%+?b*`). An error is the script's `nil, "name: message", code`. `None`
     /// (the default) has every name fail with "No such file or directory".
-    pub fn set_file_opener(&mut self, opener: Option<impl Fn(&str, &str) -> Result<Box<dyn Stream>, IoError> + Send + Sync + 'static>) {
+    pub fn set_file_opener(
+        &mut self,
+        opener: Option<impl Fn(&str, &str) -> Result<Box<dyn Stream>, IoError> + Send + Sync + 'static>,
+    ) {
         self.io_opener = opener.map(|f| Arc::new(f) as IoOpener);
     }
 
@@ -2095,7 +2202,10 @@ impl Lua {
 
     /// Sets the loader `require` asks for modules not registered with `add_module`
     /// (`None` removes it). A name that is not UTF-8 is never asked for.
-    pub fn set_module_loader(&mut self, loader: Option<impl Fn(&str) -> Option<ModuleSource> + Send + Sync + 'static>) {
+    pub fn set_module_loader(
+        &mut self,
+        loader: Option<impl Fn(&str) -> Option<ModuleSource> + Send + Sync + 'static>,
+    ) {
         self.module_loader = loader.map(|f| Arc::new(f) as ModuleLoader);
     }
 
@@ -2126,7 +2236,12 @@ pub(crate) enum CompileError {
 }
 
 impl Lua {
-    pub(crate) fn alloc_ud(&mut self, data: Box<dyn Any + Send>, size: usize, meta: Option<TableRef>) -> Result<UdRef, LuaError> {
+    pub(crate) fn alloc_ud(
+        &mut self,
+        data: Box<dyn Any + Send>,
+        size: usize,
+        meta: Option<TableRef>,
+    ) -> Result<UdRef, LuaError> {
         match self.heap.new_userdata(data, size, meta) {
             Ok(r) => Ok(r),
             Err(()) => Err(LuaError::Limit(LimitKind::Memory)),

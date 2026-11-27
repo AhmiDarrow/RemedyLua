@@ -1,7 +1,7 @@
 //! Front-end interrupt latency: a host `load` of a few MB of hostile source, interrupted at
 //! many points along it; how late each stops (the worst is what matters).
 //! `cargo run --release --example frontstop -p remedy-lua [-- CASE [POINTS]]`
-#![allow(clippy::unwrap_used, missing_docs, clippy::print_stdout)]
+#![allow(clippy::unwrap_used, clippy::panic, missing_docs, clippy::print_stdout)]
 
 use std::time::{Duration, Instant};
 
@@ -12,7 +12,14 @@ fn source(case: &str) -> String {
         "do" => format!("{}{}", "do ".repeat(850_000), "end ".repeat(850_000)),
         "dots" => format!("return a{}", ".b".repeat(3_000_000)),
         "flat" => format!("return {{{}}}", "1,".repeat(3_000_000)),
-        "locals" => (0..2000).map(|j| format!("local {}\n", (0..200).map(|i| format!("v{}", j * 200 + i)).collect::<Vec<_>>().join(","))).collect(),
+        "locals" => (0..2000)
+            .map(|j| {
+                format!(
+                    "local {}\n",
+                    (0..200).map(|i| format!("v{}", j * 200 + i)).collect::<Vec<_>>().join(",")
+                )
+            })
+            .collect(),
         "keys" => format!("return {{{}}}", (0..500_000).map(|i| format!("a{i}=1,")).collect::<String>()),
         "strs" => format!("return {{{}}}", (0..600_000).map(|i| format!("\"s{i}\",")).collect::<String>()),
         "bigstr" => format!("return \"{}\"", "a".repeat(16 << 20)),
@@ -56,7 +63,10 @@ fn main() {
             if r.is_err() {
                 let late = end.saturating_duration_since(fired);
                 if std::env::var("FRONTSTOP_VERBOSE").is_ok() {
-                    println!("  at {at:?}: {late:?} late, {:?} into the load", fired.saturating_duration_since(started));
+                    println!(
+                        "  at {at:?}: {late:?} late, {:?} into the load",
+                        fired.saturating_duration_since(started)
+                    );
                 }
                 if late > worst.0 {
                     worst = (late, at);
@@ -65,6 +75,11 @@ fn main() {
             lua.interrupt_handle().reset();
             let _ = lua.load("return 1", "=ok");
         }
-        println!("{case:8} {:.1} MB, load {full:?}: worst {:?} late (interrupted at {:?})", src.len() as f64 / 1e6, worst.0, worst.1);
+        println!(
+            "{case:8} {:.1} MB, load {full:?}: worst {:?} late (interrupted at {:?})",
+            src.len() as f64 / 1e6,
+            worst.0,
+            worst.1
+        );
     }
 }

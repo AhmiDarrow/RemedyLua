@@ -2,7 +2,7 @@
 //! or another error), the state usable afterwards, and between the caps that refuse and
 //! the caps that fit, nothing but those two outcomes.
 
-use remedy_lua::{Error, LimitKind, Libs, Limits, Lua};
+use remedy_lua::{Error, Libs, LimitKind, Limits, Lua};
 
 use super::deep::{ALL, Kind, chunk, program};
 
@@ -16,7 +16,10 @@ fn under(src: &str, name: &str, cap: usize) -> Result<String, Option<String>> {
         Err(e) => Err(Some(e.to_string())),
     };
     let after = lua.exec("return 40 + 2", "=after").map_err(|e| e.to_string());
-    assert!(matches!(after.as_deref(), Ok([remedy_lua::Value::Int(42)])), "state unusable after a {cap}-byte run: {after:?}");
+    assert!(
+        matches!(after.as_deref(), Ok([remedy_lua::Value::Int(42)])),
+        "state unusable after a {cap}-byte run: {after:?}"
+    );
     r
 }
 

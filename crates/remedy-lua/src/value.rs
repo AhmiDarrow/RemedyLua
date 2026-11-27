@@ -124,7 +124,10 @@ impl Value {
     /// Whether it lives in the collector's heap.
     #[inline]
     pub(crate) fn is_collectable(self) -> bool {
-        matches!(self, Value::Str(_) | Value::Table(_) | Value::Func(_) | Value::UserData(_) | Value::Thread(_))
+        matches!(
+            self,
+            Value::Str(_) | Value::Table(_) | Value::Func(_) | Value::UserData(_) | Value::Thread(_)
+        )
     }
 
     /// Equality without metamethods, by identity for strings: short strings (up to 40

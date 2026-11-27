@@ -77,133 +77,412 @@ pub(crate) type Instr = Op<Reg, Rk>;
 /// frame's base without bound, which it maps to `Instr` (see `Window`).
 #[derive(Clone, Copy, Debug)]
 pub(crate) enum Op<R, K> {
-    Move { a: R, b: R },
-    LoadK { a: R, k: u32 },
-    LoadInt { a: R, i: i32 },
-    LoadBool { a: R, v: bool },
+    Move {
+        a: R,
+        b: R,
+    },
+    LoadK {
+        a: R,
+        k: u32,
+    },
+    LoadInt {
+        a: R,
+        i: i32,
+    },
+    LoadBool {
+        a: R,
+        v: bool,
+    },
     /// R[a] = false, and skip the next instruction.
-    LoadFalseSkip { a: R },
+    LoadFalseSkip {
+        a: R,
+    },
     /// R[a..=a+n] = nil.
-    LoadNil { a: R, n: u16 },
-    GetUpval { a: R, u: u16 },
+    LoadNil {
+        a: R,
+        n: u16,
+    },
+    GetUpval {
+        a: R,
+        u: u16,
+    },
     /// R[a] = the running closure, which its upvalue `u` holds (`settle_upvals`); `u`
     /// names it in messages.
-    GetSelf { a: R, u: u16 },
-    SetUpval { a: R, u: u16 },
+    GetSelf {
+        a: R,
+        u: u16,
+    },
+    SetUpval {
+        a: R,
+        u: u16,
+    },
     /// R[a] = Up[u][K[k]] (a string key).
-    GetTabUp { a: R, u: u16, k: u16 },
+    GetTabUp {
+        a: R,
+        u: u16,
+        k: u16,
+    },
     /// Up[u][K[k]] = RK(v).
-    SetTabUp { u: u16, k: u16, v: K },
+    SetTabUp {
+        u: u16,
+        k: u16,
+        v: K,
+    },
     /// R[a] = R[b][R[c]].
-    GetTable { a: R, b: R, c: R },
+    GetTable {
+        a: R,
+        b: R,
+        c: R,
+    },
     /// R[a] = R[b][K[k]].
-    GetTableK { a: R, b: R, k: u16 },
+    GetTableK {
+        a: R,
+        b: R,
+        k: u16,
+    },
     /// R[a][R[b]] = RK(c).
-    SetTable { a: R, b: R, c: K },
+    SetTable {
+        a: R,
+        b: R,
+        c: K,
+    },
     /// R[a][K[k]] = RK(c).
-    SetTableK { a: R, k: u16, c: K },
-    NewTable { a: R, arr: u16, hash: u16 },
+    SetTableK {
+        a: R,
+        k: u16,
+        c: K,
+    },
+    NewTable {
+        a: R,
+        arr: u16,
+        hash: u16,
+    },
     /// R[a+1] = R[b]; R[a] = R[b][K[k]].
-    SelfK { a: R, b: R, k: u16 },
-    Arith { op: ArithOp, a: R, b: K, c: K },
+    SelfK {
+        a: R,
+        b: R,
+        k: u16,
+    },
+    Arith {
+        op: ArithOp,
+        a: R,
+        b: K,
+        c: K,
+    },
     // The common arithmetic on a register and a register or a constant, one opcode each
     // (the compiler turns `Arith` into these where it can).
-    Add { a: R, b: R, c: R },
-    AddK { a: R, b: R, k: u16 },
-    Sub { a: R, b: R, c: R },
-    SubK { a: R, b: R, k: u16 },
-    Mul { a: R, b: R, c: R },
-    MulK { a: R, b: R, k: u16 },
-    Div { a: R, b: R, c: R },
-    DivK { a: R, b: R, k: u16 },
-    Mod { a: R, b: R, c: R },
-    ModK { a: R, b: R, k: u16 },
-    IDiv { a: R, b: R, c: R },
-    IDivK { a: R, b: R, k: u16 },
+    Add {
+        a: R,
+        b: R,
+        c: R,
+    },
+    AddK {
+        a: R,
+        b: R,
+        k: u16,
+    },
+    Sub {
+        a: R,
+        b: R,
+        c: R,
+    },
+    SubK {
+        a: R,
+        b: R,
+        k: u16,
+    },
+    Mul {
+        a: R,
+        b: R,
+        c: R,
+    },
+    MulK {
+        a: R,
+        b: R,
+        k: u16,
+    },
+    Div {
+        a: R,
+        b: R,
+        c: R,
+    },
+    DivK {
+        a: R,
+        b: R,
+        k: u16,
+    },
+    Mod {
+        a: R,
+        b: R,
+        c: R,
+    },
+    ModK {
+        a: R,
+        b: R,
+        k: u16,
+    },
+    IDiv {
+        a: R,
+        b: R,
+        c: R,
+    },
+    IDivK {
+        a: R,
+        b: R,
+        k: u16,
+    },
     /// R[a] = R[b] + i; `sub`: written `R[b] - -i` (metamethods and messages see `-`).
-    AddI { a: R, b: R, i: i16, sub: bool },
-    Pow { a: R, b: R, c: R },
-    PowK { a: R, b: R, k: u16 },
-    BAnd { a: R, b: R, c: R },
-    BAndK { a: R, b: R, k: u16 },
-    BOr { a: R, b: R, c: R },
-    BOrK { a: R, b: R, k: u16 },
-    BXor { a: R, b: R, c: R },
-    BXorK { a: R, b: R, k: u16 },
-    Shl { a: R, b: R, c: R },
-    ShlK { a: R, b: R, k: u16 },
-    Shr { a: R, b: R, c: R },
-    ShrK { a: R, b: R, k: u16 },
+    AddI {
+        a: R,
+        b: R,
+        i: i16,
+        sub: bool,
+    },
+    Pow {
+        a: R,
+        b: R,
+        c: R,
+    },
+    PowK {
+        a: R,
+        b: R,
+        k: u16,
+    },
+    BAnd {
+        a: R,
+        b: R,
+        c: R,
+    },
+    BAndK {
+        a: R,
+        b: R,
+        k: u16,
+    },
+    BOr {
+        a: R,
+        b: R,
+        c: R,
+    },
+    BOrK {
+        a: R,
+        b: R,
+        k: u16,
+    },
+    BXor {
+        a: R,
+        b: R,
+        c: R,
+    },
+    BXorK {
+        a: R,
+        b: R,
+        k: u16,
+    },
+    Shl {
+        a: R,
+        b: R,
+        c: R,
+    },
+    ShlK {
+        a: R,
+        b: R,
+        k: u16,
+    },
+    Shr {
+        a: R,
+        b: R,
+        c: R,
+    },
+    ShrK {
+        a: R,
+        b: R,
+        k: u16,
+    },
     /// if (R[a] == K[k]) != eq then skip (a constant other than a small integer).
-    EqK { a: R, k: u16, eq: bool },
+    EqK {
+        a: R,
+        k: u16,
+        eq: bool,
+    },
     /// if (R[a] == i) != eq then skip.
-    EqI { a: R, i: i16, eq: bool },
+    EqI {
+        a: R,
+        i: i16,
+        eq: bool,
+    },
     /// if (R[a] < i) != k then skip.
-    LtI { a: R, i: i16, k: bool },
+    LtI {
+        a: R,
+        i: i16,
+        k: bool,
+    },
     /// if (R[a] <= i) != k then skip.
-    LeI { a: R, i: i16, k: bool },
+    LeI {
+        a: R,
+        i: i16,
+        k: bool,
+    },
     /// if (R[a] > i) != k then skip (`i < R[a]`: metamethods and messages see that order).
-    GtI { a: R, i: i16, k: bool },
+    GtI {
+        a: R,
+        i: i16,
+        k: bool,
+    },
     /// if (R[a] >= i) != k then skip (`i <= R[a]`).
-    GeI { a: R, i: i16, k: bool },
-    Unm { a: R, b: R },
-    BNot { a: R, b: R },
-    Not { a: R, b: R },
-    Len { a: R, b: R },
+    GeI {
+        a: R,
+        i: i16,
+        k: bool,
+    },
+    Unm {
+        a: R,
+        b: R,
+    },
+    BNot {
+        a: R,
+        b: R,
+    },
+    Not {
+        a: R,
+        b: R,
+    },
+    Len {
+        a: R,
+        b: R,
+    },
     /// R[a] = R[a] .. … .. R[a+n-1].
-    Concat { a: R, n: u16 },
+    Concat {
+        a: R,
+        n: u16,
+    },
     /// R[a] = tostring(R[b]) (string interpolation).
-    ToStr { a: R, b: R },
+    ToStr {
+        a: R,
+        b: R,
+    },
     /// Jump; with `close` > 0, first close upvalues and to-be-closed variables from
     /// register `close - 1` up (from the frame's base, never a window).
-    Jmp { off: i32, close: u16 },
-    Eq { b: K, c: K, k: bool },
-    Lt { b: K, c: K, k: bool },
-    Le { b: K, c: K, k: bool },
+    Jmp {
+        off: i32,
+        close: u16,
+    },
+    Eq {
+        b: K,
+        c: K,
+        k: bool,
+    },
+    Lt {
+        b: K,
+        c: K,
+        k: bool,
+    },
+    Le {
+        b: K,
+        c: K,
+        k: bool,
+    },
     /// if truthy(R[a]) != k then skip.
-    Test { a: R, k: bool },
+    Test {
+        a: R,
+        k: bool,
+    },
     /// if truthy(R[b]) == k then R[a] = R[b] else skip.
-    TestSet { a: R, b: R, k: bool },
+    TestSet {
+        a: R,
+        b: R,
+        k: bool,
+    },
     /// Call R[a] with `b - 1` arguments (MULTI: up to the top), wanting `c - 1` results.
-    Call { a: R, b: u16, c: u16 },
-    TailCall { a: R, b: u16 },
+    Call {
+        a: R,
+        b: u16,
+        c: u16,
+    },
+    TailCall {
+        a: R,
+        b: u16,
+    },
     /// Return R[a..a+b-1] (`b` MULTI: up to the top).
-    Return { a: R, b: u16 },
+    Return {
+        a: R,
+        b: u16,
+    },
     /// `Return` of no value / of R[a] alone, in a function that is not vararg and has no
     /// to-be-closed variable (C Lua's `RETURN0` and `RETURN1`: `Proto::specialize_returns`).
     Return0,
-    Return1 { a: R },
-    ForPrep { a: R, off: i32 },
-    ForLoop { a: R, off: i32 },
-    TForPrep { a: R, off: i32 },
+    Return1 {
+        a: R,
+    },
+    ForPrep {
+        a: R,
+        off: i32,
+    },
+    ForLoop {
+        a: R,
+        off: i32,
+    },
+    TForPrep {
+        a: R,
+        off: i32,
+    },
     /// The generic `for` iterator call: results to a+4.., `c` of them (MULTI: all, setting
     /// the top, for more than a 16-bit count; `PadNil` follows).
-    TForCall { a: R, c: u16 },
-    TForLoop { a: R, off: i32 },
+    TForCall {
+        a: R,
+        c: u16,
+    },
+    TForLoop {
+        a: R,
+        off: i32,
+    },
     /// R[a][off+i] = R[a+i], 1 <= i <= n (n 0: up to the top).
-    SetList { a: R, n: u8, off: u32 },
+    SetList {
+        a: R,
+        n: u8,
+        off: u32,
+    },
     /// R[a] = a closure of prototype `p`; its upvalues from registers count from the
     /// frame's base (never a window).
-    Closure { a: R, p: u32 },
+    Closure {
+        a: R,
+        p: u32,
+    },
     /// R[a..a+n-2] = varargs (n 0: all of them, setting the top).
-    VarArg { a: R, n: u16 },
-    Close { a: R },
-    Tbc { a: R },
+    VarArg {
+        a: R,
+        n: u16,
+    },
+    Close {
+        a: R,
+    },
+    Tbc {
+        a: R,
+    },
     /// The next instruction's registers count from `base + off` (functions with more
     /// registers than 16 bits address: only they have this). A jump never lands on the
     /// instruction after it, and nothing skips over it alone.
-    Window { off: u32 },
+    Window {
+        off: u32,
+    },
     /// R[a] = R[b | b_hi << 16]: `a` from the frame's base, `b` from the window's (the
     /// frame's base unless a `Window` comes first, which reaches sources past 2^24): a move
     /// between registers too far apart for one window.
-    MoveAbs { a: u32, b: u16, b_hi: u8 },
+    MoveAbs {
+        a: u32,
+        b: u16,
+        b_hi: u8,
+    },
     /// top = frame base + n: the next instruction (a call, tail call or return with its
     /// count MULTI) takes its values up to there. For counts past a 16-bit field.
-    SetTop { n: u32 },
+    SetTop {
+        n: u32,
+    },
     /// The registers from the top (set by the instruction before, a call, `...` or `for`
     /// iterator call with MULTI results) up to frame base + n become nil: that instruction's
     /// results adjusted to a count past a 16-bit field.
-    PadNil { n: u32 },
+    PadNil {
+        n: u32,
+    },
 }
 
 impl<R: Copy, K: Copy> Op<R, K> {
@@ -350,7 +629,10 @@ pub(crate) fn settle_upvals(p: &mut Proto, protos: &mut crate::heap::Slab<Proto>
         let (r, start, end) = (v.reg, v.start as usize, (v.end as usize).min(p.code.len()));
         let Some(&Op::Closure { a, p: ci }) = p.code.get(start) else { continue };
         let life = p.code.get(start + 1..end).unwrap_or_default();
-        if a != r || regs.get(usize::from(r) / 64).is_some_and(|w| w & 1 << (r % 64) != 0) || life.len() > budget {
+        if a != r
+            || regs.get(usize::from(r) / 64).is_some_and(|w| w & 1 << (r % 64) != 0)
+            || life.len() > budget
+        {
             continue;
         }
         budget -= life.len();
@@ -412,9 +694,13 @@ impl Proto {
     /// to-be-closed variable, no local a nested function captures: `needclose`), a return
     /// of no value is `Return0` and of one value `Return1`.
     pub(crate) fn specialize_returns(&mut self, protos: &crate::heap::Slab<Proto>) {
-        let captured = self.protos.iter().any(|&c| protos.get(c).is_some_and(|c| c.upvals.iter().any(|u| u.in_stack)));
+        let captured =
+            self.protos.iter().any(|&c| protos.get(c).is_some_and(|c| c.upvals.iter().any(|u| u.in_stack)));
         // (A generic `for`'s fourth value is a to-be-closed variable too: `TForPrep`.)
-        if self.is_vararg || captured || self.code.iter().any(|i| matches!(i, Op::Tbc { .. } | Op::TForPrep { .. })) {
+        if self.is_vararg
+            || captured
+            || self.code.iter().any(|i| matches!(i, Op::Tbc { .. } | Op::TForPrep { .. }))
+        {
             return;
         }
         for i in &mut self.code {

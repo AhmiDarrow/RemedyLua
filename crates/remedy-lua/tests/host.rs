@@ -5,7 +5,7 @@
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use remedy_lua::{Error, LimitKind, Libs, Limits, Lua, Value};
+use remedy_lua::{Error, Libs, LimitKind, Limits, Lua, Value};
 
 use super::common;
 
@@ -19,7 +19,10 @@ const LONG: &[(&str, &str)] = &[
         "local t = {} for i = 1, 200000 do t[i] = (i * 7919) % 200000 end \
          for round = 1, 1000 do table.sort(t, function(a, b) return a > b end) table.sort(t) end",
     ),
-    ("coroutine", "local co = coroutine.wrap(function() while true do coroutine.yield(1) end end) while true do co() end"),
+    (
+        "coroutine",
+        "local co = coroutine.wrap(function() while true do coroutine.yield(1) end end) while true do co() end",
+    ),
 ];
 
 fn big() -> Limits {
@@ -54,7 +57,10 @@ fn an_interrupt_stops_any_running_call_promptly() {
         for (name, src) in LONG {
             let (r, late, mut lua) = interrupted(src, fast, Duration::from_millis(30));
             assert_eq!(r.as_ref().err(), Some(&Error::Limit(LimitKind::Interrupted)), "{name} (fast {fast})");
-            assert!(late < Duration::from_millis(500), "{name} (fast {fast}) stopped {late:?} after the interrupt");
+            assert!(
+                late < Duration::from_millis(500),
+                "{name} (fast {fast}) stopped {late:?} after the interrupt"
+            );
             // Interrupted calls stay stopped until the host resets the interrupt.
             assert_eq!(lua.exec("return 1", "=t").err(), Some(Error::Limit(LimitKind::Interrupted)));
             lua.interrupt_handle().reset();
@@ -106,11 +112,16 @@ fn slices_keep_fuel_exact() {
             // A program that fits uses the same fuel whatever the slices.
             let mut lua = Lua::new(Limits::default().fuel(1_000_000), Libs::ALL);
             lua.set_fast_loop(fast);
-            lua.exec("local s = 0 for i = 1, 30000 do s = s + i end return s", "=t").map(|_| ()).unwrap_or_default();
+            lua.exec("local s = 0 for i = 1, 30000 do s = s + i end return s", "=t")
+                .map(|_| ())
+                .unwrap_or_default();
             let used = 1_000_000 - lua.fuel_left();
             let mut again = Lua::new(Limits::default().fuel(used), Libs::ALL);
             again.set_fast_loop(fast);
-            assert!(again.exec("local s = 0 for i = 1, 30000 do s = s + i end return s", "=t").is_ok(), "{used}");
+            assert!(
+                again.exec("local s = 0 for i = 1, 30000 do s = s + i end return s", "=t").is_ok(),
+                "{used}"
+            );
             let mut short = Lua::new(Limits::default().fuel(used - 1), Libs::ALL);
             short.set_fast_loop(fast);
             assert_eq!(

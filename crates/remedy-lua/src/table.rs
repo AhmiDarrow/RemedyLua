@@ -737,7 +737,17 @@ struct Census {
 
 impl NodesBuild {
     fn new(len: usize, bytes: usize) -> NodesBuild {
-        NodesBuild { len, nodes: Vec::new(), live: LiveBits::for_len(len), used: 0, free_top: 0, at: 0, longest: 0, bytes, ints_cost: 0 }
+        NodesBuild {
+            len,
+            nodes: Vec::new(),
+            live: LiveBits::for_len(len),
+            used: 0,
+            free_top: 0,
+            at: 0,
+            longest: 0,
+            bytes,
+            ints_cost: 0,
+        }
     }
 }
 
@@ -806,14 +816,19 @@ struct NodesBuild {
 /// `rebuild_cost`'s terms as far as they got (SEC8-F4).
 fn build_units(len: usize, old_len: usize, more: usize, ints_cost: usize, made: usize, at: usize) -> usize {
     let (a, pc) = (at.min(old_len), place_cost(len));
-    made * (pc / PLACE_COST) + a + pc * (a * 3 / 4) + if more == 0 { 0 } else { ints_cost * (at - a) / more }
+    made * (pc / PLACE_COST) + a + pc * (a * 3 / 4) + (ints_cost * (at - a)).checked_div(more).unwrap_or(0)
 }
 
 /// `v` made into `len` empty nodes (as `Pool::nodes`): a big part a piece at a time between
 /// looks, going on from as far as a part given up got.
 /// (`W`: under a fuel watch, made a `FUEL_PIECE` at a time, each one the call can pay for,
 /// `units` the charge with so many made, the clock read as without the watch.)
-fn make_nodes<const W: bool>(v: &mut Vec<Node>, len: usize, mem: &mut Mem, units: impl Fn(usize) -> usize) -> Result<(), SetError> {
+fn make_nodes<const W: bool>(
+    v: &mut Vec<Node>,
+    len: usize,
+    mem: &mut Mem,
+    units: impl Fn(usize) -> usize,
+) -> Result<(), SetError> {
     if v.is_empty() && len <= RESIZE_PIECE && !W {
         *v = mem.pool_nodes(len);
         return Ok(());
@@ -840,7 +855,12 @@ fn make_nodes<const W: bool>(v: &mut Vec<Node>, len: usize, mem: &mut Mem, units
 /// at a time (`realloc` copies one that size anyway: the allocator maps only bigger ones,
 /// which it moves without a copy, and 16 MiB copied in one go was 7 ms with no look). Given
 /// up, `arr` is as it was.
-fn regrow_arr_watched(mem: &mut Mem, arr: &mut Vec<Value>, cap: usize, copy: &mut Option<Vec<Value>>) -> Result<(), SetError> {
+fn regrow_arr_watched(
+    mem: &mut Mem,
+    arr: &mut Vec<Value>,
+    cap: usize,
+    copy: &mut Option<Vec<Value>>,
+) -> Result<(), SetError> {
     let bytes = arr.capacity().saturating_mul(SLOT_SIZE);
     if !(1 << 20..32 << 20).contains(&bytes) {
         regrow_arr(mem, arr, cap);
@@ -1127,7 +1147,12 @@ impl ArrPart {
 
     /// The storage grown to `cap` slots for a resize, a 1 to 32 MiB buffer a piece at a time
     /// (`regrow_arr_watched`).
-    fn reserve_watched(&mut self, mem: &mut Mem, cap: usize, copy: &mut Option<Vec<Value>>) -> Result<(), SetError> {
+    fn reserve_watched(
+        &mut self,
+        mem: &mut Mem,
+        cap: usize,
+        copy: &mut Option<Vec<Value>>,
+    ) -> Result<(), SetError> {
         regrow_arr_watched(mem, &mut self.buf, cap, copy)
     }
 
@@ -1281,7 +1306,12 @@ impl ArrPart {
         self.buf.resize_nil(self.live_len());
     }
 
-    fn reserve_watched(&mut self, mem: &mut Mem, cap: usize, copy: &mut Option<Vec<Value>>) -> Result<(), SetError> {
+    fn reserve_watched(
+        &mut self,
+        mem: &mut Mem,
+        cap: usize,
+        copy: &mut Option<Vec<Value>>,
+    ) -> Result<(), SetError> {
         if self.segmented() {
             self.buf.segment();
             return Ok(());
@@ -1303,7 +1333,11 @@ impl ArrPart {
     }
 
     fn grown_capacity(&self, last: usize) -> usize {
-        if self.segmented() { self.buf.capacity_for(last) } else { last.max(self.capacity() + self.capacity() / 2) }
+        if self.segmented() {
+            self.buf.capacity_for(last)
+        } else {
+            last.max(self.capacity() + self.capacity() / 2)
+        }
     }
 
     pub(crate) fn chunks(&self, r: std::ops::Range<usize>) -> impl Iterator<Item = (usize, &[Value])> {
@@ -1520,7 +1554,9 @@ mod seg {
                             continue;
                         }
                         let hi = ((k + 1) << SHIFT).min(used);
-                        if let Some(b) = s.blocks.get_mut(k).and_then(|b| b.get_mut(j - (k << SHIFT)..hi - (k << SHIFT))) {
+                        if let Some(b) =
+                            s.blocks.get_mut(k).and_then(|b| b.get_mut(j - (k << SHIFT)..hi - (k << SHIFT)))
+                        {
                             b.fill(Value::Nil);
                         }
                         j = hi;
@@ -1979,7 +2015,14 @@ impl Table {
     /// the slot must hold a value already. None: not done (take the full path); else the
     /// `nodes` slot written, if any.
     #[inline]
-    pub fn set_existing(&mut self, key: Value, val: Value, hint: u32, newindex_absent: bool, mem: &mut Mem) -> Option<Option<u32>> {
+    pub fn set_existing(
+        &mut self,
+        key: Value,
+        val: Value,
+        hint: u32,
+        newindex_absent: bool,
+        mem: &mut Mem,
+    ) -> Option<Option<u32>> {
         let has_meta = self.meta.is_some() && !newindex_absent;
         let slot = match key {
             Value::Int(i) => {
@@ -2120,7 +2163,13 @@ impl Table {
     /// when Lua's node array has room, as `set` decides (so the table ends up the same),
     /// nothing to do for nil, else None (the full path rehashes).
     #[inline]
-    fn insert_in_place(&mut self, key: Value, val: Value, has_meta: bool, mem: &mut Mem) -> Option<Option<u32>> {
+    fn insert_in_place(
+        &mut self,
+        key: Value,
+        val: Value,
+        has_meta: bool,
+        mem: &mut Mem,
+    ) -> Option<Option<u32>> {
         if has_meta {
             return None;
         }
@@ -2279,6 +2328,8 @@ impl Table {
     /// nodes are counted from now on, and the integer keys move to `nodes`.
     /// `fuel`: what the call has left, the move refused (`SetError::Fuel`) before it
     /// touches the table when it costs more; `usize::MAX` once a rehash has paid for it.
+    // (Named for the mode it switches to; tests and fault notes cite the name.)
+    #[allow(clippy::wrong_self_convention)]
     fn to_counting(&mut self, fuel: usize, mem: &mut Mem) -> Result<(), SetError> {
         let Some(p) = self.ints.as_ref() else {
             self.restructuring(mem);
@@ -2314,7 +2365,9 @@ impl Table {
         if let Some(p) = self.ints.take() {
             // Room for them all in nodes never used (removed keys hold theirs).
             if room
-                && let Err(e) = self.resumed(mem, |t, part, mem| t.rebuild_nodes::<false, false>(len.max(t.nodes.len()), 0, part, mem))
+                && let Err(e) = self.resumed(mem, |t, part, mem| {
+                    t.rebuild_nodes::<false, false>(len.max(t.nodes.len()), 0, part, mem)
+                })
             {
                 self.ints = Some(p);
                 return Err(e);
@@ -2346,7 +2399,9 @@ impl Table {
     #[cold]
     #[inline(never)]
     fn counting_refused(&mut self, fuel: usize, mem: &mut Mem) -> Result<(), SetError> {
-        let Some(pn) = self.ints.as_ref().filter(|_| mem.fuel_watchable).map(|p| p.nodes.len()) else { return Err(SetError::Fuel) };
+        let Some(pn) = self.ints.as_ref().filter(|_| mem.fuel_watchable).map(|p| p.nodes.len()) else {
+            return Err(SetError::Fuel);
+        };
         self.resumed(mem, |t, part, mem| {
             let (base, paid) = (t.resized, part.as_ref().map_or(0, |p| p.paid));
             // (A room for the marking is made below, once the new part's size is known.)
@@ -2370,7 +2425,13 @@ impl Table {
 
     /// `counting_refused`'s attempt under the watch: the integer part's live keys counted
     /// (one of `to_counting`'s three passes, charged as far as it got), then the new part.
-    fn counting_watched(&mut self, pn: usize, base: usize, part: &mut Kept, mem: &mut Mem) -> Result<(), SetError> {
+    fn counting_watched(
+        &mut self,
+        pn: usize,
+        base: usize,
+        part: &mut Kept,
+        mem: &mut Mem,
+    ) -> Result<(), SetError> {
         let (mut at, mut live) = part.as_mut().and_then(|p| p.ints_count.take()).unwrap_or_default();
         let most = mem.fuel_watch.unwrap_or(usize::MAX);
         while at < pn {
@@ -2380,7 +2441,9 @@ impl Table {
                 stash(part).ints_count = Some((at, live));
                 return Err(SetError::Stopped(crate::LimitKind::Fuel));
             }
-            live += self.ints.as_ref().map_or(0, |p| p.nodes.get(at..end).unwrap_or_default().iter().filter(|n| !n.val.is_nil()).count());
+            live += self.ints.as_ref().map_or(0, |p| {
+                p.nodes.get(at..end).unwrap_or_default().iter().filter(|n| !n.val.is_nil()).count()
+            });
             WATCHED.with(|w| w.set(w.get() + (end - at) as u64));
             if end / RESIZE_PIECE != at / RESIZE_PIECE
                 && let Some(k) = mem.stopped()
@@ -2404,7 +2467,9 @@ impl Table {
         // are the rest of it. The marking of the growth paid ahead: `prepay_marking`.)
         self.resized += pn;
         let marking = self.marking_cost(mem, self.arr.live_len() + after);
-        let r = self.prepay_marking(marking, part, mem).and_then(|()| self.rebuild_nodes::<true, true>(after, cost - pn, part, mem));
+        let r = self
+            .prepay_marking(marking, part, mem)
+            .and_then(|()| self.rebuild_nodes::<true, true>(after, cost - pn, part, mem));
         match r {
             Ok(()) => {
                 self.resized += cost - pn;
@@ -2520,7 +2585,9 @@ impl Table {
             let old = t.nodes.len();
             let len = hash_slots(old * 3 / 4 + 1);
             let grown = t.arr.live_len() + t.int_len() + len;
-            if (t.resized + rebuild_cost(old, len) + t.marking_cost(mem, grown)) / 16 > mem.fuel || part.as_ref().is_some_and(|p| p.prepaid) {
+            if (t.resized + rebuild_cost(old, len) + t.marking_cost(mem, grown)) / 16 > mem.fuel
+                || part.as_ref().is_some_and(|p| p.prepaid)
+            {
                 return t.grow_refused(part, mem);
             }
             t.grow_counted::<false>(part, mem)
@@ -2542,7 +2609,11 @@ impl Table {
         }
         let len = hash_slots(live + 1);
         // (Under a fuel watch the marking of the growth is paid ahead: `prepay_marking`.)
-        let r = if W { self.prepay_marking(self.marking_cost(mem, self.arr.live_len() + self.int_len() + len), part, mem) } else { Ok(()) };
+        let r = if W {
+            self.prepay_marking(self.marking_cost(mem, self.arr.live_len() + self.int_len() + len), part, mem)
+        } else {
+            Ok(())
+        };
         let r = r.and_then(|()| self.rebuild_nodes::<W, false>(len, 0, part, mem));
         match r {
             Ok(()) if W => self.marking_settled(mem),
@@ -2577,7 +2648,13 @@ impl Table {
     /// Given up between pieces, the table is as it was and the new part, as far as it got,
     /// stays in `part`.
     /// (`I`: the integer part's keys placed into it too, charged `ints_cost`.)
-    fn rebuild_nodes<const W: bool, const I: bool>(&mut self, len: usize, ints_cost: usize, part: &mut Kept, mem: &mut Mem) -> Result<(), SetError> {
+    fn rebuild_nodes<const W: bool, const I: bool>(
+        &mut self,
+        len: usize,
+        ints_cost: usize,
+        part: &mut Kept,
+        mem: &mut Mem,
+    ) -> Result<(), SetError> {
         let old_len = self.nodes.len();
         let mut b = match part.as_mut().and_then(|p| p.nodes.take()) {
             Some(b) if b.len == len && b.ints_cost == if I { ints_cost } else { 0 } => b,
@@ -2645,7 +2722,12 @@ impl Table {
     /// the old part kept as it was and `b` as far as it got (made a piece at a time too).
     /// (`W`: under a fuel watch, made and placed a piece at a time within it, `look_w`.)
     /// (`I`: the integer part's keys placed after the old part's, `NodesBuild::ints_cost`.)
-    fn place_again<const W: bool, const I: bool>(&mut self, b: &mut NodesBuild, mem: &mut Mem, watched: bool) -> Result<usize, SetError> {
+    fn place_again<const W: bool, const I: bool>(
+        &mut self,
+        b: &mut NodesBuild,
+        mem: &mut Mem,
+        watched: bool,
+    ) -> Result<usize, SetError> {
         self.restructuring(mem);
         // (Charged so far when stopped with `made` new slots made and `at` old slots placed:
         // `rebuild_cost`'s terms, as `rebuild_nodes` charges a stop.)
@@ -2654,12 +2736,15 @@ impl Table {
         let ints = if I { self.ints.take() } else { None };
         let more: &[Node] = ints.as_ref().map_or(&[], |p| &p.nodes);
         let (all, ints_cost) = (old_len + more.len(), b.ints_cost);
-        let units = |made: usize, at: usize| base + build_units(b.len, old_len, more.len(), ints_cost, made, at);
+        let units =
+            |made: usize, at: usize| base + build_units(b.len, old_len, more.len(), ints_cost, made, at);
         if !watched {
             b.nodes = mem.pool_nodes(b.len);
         } else {
             let made = make_nodes::<W>(&mut b.nodes, b.len, mem, |made| units(made, b.at));
-            if W && made.is_ok() && mem.fuel_watch.is_some_and(|most| units(b.len, (b.at + FUEL_PIECE).min(all)) > most) {
+            if W && made.is_ok()
+                && mem.fuel_watch.is_some_and(|most| units(b.len, (b.at + FUEL_PIECE).min(all)) > most)
+            {
                 if I {
                     self.ints = ints;
                 }
@@ -2677,13 +2762,22 @@ impl Table {
         let old_counts = (self.used, self.free_top);
         (self.used, self.free_top) = (b.used, b.free_top);
         for i in b.at..all {
-            let Some(n) = (if I && i >= old.len() { more.get(i - old.len()) } else { old.get(i) }).copied() else { break };
+            let Some(n) = (if I && i >= old.len() { more.get(i - old.len()) } else { old.get(i) }).copied()
+            else {
+                break;
+            };
             if !n.val.is_nil() {
                 b.longest = b.longest.max(self.raw_insert(n.key(), n.val).1);
             }
             // (The last look just before the new part is kept: until then it can be given up.)
             let last = i + 1 == all;
-            if watched && let Err(e) = if last { look(mem, RESIZE_PIECE - 1) } else { look_at::<W>(mem, i, |at| units(b.len, at.min(all))) } {
+            if watched
+                && let Err(e) = if last {
+                    look(mem, RESIZE_PIECE - 1)
+                } else {
+                    look_at::<W>(mem, i, |at| units(b.len, at.min(all)))
+                }
+            {
                 b.nodes = std::mem::replace(&mut self.nodes, old);
                 b.live = std::mem::replace(&mut self.live, old_live);
                 (b.used, b.free_top) = (self.used, self.free_top);
@@ -2696,8 +2790,8 @@ impl Table {
             }
         }
         if I {
-                    self.ints = ints;
-                }
+            self.ints = ints;
+        }
         // The new part made, and the placements (S5B-COST-2), counted as the most a part
         // of `old_len` slots holds when it grows (3/4) rather than the keys it held: when
         // it grows depends on the slots its dead keys took, so on the seed, and fuel must
@@ -2859,7 +2953,11 @@ impl Table {
     /// up there, the table as it was: given `Partial`, what the last one given up on this
     /// table made, while the table is unwritten since (`RESUMABLE`), and keeping what it
     /// makes when it is given up too (or refused for fuel before it begins).
-    fn resumed<R>(&mut self, mem: &mut Mem, f: impl FnOnce(&mut Table, &mut Kept, &mut Mem) -> Result<R, SetError>) -> Result<R, SetError> {
+    fn resumed<R>(
+        &mut self,
+        mem: &mut Mem,
+        f: impl FnOnce(&mut Table, &mut Kept, &mut Mem) -> Result<R, SetError>,
+    ) -> Result<R, SetError> {
         let mut part = match std::mem::take(&mut self.partial) {
             0 => None,
             h => match take_partial(mem, h) {
@@ -2913,7 +3011,12 @@ impl Table {
         r
     }
 
-    fn rehash_watched<const W: bool>(&mut self, extra: Value, part: &mut Kept, mem: &mut Mem) -> Result<(), SetError> {
+    fn rehash_watched<const W: bool>(
+        &mut self,
+        extra: Value,
+        part: &mut Kept,
+        mem: &mut Mem,
+    ) -> Result<(), SetError> {
         // Refused before its passes when it cannot pay for them alone: the counting pass is
         // in its charge (below), so such a call is refused there all the same, but only
         // after reading every part, again in every call the table was written between
@@ -2922,7 +3025,10 @@ impl Table {
         // watch, kept between calls and charged once (SEC8-F4: refused whole, it was never made
         // under a fuel below its cost, about half a unit of fuel a key): each pass charges as
         // far as it got when it stops for the fuel. (`W`: the passes made for the watch.)
-        if !W && ((self.resized + CENSUS_UNITS * (self.arr.live_len() + self.hash_len())) / 16 > mem.fuel || part.as_ref().is_some_and(|p| p.prepaid)) {
+        if !W
+            && ((self.resized + CENSUS_UNITS * (self.arr.live_len() + self.hash_len())) / 16 > mem.fuel
+                || part.as_ref().is_some_and(|p| p.prepaid))
+        {
             return self.rehash_refused(extra, part, mem);
         }
         let (mut c, mut nums) = (Census::default(), [0usize; 33]);
@@ -2948,7 +3054,9 @@ impl Table {
         let r = (|| {
             let count = CENSUS_UNITS * (self.arr.live_len() + self.hash_len());
             let scan = match self.resize_scan::<W>(asize, part, mem) {
-                Err(SetError::Stopped(crate::LimitKind::Fuel)) if W => return Err(self.scan_stopped(asize, count, part)),
+                Err(SetError::Stopped(crate::LimitKind::Fuel)) if W => {
+                    return Err(self.scan_stopped(asize, count, part));
+                }
                 r => r?,
             };
             // Charged after it was done, a rehash of a million keys (500,000 units) ran in
@@ -2961,8 +3069,14 @@ impl Table {
             // for the whole, and once in it is marked paid, the watched way: `prepay_marking`.)
             let marking = if W { self.resize_marking(asize, nhash, other_key, &scan, mem) } else { 0 };
             let r = if (self.resized + cost) / 16 > mem.fuel
-                && let Some(e) = self.short(self.resized, cost, count + self.resize_passes(asize, 0), self.resize_marking(asize, nhash, other_key, &scan, mem), part, mem)
-            {
+                && let Some(e) = self.short(
+                    self.resized,
+                    cost,
+                    count + self.resize_passes(asize, 0),
+                    self.resize_marking(asize, nhash, other_key, &scan, mem),
+                    part,
+                    mem,
+                ) {
                 Err(e)
             } else {
                 self.resized += count;
@@ -3007,7 +3121,13 @@ impl Table {
     /// shape, was 1.5x what this takes). The slots before the first such piece and after the
     /// last, one by one. Out of line, under a fuel watch only (`census`).
     #[inline(never)]
-    fn census_pieces<const W: bool>(&self, at: usize, nums: &mut [usize; 33], na: &mut usize, mem: &Mem) -> Result<(), (SetError, usize)> {
+    fn census_pieces<const W: bool>(
+        &self,
+        at: usize,
+        nums: &mut [usize; 33],
+        na: &mut usize,
+        mem: &Mem,
+    ) -> Result<(), (SetError, usize)> {
         let a = self.arr.live_len();
         let units = |k: usize| self.resized + CENSUS_UNITS * k.min(a);
         let from = at.max(FUEL_PIECE).next_multiple_of(FUEL_PIECE).min(a);
@@ -3020,7 +3140,11 @@ impl Table {
             look_at::<W>(mem, j, units).map_err(|e| (e, j + 1))?;
         }
         for j in (from.max(at)..to).step_by(FUEL_PIECE) {
-            let live: usize = self.arr.chunks(j..j + FUEL_PIECE).map(|(_, c)| c.iter().filter(|v| !v.is_nil()).count()).sum();
+            let live: usize = self
+                .arr
+                .chunks(j..j + FUEL_PIECE)
+                .map(|(_, c)| c.iter().filter(|v| !v.is_nil()).count())
+                .sum();
             if let Some(b) = nums.get_mut((64 - (j as u64).leading_zeros()) as usize) {
                 *b += live;
             }
@@ -3041,7 +3165,12 @@ impl Table {
     /// The rehash's count of the keys, between looks, going on from where `c` got. (Counted
     /// in locals, `c` written when it ends or gives up.)
     /// (`W`: under a fuel watch, its charge as far as it got, `look_w`.)
-    fn census<const W: bool>(&self, c: &mut Census, nums: &mut [usize; 33], mem: &Mem) -> Result<(), SetError> {
+    fn census<const W: bool>(
+        &self,
+        c: &mut Census,
+        nums: &mut [usize; 33],
+        mem: &Mem,
+    ) -> Result<(), SetError> {
         let units = |at: usize| self.resized + CENSUS_UNITS * at;
         let at = c.at;
         let (a, n) = (self.arr.live_len(), self.nodes.len());
@@ -3107,20 +3236,26 @@ impl Table {
             return Ok(s);
         }
         let (n, ilen) = (self.nodes.len(), self.int_len());
-        let units = |k: usize| self.resized + CENSUS_UNITS * (self.arr.live_len() + self.hash_len()) + self.scan_units(asize, k);
+        let units = |k: usize| {
+            self.resized + CENSUS_UNITS * (self.arr.live_len() + self.hash_len()) + self.scan_units(asize, k)
+        };
         let r = (|| {
             for (i, nd) in self.nodes.iter().enumerate().skip(at) {
                 if !nd.val.is_nil() {
                     s.live_before += 1;
                     match nd.key() {
-                        Value::Int(k) => s.nodes_ints_out += usize::from((k as u64).wrapping_sub(1) >= asize as u64),
+                        Value::Int(k) => {
+                            s.nodes_ints_out += usize::from((k as u64).wrapping_sub(1) >= asize as u64)
+                        }
                         _ => s.strings = true,
                     }
                 }
                 look_at::<W>(mem, i, units).map_err(|e| (e, i + 1))?;
             }
             for (i, nd) in self.int_nodes().iter().enumerate().skip(at.max(n) - n) {
-                s.ints_out += usize::from(matches!(nd.key(), Value::Int(k) if !nd.val.is_nil() && (k as u64).wrapping_sub(1) >= asize as u64));
+                s.ints_out += usize::from(
+                    matches!(nd.key(), Value::Int(k) if !nd.val.is_nil() && (k as u64).wrapping_sub(1) >= asize as u64),
+                );
                 look_at::<W>(mem, i, |k| units(n + k)).map_err(|e| (e, n + i + 1))?;
             }
             for (i, v) in self.arr.iter_from(asize.max(at.max(n + ilen) - n - ilen)) {
@@ -3168,11 +3303,20 @@ impl Table {
     /// for a call that can pay the rest (SEC8-F4).
     #[cold]
     #[inline(never)]
-    fn short(&mut self, base: usize, cost: usize, done: usize, marking: usize, part: &mut Kept, mem: &Mem) -> Option<SetError> {
+    fn short(
+        &mut self,
+        base: usize,
+        cost: usize,
+        done: usize,
+        marking: usize,
+        part: &mut Kept,
+        mem: &Mem,
+    ) -> Option<SetError> {
         if !mem.fuel_watchable {
             return Some(SetError::Fuel);
         }
-        let most = mem.fuel_watch.unwrap_or_else(|| watch_most(mem.fuel, part.as_ref().map_or(0, |p| p.paid)));
+        let most =
+            mem.fuel_watch.unwrap_or_else(|| watch_most(mem.fuel, part.as_ref().map_or(0, |p| p.paid)));
         if base + cost <= most {
             return None;
         }
@@ -3209,7 +3353,11 @@ impl Table {
         // The room `resize` makes in `nodes` for the keys moving in, first (LR-29d: it was
         // charged after, unchecked), and those keys placed at its new size.
         let inserts = if exact { 0 } else { s.ints_out - s.nodes_ints_out };
-        let nodes = if inserts > 0 && (self.used as usize + inserts) * 4 > self.nodes.len() * 3 { hash_slots(s.live_before + inserts) } else { self.nodes.len() };
+        let nodes = if inserts > 0 && (self.used as usize + inserts) * 4 > self.nodes.len() * 3 {
+            hash_slots(s.live_before + inserts)
+        } else {
+            self.nodes.len()
+        };
         let rebuild = if nodes == self.nodes.len() { 0 } else { rebuild_cost(self.nodes.len(), nodes) };
         self.resize_passes(asize, new_len)
             + rebuild
@@ -3222,7 +3370,11 @@ impl Table {
         let new_len = self.new_int_len(nhash, other_key, s);
         let exact = !s.strings && !other_key;
         let inserts = if exact { 0 } else { s.ints_out - s.nodes_ints_out };
-        let nodes = if inserts > 0 && (self.used as usize + inserts) * 4 > self.nodes.len() * 3 { hash_slots(s.live_before + inserts) } else { self.nodes.len() };
+        let nodes = if inserts > 0 && (self.used as usize + inserts) * 4 > self.nodes.len() * 3 {
+            hash_slots(s.live_before + inserts)
+        } else {
+            self.nodes.len()
+        };
         self.marking_cost(mem, asize + new_len + if exact { 0 } else { nodes })
     }
 
@@ -3245,7 +3397,15 @@ impl Table {
     /// order (the vanishing slice of the array, then the old nodes by index); else every
     /// hash key is in `nodes` and Lua's keyed nodes are counted. Keys whose value was
     /// removed go, as in Lua.
-    fn resize(&mut self, asize: usize, nhash: usize, other_key: bool, scan: Scan, part: &mut Kept, mem: &mut Mem) -> Result<(), SetError> {
+    fn resize(
+        &mut self,
+        asize: usize,
+        nhash: usize,
+        other_key: bool,
+        scan: Scan,
+        part: &mut Kept,
+        mem: &mut Mem,
+    ) -> Result<(), SetError> {
         self.restructuring(mem);
         let old_asize = self.arr.live_len();
         let csize = lua_nodes(nhash);
@@ -3276,11 +3436,13 @@ impl Table {
         // rest of them, the table's keys lost (SEC7-T1). Refused or stopped here, the table
         // is as it was. (The same rebuild an insert's growth makes, charged as it is.)
         let inserts = if exact { 0 } else { ints_out - nodes_ints_out };
-        if inserts > 0 && (self.used as usize + inserts) * 4 > self.nodes.len() * 3 {
-            if let Err(e) = self.rebuild_nodes::<false, false>(hash_slots(live_before + inserts), 0, part, mem) {
-                stash(part).resize = Some(rb);
-                return Err(e);
-            }
+        if inserts > 0
+            && (self.used as usize + inserts) * 4 > self.nodes.len() * 3
+            && let Err(e) =
+                self.rebuild_nodes::<false, false>(hash_slots(live_before + inserts), 0, part, mem)
+        {
+            stash(part).resize = Some(rb);
+            return Err(e);
         }
         // (The rebuild above passed its own slots to `reshaped`.)
         let slots0 = self.capacity_slots();
@@ -3300,14 +3462,19 @@ impl Table {
         // Every step before the parts are swapped in can be given up between pieces (the
         // interrupt or deadline): the table is then as it was but for its array buffer's
         // capacity, and what was made is kept in `rb` for the next resize to go on from.
-        let r = if exact { self.build_exact(&mut rb, old_asize, mem) } else { self.build_tail(&mut rb, old_asize, mem) };
+        let r = if exact {
+            self.build_exact(&mut rb, old_asize, mem)
+        } else {
+            self.build_tail(&mut rb, old_asize, mem)
+        };
         if let Err(e) = r {
             // (The new tail stays, hidden past the array part, for the next one: made again
             // from the start, its first pieces were 19 ms with no look at 2^21 slots.)
             self.resized = resized0;
             // (Kept: the new buffer being copied and the new integer part, whole: they are
             // there beside the old ones, SEC7-T3.)
-            rb.bytes = rb.copy.as_ref().map_or(0, |c| c.capacity() * SLOT_SIZE) + rb.ints.as_ref().map_or(0, |_| new_len * INODE_SIZE);
+            rb.bytes = rb.copy.as_ref().map_or(0, |c| c.capacity() * SLOT_SIZE)
+                + rb.ints.as_ref().map_or(0, |_| new_len * INODE_SIZE);
             mem.settle(before + held + charged, self.mem_size() + rb.bytes);
             self.reshaped(mem, slots0);
             stash(part).resize = Some(rb);
@@ -3447,7 +3614,8 @@ impl Table {
     fn build_exact(&mut self, rb: &mut ResizeBuild, old_asize: usize, mem: &mut Mem) -> Result<(), SetError> {
         let (asize, len) = (rb.asize, rb.len);
         if len > 0 {
-            let p = rb.ints.get_or_insert_with(|| IntPart { nodes: Vec::new(), next: Vec::new(), lastfree: len });
+            let p =
+                rb.ints.get_or_insert_with(|| IntPart { nodes: Vec::new(), next: Vec::new(), lastfree: len });
             make_nodes::<false>(&mut p.nodes, len, mem, |_| 0)?;
             if p.next.len() != len {
                 p.next = vec![0; len];
@@ -3462,7 +3630,11 @@ impl Table {
             if i < shrink {
                 (Value::Int((asize + i + 1) as i64), t.arr.get(asize + i).copied().unwrap_or_default())
             } else {
-                let n = if i < shrink + ilen { t.int_nodes().get(i - shrink) } else { t.nodes.get(i - shrink - ilen) };
+                let n = if i < shrink + ilen {
+                    t.int_nodes().get(i - shrink)
+                } else {
+                    t.nodes.get(i - shrink - ilen)
+                };
                 n.map_or((Value::Nil, Value::Nil), |n| (n.key(), n.val))
             }
         };
@@ -3725,17 +3897,25 @@ impl Table {
     /// cheaper of looking each key up and scanning, charged (`resized`).
     fn ints_in_hash(&mut self, from: usize, to: usize) -> bool {
         let span = to.saturating_sub(from);
-        let live = |n: &Node| !n.val.is_nil() && matches!(n.key(), Value::Int(k) if (k as u64).wrapping_sub(1) < to as u64);
+        let live = |n: &Node| {
+            !n.val.is_nil() && matches!(n.key(), Value::Int(k) if (k as u64).wrapping_sub(1) < to as u64)
+        };
         let keys = (from + 1..=to).map(|k| k as i64);
         let (len, found) = match self.ints.as_ref() {
-            Some(p) if span <= p.nodes.len() / 4 => {
-                (span * 4, keys.clone().any(|k| p.find(k).is_some_and(|j| p.nodes.get(j).is_some_and(|n| !n.val.is_nil()))))
-            }
+            Some(p) if span <= p.nodes.len() / 4 => (
+                span * 4,
+                keys.clone()
+                    .any(|k| p.find(k).is_some_and(|j| p.nodes.get(j).is_some_and(|n| !n.val.is_nil()))),
+            ),
             Some(p) => (p.nodes.len(), p.nodes.iter().any(live)),
             None if self.nodes.is_empty() => (0, false),
-            None if span <= self.nodes.len() / 4 => {
-                (span * 4, keys.clone().any(|k| self.find(Value::Int(k)).is_some_and(|i| self.nodes.get(i).is_some_and(|n| !n.val.is_nil()))))
-            }
+            None if span <= self.nodes.len() / 4 => (
+                span * 4,
+                keys.clone().any(|k| {
+                    self.find(Value::Int(k))
+                        .is_some_and(|i| self.nodes.get(i).is_some_and(|n| !n.val.is_nil()))
+                }),
+            ),
             None => (self.nodes.len(), self.nodes.iter().any(live)),
         };
         self.resized += len;
@@ -3754,7 +3934,12 @@ impl Table {
 
     /// Every live entry (for the collector and for copying out).
     pub fn entries(&self) -> impl Iterator<Item = (Value, Value)> + '_ {
-        let a = self.arr.iter().enumerate().filter(|(_, v)| !v.is_nil()).map(|(i, v)| (Value::Int(i as i64 + 1), *v));
+        let a = self
+            .arr
+            .iter()
+            .enumerate()
+            .filter(|(_, v)| !v.is_nil())
+            .map(|(i, v)| (Value::Int(i as i64 + 1), *v));
         let h = self.hash_nodes().filter(|n| !n.val.is_nil()).map(|n| (n.key(), n.val));
         a.chain(h)
     }
@@ -3769,7 +3954,9 @@ impl Table {
         let last = off + vals.len();
         let len = self.arr.live_len();
         let grow = last.saturating_sub(len);
-        if self.resized + grow >= 16 || (grow > 0 && (last > self.arr.capacity() || self.ints.is_some() || !self.nodes.is_empty())) {
+        if self.resized + grow >= 16
+            || (grow > 0 && (last > self.arr.capacity() || self.ints.is_some() || !self.nodes.is_empty()))
+        {
             return false;
         }
         self.absent.set(0);
@@ -3800,7 +3987,9 @@ impl Table {
             let h = if self.ints.is_some() { self.int_len() } else { self.nodes.len() };
             let scan = if h == 0 || span <= h / 4 { span.min(h) * 4 } else { h };
             let copy = if last > self.arr.capacity() { self.arr.live_len() } else { 0 };
-            if (self.resized + scan + copy + span + self.marking_cost(mem, last + self.hash_len())) / 16 > mem.fuel {
+            if (self.resized + scan + copy + span + self.marking_cost(mem, last + self.hash_len())) / 16
+                > mem.fuel
+            {
                 return Err(SetError::Fuel);
             }
             self.restructuring(mem);
@@ -3901,7 +4090,11 @@ mod tests {
             seen += len;
             longest = longest.max(len);
         }
-        assert_eq!(seen, t.nodes.iter().filter(|n| !n.is_free()).count(), "every node is in its home's chain");
+        assert_eq!(
+            seen,
+            t.nodes.iter().filter(|n| !n.is_free()).count(),
+            "every node is in its home's chain"
+        );
         assert_eq!(seen, t.used as usize);
         longest
     }
@@ -3944,7 +4137,9 @@ mod tests {
         keys.iter()
             .map(|&k| match k {
                 Value::Int(i) if t.arr_index(i).is_some() => None,
-                Value::Int(i) if t.ints.is_some() => t.ints.as_ref().and_then(|p| p.find(i)).map(|j| t.nodes.len() + j),
+                Value::Int(i) if t.ints.is_some() => {
+                    t.ints.as_ref().and_then(|p| p.find(i)).map(|j| t.nodes.len() + j)
+                }
                 k => t.find(k),
             })
             .collect()
@@ -3961,7 +4156,11 @@ mod tests {
             let mut m = mem();
             let mut t = Table { seed: crate::heap::mix_seed(7, 99), gc_watch: true, ..Table::default() };
             let key = |i: u64| {
-                if ints { Value::Int(((i * 2654435761) % 1000003 + 100000) as i64) } else { Value::Table(TableRef { idx: (i * 7 + 3) as u32, generation: 1 }) }
+                if ints {
+                    Value::Int(((i * 2654435761) % 1000003 + 100000) as i64)
+                } else {
+                    Value::Table(TableRef { idx: (i * 7 + 3) as u32, generation: 1 })
+                }
             };
             let val = |i: u64| Value::Table(TableRef { idx: 100_000 + i as u32, generation: 1 });
             let mut keys = Vec::new();
@@ -3980,7 +4179,10 @@ mod tests {
                     if b != a {
                         moves += 1;
                         let v = val(j as u64);
-                        assert!(m.watch.moved.chunks(2).any(|p| p.get(1).is_some_and(|x| x.raw_eq(v))), "ints {ints}: key {j} moved {b:?} -> {a:?} on insert {i}, not noted");
+                        assert!(
+                            m.watch.moved.chunks(2).any(|p| p.get(1).is_some_and(|x| x.raw_eq(v))),
+                            "ints {ints}: key {j} moved {b:?} -> {a:?} on insert {i}, not noted"
+                        );
                     }
                 }
             }
@@ -4039,14 +4241,18 @@ mod tests {
             for k in std::iter::once(64).chain([1]).chain((2..aimed).map(|j| 1 + 63 * j)) {
                 assert!(q.place(k, Value::Int(0), &mut None));
             }
-            let p = Partial { resize: Some(ResizeBuild { ints: Some(q), ..ResizeBuild::default() }), ..Partial::default() };
+            let p = Partial {
+                resize: Some(ResizeBuild { ints: Some(q), ..ResizeBuild::default() }),
+                ..Partial::default()
+            };
             t.partial = keep_partial(&mut m, Box::new(p));
             t.absent.set(RESUMABLE);
             let before = take_probes();
             assert!(t.set(Value::Int(1), Value::Int(5), &mut m).is_ok());
             assert_eq!(take_probes(), 0, "aimed {aimed}: no fuel");
             put_probes(before);
-            let kept = mem_partial(&m, t.partial).and_then(|p| p.resize.as_ref()?.ints.as_ref().map(|q| q.find(1).map(|j| q.nodes[j].val)));
+            let kept = mem_partial(&m, t.partial)
+                .and_then(|p| p.resize.as_ref()?.ints.as_ref().map(|q| q.find(1).map(|j| q.nodes[j].val)));
             if aimed == 3 {
                 assert_ne!(t.absent.get() & RESUMABLE, 0, "kept");
                 assert!(kept.flatten().is_some_and(|v| v.raw_eq(Value::Int(5))), "written");

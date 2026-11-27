@@ -45,7 +45,12 @@ pub(crate) const IN_PLACE: [&str; 2] = ["insert", "remove"];
 /// the same point). Nothing here allocates: the caller makes sure no collector step is
 /// due and the stack has the room `call_native` would make.
 #[inline(never)]
-pub(crate) fn in_place(heap: (&mut crate::heap::Slab<crate::table::Table>, crate::heap::Phase, &mut Vec<crate::heap::Gray>, u32), op: usize, args: &[Value], fuel: i64) -> Option<(Value, usize, i64)> {
+pub(crate) fn in_place(
+    heap: (&mut crate::heap::Slab<crate::table::Table>, crate::heap::Phase, &mut Vec<crate::heap::Gray>, u32),
+    op: usize,
+    args: &[Value],
+    fuel: i64,
+) -> Option<(Value, usize, i64)> {
     let (tables, phase, grayagain, part) = heap;
     let (&Value::Table(tr), want_args) = (args.first()?, if op == 0 { 2 } else { 1 }) else { return None };
     // (The table the collector traverses in chunks: `raw_set` marks what a write there
@@ -293,7 +298,14 @@ fn concat(lua: &mut Lua, a: Args) -> R {
     lua.ret_owned(b)
 }
 
-fn concat_into(lua: &mut Lua, t: Value, sep: &[u8], i: i64, last: i64, out: &mut super::OutBuf) -> Result<(), LuaError> {
+fn concat_into(
+    lua: &mut Lua,
+    t: Value,
+    sep: &[u8],
+    i: i64,
+    last: i64,
+    out: &mut super::OutBuf,
+) -> Result<(), LuaError> {
     let mut k = i;
     while k <= last {
         lua.charge(1)?;
@@ -525,7 +537,14 @@ impl InPlace {
 
 /// Sorts slots `lo..=up`: Lua's algorithm with its reads and writes in C Lua's order, so a
 /// bad order function is detected the same way and a failed sort leaves the same order.
-fn auxsort(lua: &mut Lua, s: &Sorter, v: &mut InPlace, lo: usize, up: usize, mut rnd: u64) -> Result<(), LuaError> {
+fn auxsort(
+    lua: &mut Lua,
+    s: &Sorter,
+    v: &mut InPlace,
+    lo: usize,
+    up: usize,
+    mut rnd: u64,
+) -> Result<(), LuaError> {
     let bad = || LuaError::msg("invalid order function for sorting");
     let (mut lo, mut up) = (lo, up);
     while lo < up {
@@ -630,4 +649,3 @@ fn sort(lua: &mut Lua, a: Args) -> R {
     }
     lua.ret(&[])
 }
-

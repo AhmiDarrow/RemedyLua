@@ -30,7 +30,8 @@ fn same(src: &str) {
 #[test]
 fn spec_cases_match_c_lua() {
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/lua/sweep1/spec");
-    let mut files: Vec<_> = std::fs::read_dir(&dir).unwrap().filter_map(|e| e.ok().map(|e| e.path())).collect();
+    let mut files: Vec<_> =
+        std::fs::read_dir(&dir).unwrap().filter_map(|e| e.ok().map(|e| e.path())).collect();
     files.sort();
     let (mut count, mut failures) = (0, Vec::new());
     for f in files.iter().filter(|p| p.extension().is_some_and(|x| x == "lua")) {
@@ -112,7 +113,9 @@ fn spec04_utf8_codepoint_bounds() {
 /// `%f[^%z]` never at its start. stdlib/pattern.rs:35-47 (class match has no 'z' arm).
 #[test]
 fn spec05_pattern_class_z() {
-    same(r#"return ("x"):find("%f[%z]"), ("ab"):gsub("%f[^%z]", "|"), ("a\0b"):find("%z"), ("a\0b"):gsub("%Z", "."), ("z"):match("[%z]")"#);
+    same(
+        r#"return ("x"):find("%f[%z]"), ("ab"):gsub("%f[^%z]", "|"), ("a\0b"):find("%z"), ("a\0b"):gsub("%Z", "."), ("z"):match("[%z]")"#,
+    );
 }
 
 /// SPEC-06 (critical in debug builds, major in release): `select(math.mininteger, ...)`
@@ -144,7 +147,9 @@ fn spec08_load_does_not_skip_shebang() {
 /// the chunk (parser.rs:126: MAX_DEPTH or the native stack guard trips first).
 #[test]
 fn spec09_nested_constructors_150() {
-    same(r#"local f, e = load("return " .. string.rep("{", 150) .. string.rep("}", 150)) return f and type(f()) or e"#);
+    same(
+        r#"local f, e = load("return " .. string.rep("{", 150) .. string.rep("}", 150)) return f and type(f()) or e"#,
+    );
 }
 
 /// SPEC-10 (minor): string arithmetic coercion is built into the VM instead of living in
@@ -188,7 +193,9 @@ fn spec12_missing_argument_checks() {
 /// incremental, generational.
 #[test]
 fn spec13_collectgarbage_mode_switch() {
-    same(r#"return collectgarbage("incremental"), collectgarbage("generational"), collectgarbage("incremental")"#);
+    same(
+        r#"return collectgarbage("incremental"), collectgarbage("generational"), collectgarbage("incremental")"#,
+    );
 }
 
 /// SPEC-14 (minor): errors found by the compiler (const assignment, goto, break) name a
@@ -196,7 +203,9 @@ fn spec13_collectgarbage_mode_switch() {
 /// right. compiler.rs:311 and the other `self.err` sites skip the chunkid formatting.
 #[test]
 fn spec14_compiler_error_chunkid() {
-    same(r#"return L("local x <const> = 1; x = 2"), L("goto nowhere"), L("break"), L("::a:: local function f() goto a end")"#);
+    same(
+        r#"return L("local x <const> = 1; x = 2"), L("goto nowhere"), L("break"), L("::a:: local function f() goto a end")"#,
+    );
 }
 
 /// SPEC-15 (minor): lexer/parser message text. C: `near <eof>` (no quotes); escape and
@@ -308,7 +317,9 @@ fn spec25_tonumber_base_plus_sign() {
 /// sweep fuzzer.
 #[test]
 fn spec26_alt_flag_on_zero() {
-    same(r#"return string.format("%#.0g|%#.1g|%+#.0g|%#.0o|%#o|%#5.0o|%#.0e|%#.0f", 0, 0.0, -0.0, 0, 0, 0, 0, 0)"#);
+    same(
+        r#"return string.format("%#.0g|%#.1g|%+#.0g|%#.0o|%#o|%#5.0o|%#.0e|%#.0f", 0, 0.0, -0.0, 0, 0, 0, 0, 0)"#,
+    );
 }
 
 /// SPEC-27 (major): when a coroutine dies by an error, C Lua leaves its pending
@@ -377,11 +388,38 @@ impl Rng {
 }
 
 const NUMS: &[&str] = &[
-    "0", "1", "-1", "7", "-7", "255", "65", "1000000", "math.maxinteger", "math.mininteger", "0.0", "-0.0", "0.5",
-    "1.5", "-2.25", "3.0", "1e10", "1e300", "1e-300", "2^53", "2^63", "-2^63", "math.huge", "-math.huge", "0.1",
-    "1/3", "123456.789", "5e-324", "(0/0)",
+    "0",
+    "1",
+    "-1",
+    "7",
+    "-7",
+    "255",
+    "65",
+    "1000000",
+    "math.maxinteger",
+    "math.mininteger",
+    "0.0",
+    "-0.0",
+    "0.5",
+    "1.5",
+    "-2.25",
+    "3.0",
+    "1e10",
+    "1e300",
+    "1e-300",
+    "2^53",
+    "2^63",
+    "-2^63",
+    "math.huge",
+    "-math.huge",
+    "0.1",
+    "1/3",
+    "123456.789",
+    "5e-324",
+    "(0/0)",
 ];
-const STRS: &[&str] = &["\"\"", "\"abc\"", "\"10\"", "\"0x1F\"", "\" 5 \"", "\"a\\0b\"", "\"\\255\\1\"", "\"3.5\"", "\"%d\""];
+const STRS: &[&str] =
+    &["\"\"", "\"abc\"", "\"10\"", "\"0x1F\"", "\" 5 \"", "\"a\\0b\"", "\"\\255\\1\"", "\"3.5\"", "\"%d\""];
 
 fn value(r: &mut Rng) -> String {
     match r.below(10) {
@@ -436,12 +474,21 @@ fn pattern(r: &mut Rng, depth: usize) -> String {
     }
     for _ in 0..1 + r.below(4) {
         let atom = match r.below(12) {
-            0 => r.pick(&["%a", "%d", "%s", "%w", "%p", "%l", "%u", "%x", "%c", "%g", "%A", "%S", "%W"]).to_owned(),
-            1 => r.pick(&[".", "a", "b", "(", ")", " ", "1", "%.", "%%", "%(", "%)"]).replace('(', "%(").replace(')', "%)"),
-            2 => r.pick(&["[a-c]", "[^%s]", "[%d_]", "[]]", "[^]a]", "[a-]", "[%a%d]", "[^ab]", "[(]"]).to_owned(),
+            0 => r
+                .pick(&["%a", "%d", "%s", "%w", "%p", "%l", "%u", "%x", "%c", "%g", "%A", "%S", "%W"])
+                .to_owned(),
+            1 => r
+                .pick(&[".", "a", "b", "(", ")", " ", "1", "%.", "%%", "%(", "%)"])
+                .replace('(', "%(")
+                .replace(')', "%)"),
+            2 => r
+                .pick(&["[a-c]", "[^%s]", "[%d_]", "[]]", "[^]a]", "[a-]", "[%a%d]", "[^ab]", "[(]"])
+                .to_owned(),
             3 => r.pick(&["%f[%w]", "%f[%W]", "%f[%a]", "%f[ ]", "%f[^%d]"]).to_owned(),
             4 => r.pick(&["%b()", "%bab", "%b[]"]).to_owned(),
-            5 if depth > 0 => format!("({})", pattern(r, depth - 1).trim_start_matches('^').trim_end_matches('$')),
+            5 if depth > 0 => {
+                format!("({})", pattern(r, depth - 1).trim_start_matches('^').trim_end_matches('$'))
+            }
             6 => "()".to_owned(),
             _ => r.pick(&["a", "b", "c", ".", "%a", "x", " "]).to_owned(),
         };
@@ -472,9 +519,18 @@ fn pattern_case(r: &mut Rng) -> String {
     match r.below(5) {
         0 => format!("string.find(\"{s}\", {p:?}{init})"),
         1 => format!("string.match(\"{s}\", {p:?}{init})"),
-        2 => format!("(function() local o = {{}} for a, b in string.gmatch(\"{s}\", {p:?}) do o[#o + 1] = tostring(a) .. ',' .. tostring(b) end return table.concat(o, '|') end)()"),
+        2 => format!(
+            "(function() local o = {{}} for a, b in string.gmatch(\"{s}\", {p:?}) do o[#o + 1] = tostring(a) .. ',' .. tostring(b) end return table.concat(o, '|') end)()"
+        ),
         3 => {
-            let rep = r.pick(&["\"<%0>\"", "\"%1\"", "\"\"", "{a = 'A', b = false}", "function(x) return x and #x end", "\"%%\""]);
+            let rep = r.pick(&[
+                "\"<%0>\"",
+                "\"%1\"",
+                "\"\"",
+                "{a = 'A', b = false}",
+                "function(x) return x and #x end",
+                "\"%%\"",
+            ]);
             let n = r.pick(&["", ", 1", ", 0", ", 3"]);
             format!("string.gsub(\"{s}\", {p:?}, {rep}{n})")
         }
@@ -484,10 +540,30 @@ fn pattern_case(r: &mut Rng) -> String {
 
 fn pack_case(r: &mut Rng) -> String {
     let opts: &[(&str, &str)] = &[
-        ("b", "-5"), ("B", "200"), ("h", "-300"), ("H", "60000"), ("i", "-70000"), ("I", "70000"), ("l", "1"),
-        ("j", "math.mininteger"), ("J", "-1"), ("T", "3"), ("f", "0.5"), ("d", "-1.25"), ("n", "1e300"),
-        ("i3", "-8388608"), ("I5", "1099511627775"), ("i16", "-2"), ("I9", "5"), ("s1", "'hey'"), ("s2", "''"),
-        ("z", "'zed'"), ("c3", "'ab'"), ("x", ""), ("Xi4", ""), ("Xh", ""),
+        ("b", "-5"),
+        ("B", "200"),
+        ("h", "-300"),
+        ("H", "60000"),
+        ("i", "-70000"),
+        ("I", "70000"),
+        ("l", "1"),
+        ("j", "math.mininteger"),
+        ("J", "-1"),
+        ("T", "3"),
+        ("f", "0.5"),
+        ("d", "-1.25"),
+        ("n", "1e300"),
+        ("i3", "-8388608"),
+        ("I5", "1099511627775"),
+        ("i16", "-2"),
+        ("I9", "5"),
+        ("s1", "'hey'"),
+        ("s2", "''"),
+        ("z", "'zed'"),
+        ("c3", "'ab'"),
+        ("x", ""),
+        ("Xi4", ""),
+        ("Xh", ""),
     ];
     let mut fmt = String::from(r.pick(&["", "<", ">", "=", "!", "!4", "<!8", ">!2"]));
     let mut vals = Vec::new();
@@ -515,7 +591,28 @@ fn pack_case(r: &mut Rng) -> String {
 fn numeral_case(r: &mut Rng) -> String {
     let mut s = String::new();
     for _ in 0..1 + r.below(9) {
-        s.push_str(r.pick(&["0", "1", "9", "7", "x", "X", "a", "f", "F", "p", "P", ".", "+", "-", "e", "E", " ", "z", "ff", "8000000000000000"]));
+        s.push_str(r.pick(&[
+            "0",
+            "1",
+            "9",
+            "7",
+            "x",
+            "X",
+            "a",
+            "f",
+            "F",
+            "p",
+            "P",
+            ".",
+            "+",
+            "-",
+            "e",
+            "E",
+            " ",
+            "z",
+            "ff",
+            "8000000000000000",
+        ]));
     }
     match r.below(5) {
         0 => format!("tonumber({s:?})"),
@@ -527,8 +624,25 @@ fn numeral_case(r: &mut Rng) -> String {
 }
 
 fn table_case(r: &mut Rng) -> String {
-    let mut p = String::from("(function() local t = {1, 2, 3, 4, 5} local log = {} local function L(ok, ...) log[#log + 1] = tostring(ok) .. ':' .. table.concat({tostring((...)), tostring(select(2, ...))}, ',') end\n");
-    let pos = || ["0", "1", "2", "-1", "#t", "#t + 1", "#t + 2", "3.0", "1.5", "math.maxinteger", "math.mininteger", "'2'"];
+    let mut p = String::from(
+        "(function() local t = {1, 2, 3, 4, 5} local log = {} local function L(ok, ...) log[#log + 1] = tostring(ok) .. ':' .. table.concat({tostring((...)), tostring(select(2, ...))}, ',') end\n",
+    );
+    let pos = || {
+        [
+            "0",
+            "1",
+            "2",
+            "-1",
+            "#t",
+            "#t + 1",
+            "#t + 2",
+            "3.0",
+            "1.5",
+            "math.maxinteger",
+            "math.mininteger",
+            "'2'",
+        ]
+    };
     for _ in 0..1 + r.below(6) {
         let a = r.pick(&pos());
         let b = r.pick(&pos());
@@ -538,7 +652,12 @@ fn table_case(r: &mut Rng) -> String {
             2 => format!("table.remove(t, {a})"),
             // C Lua's table.move runs to completion inside one C call (no step hook), so
             // huge ranges would hang the oracle: small positions only.
-            3 => format!("table.move(t, {}, {}, {})", r.pick(&pos()[..8]), r.pick(&pos()[..8]), r.pick(&pos()[..8])),
+            3 => format!(
+                "table.move(t, {}, {}, {})",
+                r.pick(&pos()[..8]),
+                r.pick(&pos()[..8]),
+                r.pick(&pos()[..8])
+            ),
             4 => format!("table.concat(t, ',', {a}, {b})"),
             5 => format!("select('#', table.unpack(t, {a}, {b}))"),
             _ => "table.remove(t)".to_owned(),
@@ -552,7 +671,21 @@ fn table_case(r: &mut Rng) -> String {
 fn utf8_case(r: &mut Rng) -> String {
     let mut s = String::new();
     for _ in 0..r.below(8) {
-        s.push_str(r.pick(&["a", "\\x80", "\\xbf", "\\xc2", "\\xc0", "\\xe2\\x82\\xac", "\\xed\\xa0\\x80", "\\xf4\\x90\\x80\\x80", "\\xf0\\x9f\\x98\\x80", "\\xff", "\\xe4\\xb8", "\\u{7FFFFFFF}", "\\0"]));
+        s.push_str(r.pick(&[
+            "a",
+            "\\x80",
+            "\\xbf",
+            "\\xc2",
+            "\\xc0",
+            "\\xe2\\x82\\xac",
+            "\\xed\\xa0\\x80",
+            "\\xf4\\x90\\x80\\x80",
+            "\\xf0\\x9f\\x98\\x80",
+            "\\xff",
+            "\\xe4\\xb8",
+            "\\u{7FFFFFFF}",
+            "\\0",
+        ]));
     }
     let i = r.pick(&["1", "-1", "2", "0", "-10", "10"]);
     let j = r.pick(&["-1", "1", "3", "-3", "20"]);
@@ -560,20 +693,62 @@ fn utf8_case(r: &mut Rng) -> String {
     match r.below(4) {
         0 => format!("utf8.len(\"{s}\", {}, {j}{lax})", if s.is_empty() { "1" } else { i }),
         1 => format!("utf8.codepoint(\"{s}\", {i}, {j}{lax})"),
-        2 => format!("utf8.offset(\"{s}\", {}, {})", r.pick(&["0", "1", "2", "-1", "-2", "5"]), r.pick(&["1", "2", "3", "-1"])),
-        _ => format!("(function() local o = {{}} for p, c in utf8.codes(\"{s}\"{lax}) do o[#o + 1] = p .. '=' .. c end return table.concat(o, ' ') end)()"),
+        2 => format!(
+            "utf8.offset(\"{s}\", {}, {})",
+            r.pick(&["0", "1", "2", "-1", "-2", "5"]),
+            r.pick(&["1", "2", "3", "-1"])
+        ),
+        _ => format!(
+            "(function() local o = {{}} for p, c in utf8.codes(\"{s}\"{lax}) do o[#o + 1] = p .. '=' .. c end return table.concat(o, ' ') end)()"
+        ),
     }
 }
 
 fn for_case(r: &mut Rng) -> String {
-    let b = &["0", "1", "-1", "3", "10", "0.5", "2.5", "-2.5", "math.maxinteger", "math.mininteger", "math.maxinteger - 1", "math.mininteger + 1", "2^53", "1e300", "-1e300", "math.huge", "-math.huge", "'3'", "0/0"];
+    let b = &[
+        "0",
+        "1",
+        "-1",
+        "3",
+        "10",
+        "0.5",
+        "2.5",
+        "-2.5",
+        "math.maxinteger",
+        "math.mininteger",
+        "math.maxinteger - 1",
+        "math.mininteger + 1",
+        "2^53",
+        "1e300",
+        "-1e300",
+        "math.huge",
+        "-math.huge",
+        "'3'",
+        "0/0",
+    ];
     let (a, l) = (r.pick(b), r.pick(b));
-    let step = r.pick(&["", ", 1", ", -1", ", 2", ", -3", ", 0.5", ", -0.25", ", math.maxinteger", ", math.mininteger", ", 2^62", ", 0"]);
-    format!("(function() local o, n = {{}}, 0 for i = {a}, {l}{step} do n = n + 1 if n > 6 then break end o[n] = math.type(i) .. ':' .. tostring(i) end return n, table.concat(o, ' ') end)()")
+    let step = r.pick(&[
+        "",
+        ", 1",
+        ", -1",
+        ", 2",
+        ", -3",
+        ", 0.5",
+        ", -0.25",
+        ", math.maxinteger",
+        ", math.mininteger",
+        ", 2^62",
+        ", 0",
+    ]);
+    format!(
+        "(function() local o, n = {{}}, 0 for i = {a}, {l}{step} do n = n + 1 if n > 6 then break end o[n] = math.type(i) .. ':' .. tostring(i) end return n, table.concat(o, ' ') end)()"
+    )
 }
 
 fn sweep_program(r: &mut Rng) -> String {
-    let mut p = String::from("local out = {}\nlocal function try(f) local r = table.pack(pcall(f)) r.n = nil return r end\n");
+    let mut p = String::from(
+        "local out = {}\nlocal function try(f) local r = table.pack(pcall(f)) r.n = nil return r end\n",
+    );
     for _ in 0..3 + r.below(8) {
         let e = match r.below(7) {
             0 => format_case(r),

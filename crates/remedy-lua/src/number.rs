@@ -597,6 +597,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[allow(clippy::approx_constant)] // a Lua-printed literal, not meant as PI
     fn floats_print_like_lua() {
         assert_eq!(fmt_float(1.0), "1.0");
         assert_eq!(fmt_float(0.1), "0.1");
@@ -627,6 +628,12 @@ mod tests {
         assert!(matches!(n("0x1p4"), Some(Value::Num(f)) if f == 16.0));
         assert!(matches!(n(".5"), Some(Value::Num(f)) if f == 0.5));
         assert!(matches!(n("5."), Some(Value::Num(f)) if f == 5.0));
-        assert!(n("inf").is_none() && n("nan").is_none() && n("1e").is_none() && n("").is_none() && n("0x").is_none());
+        assert!(
+            n("inf").is_none()
+                && n("nan").is_none()
+                && n("1e").is_none()
+                && n("").is_none()
+                && n("0x").is_none()
+        );
     }
 }

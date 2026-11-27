@@ -170,7 +170,10 @@ fn message_handler_traceback_starts_at_the_raising_function() {
         r[0],
         "t:1: boom\nstack traceback:\n\t[C]: in function 'error'\n\tt:1: in function <t:1>\n\t[C]: in function 'xpcall'\n\tt:1: in main chunk"
     );
-    assert_eq!(r[1], "e\nstack traceback:\n\t[C]: in function 'error'\n\t[C]: in function 'xpcall'\n\tt:1: in main chunk");
+    assert_eq!(
+        r[1],
+        "e\nstack traceback:\n\t[C]: in function 'error'\n\t[C]: in function 'xpcall'\n\tt:1: in main chunk"
+    );
 }
 
 #[test]
@@ -429,7 +432,10 @@ fn library_function_upvalues_as_c_lua() {
         end
         return table.concat(out, " ")
     "##;
-    assert_eq!(common::remedy_libs(program, FUEL, common::ALL_OPT_IN), Ok("\"0 0 0 0 3 1 1 1 0 0 0\"".into()));
+    assert_eq!(
+        common::remedy_libs(program, FUEL, common::ALL_OPT_IN),
+        Ok("\"0 0 0 0 3 1 1 1 0 0 0\"".into())
+    );
     same_as_c(program);
 }
 
@@ -447,7 +453,10 @@ fn opt_in_flags_are_off_in_every_preset() {
     lua.open_libs(Libs::DEBUG_INFO);
     assert_eq!(run(&mut lua, "return type(debug.traceback), type(require)").unwrap(), ["function", "nil"]);
     lua.open_libs(Libs::REQUIRE);
-    assert_eq!(run(&mut lua, "return type(require), package.loaded.debug == debug").unwrap(), ["function", "true"]);
+    assert_eq!(
+        run(&mut lua, "return type(require), package.loaded.debug == debug").unwrap(),
+        ["function", "true"]
+    );
     // Each flag alone.
     let mut lua = Lua::new(Limits::default(), Libs::SAFE | Libs::REQUIRE);
     assert_eq!(run(&mut lua, "return type(debug), type(require)").unwrap(), ["nil", "function"]);
@@ -501,11 +510,15 @@ fn nothing_that_breaks_the_sandbox_is_there() {
 fn host_modules_load_through_require() {
     let mut lua = state();
     lua.add_module("greet", "local M = {} function M.hi(n) return 'hi ' .. n end function M.where() return debug.traceback('w') end return M");
-    lua.add_module_source("cfg", ModuleSource::new("return {name = ..., origin = select(2, ...)}", "mods/cfg.lua"));
+    lua.add_module_source(
+        "cfg",
+        ModuleSource::new("return {name = ..., origin = select(2, ...)}", "mods/cfg.lua"),
+    );
     lua.add_module("broken", "return = 1");
     lua.add_module("loops", "while true do end");
     lua.set_module_loader(Some(|n: &str| {
-        n.strip_prefix("gen.").map(|rest| ModuleSource::new(format!("return '{rest}'"), format!("gen/{rest}.lua")))
+        n.strip_prefix("gen.")
+            .map(|rest| ModuleSource::new(format!("return '{rest}'"), format!("gen/{rest}.lua")))
     }));
     let r = run(
         &mut lua,
@@ -523,8 +536,14 @@ fn host_modules_load_through_require() {
     assert_eq!((r[2].as_str(), r[3].as_str(), r[4].as_str()), ("cfg", "mods/cfg.lua", "mods/cfg.lua"));
     assert_eq!((r[5].as_str(), r[6].as_str()), ("x", "gen/y.lua"));
     assert_eq!(r[7], "w\nstack traceback:\n\tgreet:1: in function 'greet.where'\n\tt:5: in main chunk");
-    assert_eq!(r[8], "error loading module 'broken' from host module 'broken':\n\tbroken:1: unexpected symbol near '='");
-    assert_eq!(r[9], "module 'absent' not found:\n\tno field package.preload['absent']\n\tno host module 'absent'");
+    assert_eq!(
+        r[8],
+        "error loading module 'broken' from host module 'broken':\n\tbroken:1: unexpected symbol near '='"
+    );
+    assert_eq!(
+        r[9],
+        "module 'absent' not found:\n\tno field package.preload['absent']\n\tno host module 'absent'"
+    );
     assert_eq!(r[10], "true");
     // A module's code runs on the script's budget: an endless one stops at the fuel limit,
     // which no `pcall` catches.
@@ -534,7 +553,10 @@ fn host_modules_load_through_require() {
     // No loader: an unknown name is not found; `None` removes the loader.
     lua.set_module_loader(None::<fn(&str) -> Option<ModuleSource>>);
     lua.set_limits(lua.limits().fuel(1_000_000));
-    assert!(run(&mut lua, "return select(2, pcall(require, 'gen.z'))").unwrap()[0].contains("no host module 'gen.z'"));
+    assert!(
+        run(&mut lua, "return select(2, pcall(require, 'gen.z'))").unwrap()[0]
+            .contains("no host module 'gen.z'")
+    );
 }
 
 /// Compiling a host module is charged as `load` charges the same source.
@@ -579,9 +601,15 @@ fn fuel_is_independent_of_the_seed_and_the_fast_loop() {
     let mut varied = Vec::new();
     for n in (1..=150).step_by(3) {
         // Tables the script keeps in its globals, and modules only `package.loaded` holds.
-        for store in ["T = {} for i = 1, N do T['m' .. i] = {a = i, b = {}} end", "for i = 1, N do package.loaded['m' .. i] = {a = i, b = {}} end"] {
+        for store in [
+            "T = {} for i = 1, N do T['m' .. i] = {a = i, b = {}} end",
+            "for i = 1, N do package.loaded['m' .. i] = {a = i, b = {}} end",
+        ] {
             for body in [tail, with_libs] {
-                let src = format!("for i = 1, 3000 do _G['g' .. i] = i end {} {body}", store.replace('N', &n.to_string()));
+                let src = format!(
+                    "for i = 1, 3000 do _G['g' .. i] = i end {} {body}",
+                    store.replace('N', &n.to_string())
+                );
                 let mut fuels = std::collections::BTreeSet::new();
                 for seed in [1u64, 2, 3, 4] {
                     fuels.insert(fuel(&src, seed, true));
@@ -607,7 +635,9 @@ fn traceback_name_search_is_charged_by_slots_read() {
         FUEL - lua.fuel_left()
     };
     let small = used("");
-    let wide = used("for i = 1, 65536 do package.loaded['c' .. i] = i end for i = 1, 65535 do package.loaded['c' .. i] = nil end");
+    let wide = used(
+        "for i = 1, 65536 do package.loaded['c' .. i] = i end for i = 1, 65535 do package.loaded['c' .. i] = nil end",
+    );
     assert!(wide > small + 60_000, "a churned 64k-slot loaded table cost {wide} against {small}");
     let nested = used("local t = {} for i = 1, 65536 do t['k' .. i] = i end package.loaded.big = t");
     assert!(nested > small + 60_000, "a 64k-entry loaded module cost {nested} against {small}");
@@ -626,7 +656,10 @@ fn deep_stacks_are_charged() {
         lua.call(f.value(), &[]).unwrap();
         FUEL - lua.fuel_left()
     };
-    for body in ["for i = 1, 100 do local t = debug.getinfo(1, 'l') end", "for i = 1, 100 do local s = debug.traceback() end"] {
+    for body in [
+        "for i = 1, 100 do local t = debug.getinfo(1, 'l') end",
+        "for i = 1, 100 do local s = debug.traceback() end",
+    ] {
         let shallow = used(10, body);
         let deep = used(1500, body);
         // 100 walks of 1,500 more levels: at least a unit per two levels.

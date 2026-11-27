@@ -95,13 +95,31 @@ impl Trace {
     }
 
     /// Records `op` from `start` to now.
-    pub(crate) fn note(&mut self, op: TraceOp, step: u32, slots: u64, bytes: u64, fuel: u64, start: Duration) {
+    pub(crate) fn note(
+        &mut self,
+        op: TraceOp,
+        step: u32,
+        slots: u64,
+        bytes: u64,
+        fuel: u64,
+        start: Duration,
+    ) {
         if self.recs.len() >= self.cap {
             self.dropped += 1;
             return;
         }
         let end = self.now();
-        self.recs.push(TraceRecord { call: self.call, step, poll: self.poll, op, slots, bytes, fuel, start, end });
+        self.recs.push(TraceRecord {
+            call: self.call,
+            step,
+            poll: self.poll,
+            op,
+            slots,
+            bytes,
+            fuel,
+            start,
+            end,
+        });
     }
 
     /// The records so far (the buffer stays, empty, its room kept).

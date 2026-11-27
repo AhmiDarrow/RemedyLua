@@ -75,7 +75,7 @@ impl State {
 }
 
 mod imp {
-    use std::ffi::{c_char, c_int, c_void, CString};
+    use std::ffi::{CString, c_char, c_int, c_void};
 
     #[repr(C)]
     pub struct LuaState {
@@ -90,7 +90,13 @@ mod imp {
         fn oracle_cap(l: L, cap: i64) -> c_int;
         fn oracle_cap_hit(l: L) -> c_int;
         fn oracle_close(l: L);
-        fn luaL_loadbufferx(l: L, b: *const c_char, sz: usize, name: *const c_char, mode: *const c_char) -> c_int;
+        fn luaL_loadbufferx(
+            l: L,
+            b: *const c_char,
+            sz: usize,
+            name: *const c_char,
+            mode: *const c_char,
+        ) -> c_int;
         fn lua_pcallk(l: L, na: c_int, nr: c_int, ef: c_int, ctx: isize, k: *const c_void) -> c_int;
         fn luaL_tolstring(l: L, idx: c_int, len: *mut usize) -> *const c_char;
         fn lua_settop(l: L, idx: c_int);

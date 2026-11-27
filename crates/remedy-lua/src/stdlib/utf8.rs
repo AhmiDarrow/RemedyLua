@@ -140,7 +140,10 @@ fn codepoint(lua: &mut Lua, a: Args) -> R {
                 }
             }
         }
-        if i < pose && !bad && let Err(e) = lua.check_time() {
+        if i < pose
+            && !bad
+            && let Err(e) = lua.check_time()
+        {
             super::owe(out.len() as u64 / 8 + (i + 1 - posi) as u64 / 16 + 1);
             return Err(e);
         }
@@ -206,7 +209,13 @@ fn offset(lua: &mut Lua, a: Args) -> R {
     let default_i = if n >= 0 { 1 } else { len + 1 };
     let i = lua.opt_int(a, 2, default_i)?;
     let bytes = lua.heap.str_bytes(s);
-    let mut posi = if i >= 0 { i } else if i.unsigned_abs() > len as u64 { 0 } else { len + i + 1 } - 1;
+    let mut posi = if i >= 0 {
+        i
+    } else if i.unsigned_abs() > len as u64 {
+        0
+    } else {
+        len + i + 1
+    } - 1;
     if !(0 <= posi && posi <= len) {
         return Err(LuaError::Arg(3, "position out of bounds".into()));
     }

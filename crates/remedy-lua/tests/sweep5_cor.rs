@@ -246,10 +246,16 @@ fn s5c_1_fuel_is_seed_independent_with_the_collector_running() {
         for fast in [true, false] {
             let mut seen = Vec::new();
             for seed in [super::common::TEST_SEED, 0, 1, 2, 7, 0xdead_beef, u64::MAX] {
-                let mut lua = remedy_lua::Lua::new(remedy_lua::Limits::default().hash_seed(seed), remedy_lua::Libs::ALL);
+                let mut lua = remedy_lua::Lua::new(
+                    remedy_lua::Limits::default().hash_seed(seed),
+                    remedy_lua::Libs::ALL,
+                );
                 lua.set_fast_loop(fast);
                 let f = lua.load(src, "=t").unwrap();
-                let out = format!("{:?}", lua.call(f.value(), &[]).unwrap().first().map(|v| lua.to_string_lossy(*v)));
+                let out = format!(
+                    "{:?}",
+                    lua.call(f.value(), &[]).unwrap().first().map(|v| lua.to_string_lossy(*v))
+                );
                 seen.push((seed, out, lua.limits().fuel - lua.fuel_left()));
             }
             let first = &seen[0];

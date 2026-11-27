@@ -1,7 +1,7 @@
 //! Front-end memory: peak resident memory (Linux `VmHWM`) of one load of a file against
 //! the memory limit it ran under. Each run is its own process, so the peak is the load's.
 //! `cargo run --release --example frontmem -p remedy-lua -- FILE LIMIT_BYTES [host|call|check]`
-#![allow(clippy::unwrap_used, missing_docs, clippy::print_stdout)]
+#![allow(clippy::unwrap_used, clippy::indexing_slicing, missing_docs, clippy::print_stdout)]
 
 use remedy_lua::{Libs, Limits, Lua};
 
@@ -23,7 +23,10 @@ fn main() {
     let before = hwm();
     let t = std::time::Instant::now();
     let outcome = match mode.as_str() {
-        "check" => format!("{:?}", remedy_lua::check(&src, name.trim_start_matches('=')).first().map(|d| d.message.clone())),
+        "check" => format!(
+            "{:?}",
+            remedy_lua::check(&src, name.trim_start_matches('=')).first().map(|d| d.message.clone())
+        ),
         "call" => {
             let mut lua = Lua::new(Limits::default().memory(limit).fuel(1 << 40), Libs::ALL);
             let s = lua.create_string(&src).unwrap();

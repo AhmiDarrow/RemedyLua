@@ -43,8 +43,12 @@ fn long_bracket(b: &[u8], i: usize) -> Option<usize> {
 }
 
 fn long_end(b: &[u8], from: usize, lvl: usize) -> usize {
-    let close: Vec<u8> = std::iter::once(b']').chain(std::iter::repeat_n(b'=', lvl)).chain(std::iter::once(b']')).collect();
-    b[from..].windows(close.len()).position(|w| w == close.as_slice()).map_or(b.len(), |p| from + p + close.len())
+    let close: Vec<u8> =
+        std::iter::once(b']').chain(std::iter::repeat_n(b'=', lvl)).chain(std::iter::once(b']')).collect();
+    b[from..]
+        .windows(close.len())
+        .position(|w| w == close.as_slice())
+        .map_or(b.len(), |p| from + p + close.len())
 }
 
 pub fn tokenize(src: &str) -> Vec<Tok> {
@@ -122,32 +126,114 @@ pub fn tokenize(src: &str) -> Vec<Tok> {
         i = i2;
     }
     if pre_start < b.len() {
-        out.push(Tok { pre: String::from_utf8_lossy(&b[pre_start..]).into_owned(), text: String::new(), kind: Kind::Other });
+        out.push(Tok {
+            pre: String::from_utf8_lossy(&b[pre_start..]).into_owned(),
+            text: String::new(),
+            kind: Kind::Other,
+        });
     }
     out
 }
 
 const KEYWORDS: &[&str] = &[
-    "and", "break", "do", "else", "elseif", "end", "false", "for", "function", "goto", "if", "in", "local", "nil", "not", "or",
-    "repeat", "return", "then", "true", "until", "while",
+    "and", "break", "do", "else", "elseif", "end", "false", "for", "function", "goto", "if", "in", "local",
+    "nil", "not", "or", "repeat", "return", "then", "true", "until", "while",
 ];
 const OPS: &[&str] = &[
-    "+", "-", "*", "/", "//", "%", "^", "#", "&", "~", "|", "<<", ">>", "==", "~=", "<=", ">=", "<", ">", "=", "(", ")", "{", "}",
-    "[", "]", "::", ";", ":", ",", ".", "..", "...",
+    "+", "-", "*", "/", "//", "%", "^", "#", "&", "~", "|", "<<", ">>", "==", "~=", "<=", ">=", "<", ">",
+    "=", "(", ")", "{", "}", "[", "]", "::", ";", ":", ",", ".", "..", "...",
 ];
 const NUMS: &[&str] = &[
-    "0", "1", "-1", "2", "255", "0x7fffffffffffffff", "0xffffffffffffffff", "9223372036854775807", "9223372036854775808",
-    "-9223372036854775808", "1e308", "1e309", "0.0", "-0.0", "0x1p-1074", "1e-320", "0x", "1e", "3..2", "0x.p1", "08", "1.5e+",
-    "4294967296", "65536", "200", "1000000", "0/0", "2^63", "math.mininteger", "math.huge",
+    "0",
+    "1",
+    "-1",
+    "2",
+    "255",
+    "0x7fffffffffffffff",
+    "0xffffffffffffffff",
+    "9223372036854775807",
+    "9223372036854775808",
+    "-9223372036854775808",
+    "1e308",
+    "1e309",
+    "0.0",
+    "-0.0",
+    "0x1p-1074",
+    "1e-320",
+    "0x",
+    "1e",
+    "3..2",
+    "0x.p1",
+    "08",
+    "1.5e+",
+    "4294967296",
+    "65536",
+    "200",
+    "1000000",
+    "0/0",
+    "2^63",
+    "math.mininteger",
+    "math.huge",
 ];
 const STRS: &[&str] = &[
-    "\"\"", "\"%\"", "\"%d\"", "\"\\0\"", "\"\\xff\\xfe\"", "\"\\u{7FFFFFFF}\"", "\"[\"", "\"%b\"", "\"%f\"", "\"(()\"", "'%1'",
-    "\"\\z\"", "\"\\300\"", "\"\\x4\"", "\"\\u{110000000}\"", "\"\\q\"", "[[]]", "[==[]=]]==]", "\"unterminated", "`x{1}`",
-    "\"10\"", "\"0x10\"", "\"1e1\"", "\"abc\"", "\"é\"",
+    "\"\"",
+    "\"%\"",
+    "\"%d\"",
+    "\"\\0\"",
+    "\"\\xff\\xfe\"",
+    "\"\\u{7FFFFFFF}\"",
+    "\"[\"",
+    "\"%b\"",
+    "\"%f\"",
+    "\"(()\"",
+    "'%1'",
+    "\"\\z\"",
+    "\"\\300\"",
+    "\"\\x4\"",
+    "\"\\u{110000000}\"",
+    "\"\\q\"",
+    "[[]]",
+    "[==[]=]]==]",
+    "\"unterminated",
+    "`x{1}`",
+    "\"10\"",
+    "\"0x10\"",
+    "\"1e1\"",
+    "\"abc\"",
+    "\"é\"",
 ];
 const NOISE: &[&str] = &[
-    "<const>", "<close>", "<toclose>", "goto", "::l::", "...", "local", "function", "end", "return", "break", "--[[", "]]", "\n",
-    "\0", "\u{FEFF}", "#!", "\r", "\t", "@", "$", "!", "?", "\\", "`", "continue", "+=", "..=", "self", "_ENV", "_G",
+    "<const>",
+    "<close>",
+    "<toclose>",
+    "goto",
+    "::l::",
+    "...",
+    "local",
+    "function",
+    "end",
+    "return",
+    "break",
+    "--[[",
+    "]]",
+    "\n",
+    "\0",
+    "\u{FEFF}",
+    "#!",
+    "\r",
+    "\t",
+    "@",
+    "$",
+    "!",
+    "?",
+    "\\",
+    "`",
+    "continue",
+    "+=",
+    "..=",
+    "self",
+    "_ENV",
+    "_G",
 ];
 
 fn rand_tok(rng: &mut Rng) -> String {
@@ -260,7 +346,8 @@ fn mutate_once(src: &str, rng: &mut Rng, corpus: &[String]) -> String {
             // Wrap a token run in parens / a do-block.
             let len = 1 + rng.below(5);
             let j = (i + len).min(n);
-            let (open, close) = *rng.pick(&[("(", ")"), ("do ", " end"), ("{", "}"), ("[", "]"), ("function() ", " end")]);
+            let (open, close) =
+                *rng.pick(&[("(", ")"), ("do ", " end"), ("{", "}"), ("[", "]"), ("function() ", " end")]);
             ts.insert(j, Tok { pre: String::new(), text: close.into(), kind: Kind::Op });
             ts.insert(i, Tok { pre: " ".into(), text: open.into(), kind: Kind::Op });
         }
@@ -284,7 +371,12 @@ pub fn ddmin<T: Clone>(units: Vec<T>, budget: &mut usize, keep: &mut dyn FnMut(&
 pub const MIN_TIME: Duration = Duration::from_secs(60);
 
 /// `ddmin`, stopping (with the smallest set found so far) at `deadline`.
-pub fn ddmin_until<T: Clone>(mut units: Vec<T>, budget: &mut usize, deadline: Instant, keep: &mut dyn FnMut(&[T]) -> bool) -> Vec<T> {
+pub fn ddmin_until<T: Clone>(
+    mut units: Vec<T>,
+    budget: &mut usize,
+    deadline: Instant,
+    keep: &mut dyn FnMut(&[T]) -> bool,
+) -> Vec<T> {
     let mut n = 2usize;
     while units.len() >= 2 && *budget > 0 {
         let chunk = units.len().div_ceil(n);

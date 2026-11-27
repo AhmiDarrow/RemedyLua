@@ -26,7 +26,9 @@
 use std::collections::{HashMap, HashSet};
 use std::rc::Rc;
 
-use crate::ast::{BinOp, Block, Expr, ExprKind, Field, ForNum, FuncBody, InterpExpr, Stat, StatKind, Type, UnOp};
+use crate::ast::{
+    BinOp, Block, Expr, ExprKind, Field, ForNum, FuncBody, InterpExpr, Stat, StatKind, Type, UnOp,
+};
 use crate::diag::{Diagnostic, Pos};
 
 /// A type: an index into the checker's arena.
@@ -307,7 +309,11 @@ pub(crate) fn check(block: &Block, chunk: &str, src_len: usize, memory: usize) -
     let mut diags = std::mem::take(&mut c.diags);
     if let Some(why) = c.stopped {
         let at = if c.pass == 2 { c.at } else { Pos { line: 1, col: 1 } };
-        diags.push(Diagnostic::warning(chunk, at, format!("type checking stopped here: {why}; what follows was not checked")));
+        diags.push(Diagnostic::warning(
+            chunk,
+            at,
+            format!("type checking stopped here: {why}; what follows was not checked"),
+        ));
     }
     diags
 }
@@ -426,7 +432,8 @@ impl<'a> Checker<'a> {
         let before = self.steps;
         self.steps = self.steps.saturating_add(n);
         if self.steps > self.max_steps {
-            self.stopped = Some("the program is too large or its types too complex for the work a check may do");
+            self.stopped =
+                Some("the program is too large or its types too complex for the work a check may do");
             return false;
         }
         if self.steps / MEMORY_EVERY != before / MEMORY_EVERY && self.held() > self.memory {
@@ -478,7 +485,11 @@ impl<'a> Checker<'a> {
             Ty::Sig(s) => 64 + s.params.len() * 4 + s.ret.as_ref().map_or(0, |r| r.len() * 4),
             Ty::Shape(f) => f.iter().map(|(n, _)| n.len() + 24).sum(),
             Ty::Union(m) => m.len() * 4,
-            Ty::Ctor(c) => 96 + c.named.iter().map(|(n, _)| n.len() + 24).sum::<usize>() + c.items.len() * 4 + c.keyed.len() * 8,
+            Ty::Ctor(c) => {
+                96 + c.named.iter().map(|(n, _)| n.len() + 24).sum::<usize>()
+                    + c.items.len() * 4
+                    + c.keyed.len() * 8
+            }
             _ => 0,
         };
         self.ty_bytes = self.ty_bytes.saturating_add(extra);
@@ -516,7 +527,10 @@ impl<'a> Checker<'a> {
                 break at.pos;
             }
             let next = match &at.kind {
-                ExprKind::Bin(_, l, _) | ExprKind::Index(l, _) | ExprKind::Call(l, _) | ExprKind::Method(l, ..) => Some(&**l),
+                ExprKind::Bin(_, l, _)
+                | ExprKind::Index(l, _)
+                | ExprKind::Call(l, _)
+                | ExprKind::Method(l, ..) => Some(&**l),
                 ExprKind::Concat(v) => v.first(),
                 _ => None,
             };
@@ -579,7 +593,11 @@ impl<'a> Checker<'a> {
             format!("attempt to {} a {} value{d}", op.what(), kind_name(bad))
         } else {
             let shown = self.show(t);
-            let d = if desc.is_empty() { format!(" (its type is {shown})") } else { format!(" ({desc} is {shown})") };
+            let d = if desc.is_empty() {
+                format!(" (its type is {shown})")
+            } else {
+                format!(" ({desc} is {shown})")
+            };
             format!("attempt to {} a value that may be {}{d}", op.what(), kind_name(bad))
         };
         self.diag_at(mark, msg);
@@ -637,7 +655,10 @@ impl<'a> Checker<'a> {
     /// Whether `b`'s values are all `a`'s, by a quick look (no structure).
     fn absorbs(&self, a: T, b: T) -> bool {
         match (self.ty(a), self.ty(b)) {
-            (Ty::Num, Ty::Int) | (Ty::Str, Ty::Lit(_)) | (Ty::Table, Ty::Ctor(_)) | (Ty::Bool, Ty::True | Ty::False) => true,
+            (Ty::Num, Ty::Int)
+            | (Ty::Str, Ty::Lit(_))
+            | (Ty::Table, Ty::Ctor(_))
+            | (Ty::Bool, Ty::True | Ty::False) => true,
             (Ty::Func, Ty::Sig(_)) => true,
             (Ty::Union(m), _) => m.contains(&b),
             _ => false,
@@ -678,7 +699,10 @@ impl<'a> Checker<'a> {
             Ty::Union(_) => {
                 let m = self.flatten(t);
                 if m.iter().any(|&x| matches!(self.ty(x), Ty::Ctor(_))) {
-                    let m = m.into_iter().map(|x| if matches!(self.ty(x), Ty::Ctor(_)) { TABLE } else { x }).collect();
+                    let m = m
+                        .into_iter()
+                        .map(|x| if matches!(self.ty(x), Ty::Ctor(_)) { TABLE } else { x })
+                        .collect();
                     self.union_of(m)
                 } else {
                     t
@@ -760,7 +784,8 @@ impl<'a> Checker<'a> {
                         Type::Union(_) => self.union_of(parts),
                         Type::Func { params, vararg, .. } => {
                             let (p, r) = parts.split_at(params.len().min(parts.len()));
-                            let sig = Sig { params: p.into(), va: vararg.then_some(ANY), ret: Some(r.into()) };
+                            let sig =
+                                Sig { params: p.into(), va: vararg.then_some(ANY), ret: Some(r.into()) };
                             self.add(Ty::Sig(Box::new(sig)))
                         }
                         Type::Shape(fs) => {
@@ -937,7 +962,11 @@ impl<'a> Checker<'a> {
             t
         } else {
             let all = self.flatten(t);
-            let m: Vec<T> = all.iter().filter(|&&x| x != NIL && x != FALSE).map(|&x| if x == BOOL { TRUE } else { x }).collect();
+            let m: Vec<T> = all
+                .iter()
+                .filter(|&&x| x != NIL && x != FALSE)
+                .map(|&x| if x == BOOL { TRUE } else { x })
+                .collect();
             if m.is_empty() || m == all { t } else { self.union_of(m) }
         };
         self.truthy_of.insert(t, r);
@@ -954,7 +983,11 @@ impl<'a> Checker<'a> {
             t
         } else {
             let all = self.flatten(t);
-            let m: Vec<T> = all.iter().filter(|&&x| x == NIL || x == FALSE || x == BOOL).map(|&x| if x == BOOL { FALSE } else { x }).collect();
+            let m: Vec<T> = all
+                .iter()
+                .filter(|&&x| x == NIL || x == FALSE || x == BOOL)
+                .map(|&x| if x == BOOL { FALSE } else { x })
+                .collect();
             if m.is_empty() || m == all { t } else { self.union_of(m) }
         };
         self.falsy_of.insert(t, r);
@@ -963,7 +996,9 @@ impl<'a> Checker<'a> {
 
     fn field_of(&self, t: T, name: &str) -> Option<T> {
         match self.ty(t) {
-            Ty::Shape(fs) => fs.binary_search_by(|(n, _)| (**n).cmp(name)).ok().and_then(|i| fs.get(i)).map(|(_, t)| *t),
+            Ty::Shape(fs) => {
+                fs.binary_search_by(|(n, _)| (**n).cmp(name)).ok().and_then(|i| fs.get(i)).map(|(_, t)| *t)
+            }
             _ => None,
         }
     }
@@ -1022,7 +1057,8 @@ impl<'a> Checker<'a> {
                         Ok(r) => pending = Some(r),
                         Err((all, goals)) => {
                             let depth = stack.len();
-                            let assumed = matches!(self.ty(x), Ty::Alias(_)) || matches!(self.ty(y), Ty::Alias(_));
+                            let assumed =
+                                matches!(self.ty(x), Ty::Alias(_)) || matches!(self.ty(y), Ty::Alias(_));
                             if assumed {
                                 self.assume.insert((x, y), u32::try_from(depth).unwrap_or(u32::MAX));
                             }
@@ -1080,7 +1116,8 @@ impl<'a> Checker<'a> {
             }
             return Err((false, m.iter().map(|&y| (a, y)).collect()));
         }
-        let tabular = |t: &Ty| matches!(t, Ty::Table | Ty::Array(_) | Ty::Map(..) | Ty::Shape(_) | Ty::Ctor(_));
+        let tabular =
+            |t: &Ty| matches!(t, Ty::Table | Ty::Array(_) | Ty::Map(..) | Ty::Shape(_) | Ty::Ctor(_));
         let r = match (self.ty(a), self.ty(b)) {
             (Ty::Int, Ty::Num) | (Ty::Lit(_), Ty::Str) | (Ty::True | Ty::False, Ty::Bool) => true,
             (Ty::Lit(x), Ty::Lit(y)) => x == y,
@@ -1088,7 +1125,9 @@ impl<'a> Checker<'a> {
             (x, Ty::Table) if tabular(x) => true,
             (Ty::Table, y) if tabular(y) => true,
             (Ty::Array(x), Ty::Array(y)) => return Err((true, vec![(*x, *y), (*y, *x)])),
-            (Ty::Map(k1, v1), Ty::Map(k2, v2)) => return Err((true, vec![(*k1, *k2), (*k2, *k1), (*v1, *v2), (*v2, *v1)])),
+            (Ty::Map(k1, v1), Ty::Map(k2, v2)) => {
+                return Err((true, vec![(*k1, *k2), (*k2, *k1), (*v1, *v2), (*v2, *v1)]));
+            }
             (Ty::Array(x), Ty::Map(k, v)) | (Ty::Map(k, v), Ty::Array(x)) => {
                 return Err((true, vec![(*k, NUM), (INT, *k), (*x, *v), (*v, *x)]));
             }
@@ -1182,7 +1221,11 @@ impl<'a> Checker<'a> {
                         Ty::Any => {}
                         Ty::Lit(s) => {
                             let s = String::from_utf8_lossy(s).into_owned();
-                            match gs.binary_search_by(|(m, _)| (**m).cmp(s.as_str())).ok().and_then(|i| gs.get(i)) {
+                            match gs
+                                .binary_search_by(|(m, _)| (**m).cmp(s.as_str()))
+                                .ok()
+                                .and_then(|i| gs.get(i))
+                            {
                                 Some((_, g)) => goals.push((*v, *g)),
                                 None => return Ok(false),
                             }
@@ -1275,7 +1318,9 @@ impl<'a> Checker<'a> {
                 Ty::Lit(b) => out.push_str(&format!("{:?}", short(&String::from_utf8_lossy(b)))),
                 Ty::Alias(i) => out.push_str(self.aliases.get(*i as usize).map_or("?", |a| a.name.as_str())),
                 Ty::Array(x) => parts = vec![P::S("{"), P::T(*x, false), P::S("}")],
-                Ty::Map(k, v) => parts = vec![P::S("{["), P::T(*k, false), P::S("]: "), P::T(*v, false), P::S("}")],
+                Ty::Map(k, v) => {
+                    parts = vec![P::S("{["), P::T(*k, false), P::S("]: "), P::T(*v, false), P::S("}")]
+                }
                 Ty::Shape(fs) => {
                     parts.push(P::S("{"));
                     for (i, (n, x)) in fs.iter().enumerate().take(16) {
@@ -1368,7 +1413,11 @@ impl<'a> Checker<'a> {
     }
 
     fn open_scope(&mut self) {
-        self.scopes.push(Scope { locals: self.locals.len(), narrow: self.narrow.len(), aliases: self.alias_stack.len() });
+        self.scopes.push(Scope {
+            locals: self.locals.len(),
+            narrow: self.narrow.len(),
+            aliases: self.alias_stack.len(),
+        });
     }
 
     fn close_scope(&mut self) {
@@ -1717,7 +1766,9 @@ impl<'a> Checker<'a> {
                     self.assign_local(i, t, at);
                 }
             }
-            (ExprKind::Index(o, k), Some((ov, kv))) => self.index_write(&ov, Key::Val(&kv, k), t, o, target, at),
+            (ExprKind::Index(o, k), Some((ov, kv))) => {
+                self.index_write(&ov, Key::Val(&kv, k), t, o, target, at)
+            }
             _ => {}
         }
     }
@@ -1897,8 +1948,10 @@ impl<'a> Checker<'a> {
                         todo.push(els);
                     }
                 },
-                StatKind::While(c, _) if truthy_const(c) && !self.breaks_at.get(&addr(last)).copied().unwrap_or(true) => {}
-                StatKind::Repeat(_, c) if falsy_const(c) && !self.breaks_at.get(&addr(last)).copied().unwrap_or(true) => {}
+                StatKind::While(c, _)
+                    if truthy_const(c) && !self.breaks_at.get(&addr(last)).copied().unwrap_or(true) => {}
+                StatKind::Repeat(_, c)
+                    if falsy_const(c) && !self.breaks_at.get(&addr(last)).copied().unwrap_or(true) => {}
                 _ => return false,
             }
         }
@@ -1983,7 +2036,11 @@ impl<'a> Checker<'a> {
         let limitv = self.pop_val();
         let startv = self.pop_val();
         let mut ints = true;
-        let parts = [(Some(&startv), Some(start), "initial"), (Some(&limitv), Some(limit), "limit"), (stepv.as_ref(), step.as_ref(), "step")];
+        let parts = [
+            (Some(&startv), Some(start), "initial"),
+            (Some(&limitv), Some(limit), "limit"),
+            (stepv.as_ref(), step.as_ref(), "step"),
+        ];
         for (v, e, what) in parts {
             let (Some(v), Some(e)) = (v, e) else { continue };
             let k = self.kinds(v.ty);
@@ -1995,7 +2052,10 @@ impl<'a> Checker<'a> {
                     format!("'for' {what} value must be a number")
                 } else {
                     let shown = self.show(v.ty);
-                    format!("'for' {what} value must be a number (it may be {}: its type is {shown})", kind_name(k & !K_NUM))
+                    format!(
+                        "'for' {what} value must be a number (it may be {}: its type is {shown})",
+                        kind_name(k & !K_NUM)
+                    )
                 };
                 self.diag_at(e, msg);
             }
@@ -2049,7 +2109,13 @@ impl<'a> Checker<'a> {
         // The name path, as written after `function`.
         let len: usize = path.iter().map(|p| p.len() + 1).sum::<usize>() + method.map_or(0, |m| m.len() + 1);
         let npos = Pos { line: s.pos.line, col: s.pos.col.saturating_add(9) };
-        let at = (npos, Pos { line: npos.line, col: npos.col.saturating_add(u32::try_from(len.saturating_sub(1)).unwrap_or(0)) });
+        let at = (
+            npos,
+            Pos {
+                line: npos.line,
+                col: npos.col.saturating_add(u32::try_from(len.saturating_sub(1)).unwrap_or(0)),
+            },
+        );
         let mut obj = self.name_value(first);
         let walk = if method.is_some() { path.len() } else { path.len().saturating_sub(1) };
         for seg in path.iter().take(walk).skip(1) {
@@ -2057,7 +2123,14 @@ impl<'a> Checker<'a> {
                 let k = self.kinds(obj.ty);
                 if k & K_ANY == 0 && k & Op::Index.bad() != 0 {
                     let shown = self.show(obj.ty);
-                    self.diag(at.0, at.1, format!("attempt to index a value that may be {} (its type is {shown})", kind_name(k & Op::Index.bad())));
+                    self.diag(
+                        at.0,
+                        at.1,
+                        format!(
+                            "attempt to index a value that may be {} (its type is {shown})",
+                            kind_name(k & Op::Index.bad())
+                        ),
+                    );
                 }
             }
             obj = self.index_name(&obj, seg, Some(at));
@@ -2101,7 +2174,11 @@ impl<'a> Checker<'a> {
                 Some(e) => self.range(e),
                 None => whole,
             };
-            self.diag(at.0, at.1, format!("too many return values: expected {}, got {}", rs.len(), sp.fixed.len()));
+            self.diag(
+                at.0,
+                at.1,
+                format!("too many return values: expected {}, got {}", rs.len(), sp.fixed.len()),
+            );
         }
         for (i, &r) in rs.iter().enumerate() {
             let (t, _) = self.nth(&sp, i);
@@ -2161,7 +2238,8 @@ impl<'a> Checker<'a> {
             Some(s) => s,
             None => self.sig_of(b, selfv.as_ref().map(|v| v.ty)),
         };
-        let (params, va, ret) = self.sig_parts(sig).unwrap_or_else(|| (Box::new([]), b.vararg.then_some(ANY), None));
+        let (params, va, ret) =
+            self.sig_parts(sig).unwrap_or_else(|| (Box::new([]), b.vararg.then_some(ANY), None));
         let va = if b.vararg {
             let t = va.unwrap_or(ANY);
             Some(V { ty: self.opt(t), st: b.vararg_ty.is_some(), multi: Multi::Rep(t) })
@@ -2205,18 +2283,22 @@ impl<'a> Checker<'a> {
         self.loops.pop();
         if self.pass == 2
             && let Some(rs) = ctx.and_then(|c| c.ret)
+            && rs.iter().any(|&r| !self.sub(NIL, r))
+            && !self.exits(&b.body)
         {
-            if rs.iter().any(|&r| !self.sub(NIL, r)) && !self.exits(&b.body) {
-                let shown = match rs.len() {
-                    1 => rs.first().map(|&r| self.show(r)).unwrap_or_default(),
-                    _ => {
-                        let v: Vec<String> = rs.iter().map(|&r| self.show(r)).collect();
-                        format!("({})", v.join(", "))
-                    }
-                };
-                let end = b.body.end;
-                self.diag(end, Pos { line: end.line, col: end.col.saturating_add(3) }, format!("function may end without returning {shown}"));
-            }
+            let shown = match rs.len() {
+                1 => rs.first().map(|&r| self.show(r)).unwrap_or_default(),
+                _ => {
+                    let v: Vec<String> = rs.iter().map(|&r| self.show(r)).collect();
+                    format!("({})", v.join(", "))
+                }
+            };
+            let end = b.body.end;
+            self.diag(
+                end,
+                Pos { line: end.line, col: end.col.saturating_add(3) },
+                format!("function may end without returning {shown}"),
+            );
         }
         self.vals.push(V::one(sig, ann));
     }
@@ -2385,10 +2467,13 @@ impl<'a> Checker<'a> {
                 Field::Keyed(ke, _) => {
                     let k = vi.next().unwrap_or_else(V::dynamic);
                     let v = vi.next().unwrap_or_else(V::dynamic);
-                    match (&ke.kind, std::str::from_utf8(match &ke.kind {
-                        ExprKind::Str(s) => s,
-                        _ => &[],
-                    })) {
+                    match (
+                        &ke.kind,
+                        std::str::from_utf8(match &ke.kind {
+                            ExprKind::Str(s) => s,
+                            _ => &[],
+                        }),
+                    ) {
                         (ExprKind::Str(_), Ok(s)) => named.push((s.into(), v.ty, i)),
                         _ => keyed.push((k.ty, v.ty)),
                     }
@@ -2470,7 +2555,11 @@ impl<'a> Checker<'a> {
         if let Some((x, y)) = fail {
             let msg = if any_ok {
                 let (sa, sb) = (self.show(a), self.show(b));
-                format!("comparison may fail: attempt to compare {} with {} (the operands are {sa} and {sb})", kind_name(x), kind_name(y))
+                format!(
+                    "comparison may fail: attempt to compare {} with {} (the operands are {sa} and {sb})",
+                    kind_name(x),
+                    kind_name(y)
+                )
             } else if x == y {
                 format!("attempt to compare two {} values", kind_name(x))
             } else {
@@ -2584,7 +2673,15 @@ impl<'a> Checker<'a> {
                     }
                     Some(self.opt(v))
                 }
-                Ty::Nil | Ty::Bool | Ty::True | Ty::False | Ty::Num | Ty::Int | Ty::Func | Ty::Sig(_) | Ty::Thread => None,
+                Ty::Nil
+                | Ty::Bool
+                | Ty::True
+                | Ty::False
+                | Ty::Num
+                | Ty::Int
+                | Ty::Func
+                | Ty::Sig(_)
+                | Ty::Thread => None,
                 _ => {
                     any = true;
                     None
@@ -2619,7 +2716,15 @@ impl<'a> Checker<'a> {
     }
 
     /// Stores a value of type `t` under `key` in `obj`.
-    fn index_write(&mut self, obj: &V, key: Key<'_, 'a>, t: T, oe: &'a Expr, whole: &'a Expr, at: (Pos, Pos)) {
+    fn index_write(
+        &mut self,
+        obj: &V,
+        key: Key<'_, 'a>,
+        t: T,
+        oe: &'a Expr,
+        whole: &'a Expr,
+        at: (Pos, Pos),
+    ) {
         if obj.st {
             self.op_check(Op::Index, obj.ty, oe, whole);
         }
@@ -2692,7 +2797,15 @@ impl<'a> Checker<'a> {
     }
 
     /// A call of `f` (with `selfv` first for a method call) on `args`.
-    fn call(&mut self, f: &V, selfv: Option<&V>, args: &[V], fe: &'a Expr, arg_es: &'a [Expr], whole: &'a Expr) -> V {
+    fn call(
+        &mut self,
+        f: &V,
+        selfv: Option<&V>,
+        args: &[V],
+        fe: &'a Expr,
+        arg_es: &'a [Expr],
+        whole: &'a Expr,
+    ) -> V {
         if f.st {
             self.op_check(Op::Call, f.ty, fe, fe);
         }
@@ -2709,7 +2822,16 @@ impl<'a> Checker<'a> {
     }
 
     #[allow(clippy::too_many_arguments, reason = "the parts of a call")]
-    fn check_args(&mut self, params: &[T], va: Option<T>, selfv: Option<&V>, args: &[V], fe: &Expr, arg_es: &[Expr], whole: &Expr) {
+    fn check_args(
+        &mut self,
+        params: &[T],
+        va: Option<T>,
+        selfv: Option<&V>,
+        args: &[V],
+        fe: &Expr,
+        arg_es: &[Expr],
+        whole: &Expr,
+    ) {
         let who = match &fe.kind {
             ExprKind::Name(n) => format!("'{n}'"),
             ExprKind::Index(_, k) => match &k.kind {
@@ -2736,7 +2858,15 @@ impl<'a> Checker<'a> {
         if va.is_none() && arg_es.len() + off > params.len() {
             let j = params.len().saturating_sub(off);
             let at = at_arg(self, j);
-            self.diag(at.0, at.1, format!("too many arguments to {who}: expected {}, got {}", params.len() - off.min(params.len()), arg_es.len()));
+            self.diag(
+                at.0,
+                at.1,
+                format!(
+                    "too many arguments to {who}: expected {}, got {}",
+                    params.len() - off.min(params.len()),
+                    arg_es.len()
+                ),
+            );
         }
         for (i, &p) in params.iter().enumerate() {
             let exact = i < sp.fixed.len();
@@ -2805,7 +2935,11 @@ impl Key<'_, '_> {
 }
 
 fn short(s: &str) -> String {
-    if s.chars().count() > 40 { format!("{}...", s.chars().take(40).collect::<String>()) } else { s.to_owned() }
+    if s.chars().count() > 40 {
+        format!("{}...", s.chars().take(40).collect::<String>())
+    } else {
+        s.to_owned()
+    }
 }
 
 fn name_end(pos: Pos, name: &str) -> Pos {

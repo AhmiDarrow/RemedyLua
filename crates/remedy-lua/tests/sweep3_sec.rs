@@ -600,7 +600,7 @@ fn fuel_slices_do_not_change_what_a_call_uses() {
     let src = "local t = {} for i = 1, 30000 do t[i] = tostring(i) .. 'x' end table.sort(t) \
                local n = 0 for w in table.concat(t, ' '):gmatch('%d+') do n = n + 1 end collectgarbage() return n";
     let mut used = Vec::new();
-    for fuel in [5_000_000u64, 1 << 20 + 3, 1 << 40, u64::MAX] {
+    for fuel in [5_000_000u64, (1 << 20) + 3, 1 << 40, u64::MAX] {
         for fast in [true, false] {
             let mut lua = Lua::new(Limits::default().fuel(fuel).hash_seed(5), Libs::ALL);
             lua.set_fast_loop(fast);
@@ -832,19 +832,21 @@ fn hostile_fuzz_budgets_and_natives() {
         let limits =
             Limits::default().fuel(200_000 + r.below(800_000) as u64).memory(32 << 20).hash_seed(seed);
         let s = src.clone();
-        let res = bounded(30, move || super::common::small_stack(move || {
-            let mut out = Vec::new();
-            for fast in [true, false] {
-                let mut lua = Lua::new(limits, Libs::ALL);
-                lua.set_fast_loop(fast);
-                let start = Instant::now();
-                let o = outcome(lua.exec(&s, "=fuzz"));
-                let t = start.elapsed();
-                let after = outcome(lua.exec("return 1", "=after"));
-                out.push((o, limits.fuel - lua.fuel_left(), lua.memory_used(), after, t));
-            }
-            out
-        }))
+        let res = bounded(30, move || {
+            super::common::small_stack(move || {
+                let mut out = Vec::new();
+                for fast in [true, false] {
+                    let mut lua = Lua::new(limits, Libs::ALL);
+                    lua.set_fast_loop(fast);
+                    let start = Instant::now();
+                    let o = outcome(lua.exec(&s, "=fuzz"));
+                    let t = start.elapsed();
+                    let after = outcome(lua.exec("return 1", "=after"));
+                    out.push((o, limits.fuel - lua.fuel_left(), lua.memory_used(), after, t));
+                }
+                out
+            })
+        })
         .unwrap_or_else(|e| panic!("iteration {i}: {e}\n{src}"));
         let (a, b) = (&res[0], &res[1]);
         assert_eq!((&a.0, a.1, a.2), (&b.0, b.1, b.2), "iteration {i}: fast and full differ\n{src}");
@@ -855,19 +857,21 @@ fn hostile_fuzz_budgets_and_natives() {
             let s = format!("while true do\n{}\nend", fuzz_program(&mut r).replace("return 'done'", ""));
             let delay = r.below(40) as u64;
             let label = s.clone();
-            let res = bounded(30, move || super::common::small_stack(move || {
-                let mut lua = Lua::new(Limits::unmetered().memory(64 << 20), Libs::ALL);
-                let h = lua.interrupt_handle();
-                let t = std::thread::spawn(move || {
-                    std::thread::sleep(Duration::from_millis(delay));
-                    h.interrupt();
-                    Instant::now()
-                });
-                let o = outcome(lua.exec(&s, "=fuzz"));
-                let end = Instant::now();
-                let at = t.join().unwrap();
-                (o, end.saturating_duration_since(at))
-            }))
+            let res = bounded(30, move || {
+                super::common::small_stack(move || {
+                    let mut lua = Lua::new(Limits::unmetered().memory(64 << 20), Libs::ALL);
+                    let h = lua.interrupt_handle();
+                    let t = std::thread::spawn(move || {
+                        std::thread::sleep(Duration::from_millis(delay));
+                        h.interrupt();
+                        Instant::now()
+                    });
+                    let o = outcome(lua.exec(&s, "=fuzz"));
+                    let end = Instant::now();
+                    let at = t.join().unwrap();
+                    (o, end.saturating_duration_since(at))
+                })
+            })
             .unwrap_or_else(|e| panic!("iteration {i} (interrupted): {e}\n{label}"));
             assert!(
                 res.0 == "limit Interrupted" || res.0 == "limit Memory" || res.0.starts_with("error"),
@@ -994,7 +998,7 @@ const FAMILIES: &[(&str, Gen)] = &[
                 "local _ = load(src .. ')')",
                 "local _ = load('x = 1', nil, name)",
             ])
-                .into(),
+            .into(),
         )
     }),
     ("next", |n, r| {
@@ -1081,7 +1085,10 @@ const FAMILIES: &[(&str, Gen)] = &[
     }),
     ("debug.getinfo", |n, r| {
         (
-            format!("function D(d, f) if d == 0 then return f() end local r = D(d - 1, f) return r end N = {}", n.min(1500)),
+            format!(
+                "function D(d, f) if d == 0 then return f() end local r = D(d - 1, f) return r end N = {}",
+                n.min(1500)
+            ),
             r.pick(&[
                 "local t = debug.getinfo(1, 'Slnut')",
                 "local t = debug.getinfo(print)",
@@ -1186,7 +1193,10 @@ const FAMILIES: &[(&str, Gen)] = &[
                 format!("{t} for i = 1, {n} do t[i] = 'abcdefgh' .. i end t[{n} + 1] = {{}}"),
                 "pcall(table.concat, t, ',')".into(),
             ),
-            1 => (format!("{t} sep = string.rep(',', {})", n.clamp(1, 4096)), "pcall(table.concat, t, sep)".into()),
+            1 => (
+                format!("{t} sep = string.rep(',', {})", n.clamp(1, 4096)),
+                "pcall(table.concat, t, sep)".into(),
+            ),
             _ => (t, "pcall(table.concat, t, ',')".into()),
         }
     }),
@@ -1291,20 +1301,43 @@ const FAMILIES: &[(&str, Gen)] = &[
     // ---- io (the families' states have files in memory and an endless stdin: `host_env`)
     ("io.close", |_, _| (String::new(), "io.close(io.open('small'))".into())),
     ("io.flush", |_, _| (String::new(), "io.flush()".into())),
-    ("io.input", |_, r| (String::new(), r.pick(&["io.input(io.stdin)", "io.input('small')", "pcall(io.input, 'missing')"]).into())),
+    ("io.input", |_, r| {
+        (
+            String::new(),
+            r.pick(&["io.input(io.stdin)", "io.input('small')", "pcall(io.input, 'missing')"]).into(),
+        )
+    }),
     ("io.lines", |n, r| {
         (
             format!("name = string.rep('n', {})", n.min(1 << 20)),
-            r.pick(&["for l in io.lines('big') do end", "for a, b in io.lines('big', 'n', 'l') do end", "pcall(io.lines, name)", "for l in io.lines('small', 'L') do end"]).into(),
+            r.pick(&[
+                "for l in io.lines('big') do end",
+                "for a, b in io.lines('big', 'n', 'l') do end",
+                "pcall(io.lines, name)",
+                "for l in io.lines('small', 'L') do end",
+            ])
+            .into(),
         )
     }),
     ("io.open", |n, r| {
         (
             format!("name = string.rep('n', {})", n.min(1 << 20)),
-            r.pick(&["local f = io.open('big') f:close()", "local f = io.open(name)", "local f = io.open('big', 'rb') f:close()", "pcall(io.open, 'big', 'rw')"]).into(),
+            r.pick(&[
+                "local f = io.open('big') f:close()",
+                "local f = io.open(name)",
+                "local f = io.open('big', 'rb') f:close()",
+                "pcall(io.open, 'big', 'rw')",
+            ])
+            .into(),
         )
     }),
-    ("io.output", |_, r| (String::new(), r.pick(&["io.output(io.stdout)", "io.output('out') io.output():close() io.output(io.stdout)"]).into())),
+    ("io.output", |_, r| {
+        (
+            String::new(),
+            r.pick(&["io.output(io.stdout)", "io.output('out') io.output():close() io.output(io.stdout)"])
+                .into(),
+        )
+    }),
     ("io.read", |n, r| {
         (
             format!("io.input('big') k = {}", n.min(1 << 20)),
@@ -1319,11 +1352,19 @@ const FAMILIES: &[(&str, Gen)] = &[
             .into(),
         )
     }),
-    ("io.type", |_, r| (String::new(), format!("local _ = io.type({})", r.pick(&["io.stdout", "1", "{}", "nil"])))),
+    ("io.type", |_, r| {
+        (String::new(), format!("local _ = io.type({})", r.pick(&["io.stdout", "1", "{}", "nil"])))
+    }),
     ("io.write", |n, r| {
         (
             format!("s = string.rep('w', {}) f = io.open('out', 'w')", n.min(1 << 20)),
-            r.pick(&["io.write(s)", "io.write(1.5, 2, s)", "f:write(s) f:seek('set')", "io.stderr:write(s, 3)"]).into(),
+            r.pick(&[
+                "io.write(s)",
+                "io.write(1.5, 2, s)",
+                "f:write(s) f:seek('set')",
+                "io.stderr:write(s, 3)",
+            ])
+            .into(),
         )
     }),
     // ---- os
@@ -1342,11 +1383,24 @@ const FAMILIES: &[(&str, Gen)] = &[
     ("os.getenv", |n, r| {
         (
             format!("n = string.rep('A', {})", n.min(1 << 22)),
-            r.pick(&["local _ = os.getenv(n)", "local _ = os.getenv('BIG')", "local _ = os.getenv('A')", "local _ = os.getenv('none')"]).into(),
+            r.pick(&[
+                "local _ = os.getenv(n)",
+                "local _ = os.getenv('BIG')",
+                "local _ = os.getenv('A')",
+                "local _ = os.getenv('none')",
+            ])
+            .into(),
         )
     }),
     ("os.setlocale", |_, r| {
-        (String::new(), format!("local _ = os.setlocale({}, {})", r.pick(&["nil", "'C'", "''", "'xx'"]), r.pick(&["nil", "'all'", "'numeric'", "'time'"])))
+        (
+            String::new(),
+            format!(
+                "local _ = os.setlocale({}, {})",
+                r.pick(&["nil", "'C'", "''", "'xx'"]),
+                r.pick(&["nil", "'all'", "'numeric'", "'time'"])
+            ),
+        )
     }),
     ("os.time", |_, _| {
         (String::new(), "local _ = os.time(), os.time({year = 2026, month = 1, day = 1})".into())
@@ -1585,7 +1639,9 @@ fn fuel_tracks_time_body() {
     let names = lua.to_string_lossy(names[0]).unwrap();
     // The string metatable's arithmetic metamethods are the "string arithmetic" family.
     let family_of = |n: &str| match n.strip_prefix("string-meta.") {
-        Some("__add" | "__sub" | "__mul" | "__div" | "__mod" | "__pow" | "__unm" | "__idiv") => "string arithmetic".to_owned(),
+        Some("__add" | "__sub" | "__mul" | "__div" | "__mod" | "__pow" | "__unm" | "__idiv") => {
+            "string arithmetic".to_owned()
+        }
         _ => n.to_owned(),
     };
     let missing: Vec<&str> =
@@ -1661,7 +1717,11 @@ fn fuel_tracks_time_body() {
             ));
         }
     }
-    assert!(bad.is_empty(), "seeds {seeds:?}, median {median:.1} cpu per unit, bound {bound:.1}:\n{}", bad.join("\n"));
+    assert!(
+        bad.is_empty(),
+        "seeds {seeds:?}, median {median:.1} cpu per unit, bound {bound:.1}:\n{}",
+        bad.join("\n")
+    );
 }
 
 /// LR-29: one `gsub` match over 2 MiB whose replacement expands to 128 MiB (64 `%0`) was
@@ -1723,7 +1783,8 @@ fn lr29_huge_replacements_and_joins_stop_promptly() {
     // whose load made it 29 ms late once against its 25 ms bound in a full run (passing
     // 5 of 5 alone).
     let _alone = super::common::measuring();
-    let setup = "s = string.rep('ab', 1048576) big = string.rep('x', 16 << 20) T = {} for i = 1, 8 do T[i] = big end";
+    let setup =
+        "s = string.rep('ab', 1048576) big = string.rep('x', 16 << 20) T = {} for i = 1, 8 do T[i] = big end";
     for body in [
         "pcall(string.gsub, s, '%f[%w]%w+', string.rep('%0', 64))",
         "pcall(table.concat, T)",
@@ -1737,7 +1798,8 @@ fn lr29_huge_replacements_and_joins_stop_promptly() {
             // its stretches: the match, then the copies): each within 25 ms, not a seed that
             // happens to land well.
             for ms in [1, 2, 4, 8, 16, 32, 64] {
-                let mut lua = Lua::new(Limits::unmetered().memory(512 << 20).string_len(64 << 20), FAMILY_LIBS);
+                let mut lua =
+                    Lua::new(Limits::unmetered().memory(512 << 20).string_len(64 << 20), FAMILY_LIBS);
                 lua.exec(setup, "=setup").unwrap();
                 let f = lua.load(body, "=one").unwrap();
                 let after = Duration::from_millis(ms);
@@ -1760,11 +1822,15 @@ fn lr29_huge_replacements_and_joins_stop_promptly() {
                     Some(t) => end.saturating_duration_since(t.join().unwrap()),
                     None => end.saturating_duration_since(start).saturating_sub(after),
                 };
-                assert!(late < Duration::from_millis(25), "{body} (deadline {use_clock}), one call stopped at {ms} ms: {late:?} late");
+                assert!(
+                    late < Duration::from_millis(25),
+                    "{body} (deadline {use_clock}), one call stopped at {ms} ms: {late:?} late"
+                );
             }
         }
         let fuel = |fast: bool| {
-            let mut lua = Lua::new(Limits::default().memory(512 << 20).string_len(64 << 20).fuel(1 << 40), FAMILY_LIBS);
+            let mut lua =
+                Lua::new(Limits::default().memory(512 << 20).string_len(64 << 20).fuel(1 << 40), FAMILY_LIBS);
             lua.set_fast_loop(fast);
             let r = lua.exec(format!("{setup} {body}"), "=t").map(|_| ()).map_err(|e| e.to_string());
             (r, lua.fuel_left())

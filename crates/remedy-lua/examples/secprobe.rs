@@ -18,8 +18,12 @@ fn rss() -> usize {
 
 fn state(mem: usize, fast: bool) -> Lua {
     let libs = Libs::ALL.union(Libs::DEBUG_INFO).union(Libs::REQUIRE);
-    let mut lua = Lua::new(Limits::default().memory(mem).string_len(32 << 20).fuel(1 << 34).hash_seed(7), libs);
-    lua.add_module("hostmod", "local M = {n = 1} for i = 1, 20 do M[i] = function() return i end end return M");
+    let mut lua =
+        Lua::new(Limits::default().memory(mem).string_len(32 << 20).fuel(1 << 34).hash_seed(7), libs);
+    lua.add_module(
+        "hostmod",
+        "local M = {n = 1} for i = 1, 20 do M[i] = function() return i end end return M",
+    );
     lua.set_fast_loop(fast);
     lua.set_print(|_| {});
     lua

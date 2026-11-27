@@ -12,7 +12,10 @@ use remedy_lua::{Error, Libs, LimitKind, Limits, Lua};
 fn ns_per_unit(setup: &str, body: &str, fuel: u64, fast: bool) -> f64 {
     // (384 MiB: S5GC-2's 2M closures are charged what their upvalue lists take since
     // SEC-M9, past 256 MiB; the cost measured is per unit of fuel either way.)
-    let mut lua = Lua::new(Limits::default().memory(384 << 20).fuel(1 << 40).hash_seed(super::common::TEST_SEED), Libs::ALL);
+    let mut lua = Lua::new(
+        Limits::default().memory(384 << 20).fuel(1 << 40).hash_seed(super::common::TEST_SEED),
+        Libs::ALL,
+    );
     lua.set_fast_loop(fast);
     lua.set_print(|_| {});
     lua.exec(setup, "=setup").unwrap();
@@ -75,7 +78,10 @@ fn probe_cases() -> Vec<(String, String)> {
             let d = deep_chains(bits, n, l);
             v.push((d.clone(), format!("table.sort(t) -- {bits} {n} {l}")));
             v.push((d.clone(), "local x = #t".to_owned()));
-            v.push((format!("{d} setmetatable(t, {{__index = t}}) k = 1 + ((1 << ({bits} + 1)) - 1) * 999"), "pcall(function() return t[k] end)".to_owned()));
+            v.push((
+                format!("{d} setmetatable(t, {{__index = t}}) k = 1 + ((1 << ({bits} + 1)) - 1) * 999"),
+                "pcall(function() return t[k] end)".to_owned(),
+            ));
         }
     }
     if sel.is_empty() || sel == "sparse" {
@@ -88,7 +94,10 @@ fn probe_cases() -> Vec<(String, String)> {
     if sel.is_empty() || sel == "nodes" {
         let d = run_of_floats(super::common::TEST_SEED, 14, 6200, 150);
         v.push((d.clone(), "local x = t[k]".to_owned()));
-        v.push((format!("{d} setmetatable(t, {{__index = t}})"), "pcall(function() return t[k] end)".to_owned()));
+        v.push((
+            format!("{d} setmetatable(t, {{__index = t}})"),
+            "pcall(function() return t[k] end)".to_owned(),
+        ));
     }
     if sel.is_empty() || sel == "intern" {
         let (setup, n) = (colliding_strings(super::common::TEST_SEED, 4000), 4000);
@@ -150,8 +159,10 @@ fn sparse_slab(n: u32, make: &str) -> String {
 #[test]
 fn s5gc_1_many_lookups_in_one_charge_each_pay() {
     let d = deep_chains(15, 64, 500);
-    let looped =
-        format!("{} setmetatable(t, {{__index = t, __newindex = t}}) k = 1 + ((1 << 16) - 1) * 999", deep_chains(15, 2, 8000));
+    let looped = format!(
+        "{} setmetatable(t, {{__index = t, __newindex = t}}) k = 1 + ((1 << 16) - 1) * 999",
+        deep_chains(15, 2, 8000)
+    );
     let gsub = format!("{d} s = string.rep('x', 63)");
     // `#t` probes keys 1, 2, 4, ... 2^40 and then halves: each at the end of a chain.
     let border = "t = {} local J = 1 << 50 for j = 1, (1 << 15) + 1 do t[J + j] = true end \
@@ -177,7 +188,10 @@ fn s5gc_1_many_lookups_in_one_charge_each_pay() {
 #[test]
 fn s5gc_1_probe_charging_matches_c_lua_and_the_full_path() {
     let progs = [
-        format!("{} table.sort(t) local s = {{}} for i = 1, #t do s[i] = t[i] end return #t, table.concat(s, ',')", deep_chains(11, 16, 60)),
+        format!(
+            "{} table.sort(t) local s = {{}} for i = 1, #t do s[i] = t[i] end return #t, table.concat(s, ',')",
+            deep_chains(11, 16, 60)
+        ),
         format!(
             "{} local u = setmetatable({{}}, {{__index = setmetatable({{}}, {{__index = t}})}}) \
              local s = 0 for i = 1, 8 do s = s + u[i] end local n = 0 for i = 1, 200 do if u[i + 2047 * 1001] then n = n + 1 end end return s, n, #t",
@@ -203,7 +217,10 @@ fn s5gc_2_sparse_slabs_are_skipped() {
     let tables = sparse_slab(1_200_000, "{}");
     let funcs = sparse_slab(2_000_000, "function() return i end");
     let threads = sparse_slab(200_000, "coroutine.create(print)");
-    assert_metered(&[(&tables, "local t = {}"), (&funcs, "local t = {}"), (&threads, "local t = {}")], 300_000);
+    assert_metered(
+        &[(&tables, "local t = {}"), (&funcs, "local t = {}"), (&threads, "local t = {}")],
+        300_000,
+    );
     let work = "local t = {} for i = 1, 20000 do t[i % 100 + 1] = {i} end \
                 local co = coroutine.wrap(function() for i = 1, 100 do coroutine.yield({}) end end) \
                 for i = 1, 100 do co() end collectgarbage() return #t";
@@ -216,7 +233,8 @@ fn s5gc_2_sparse_slabs_are_skipped() {
     };
     for fast in [true, false] {
         let fuel_in = |setup: &str| {
-            let mut lua = Lua::new(Limits::default().memory(256 << 20).hash_seed(super::common::TEST_SEED), Libs::ALL);
+            let mut lua =
+                Lua::new(Limits::default().memory(256 << 20).hash_seed(super::common::TEST_SEED), Libs::ALL);
             lua.set_fast_loop(fast);
             lua.exec(setup, "=setup").unwrap();
             let f = lua.load(work, "=work").unwrap();
@@ -245,7 +263,9 @@ fn s5gc_3_interner_walks_are_charged() {
     let native = format!("local x = table.concat({{a[{n}], b[{n}]}})");
     let format = format!("local x = string.format('%s%s', a[{n}], b[{n}])");
     // Interning them all again from source.
-    let src = format!("{setup} src = 'return {{' .. string.format(string.rep('%q,', #keep), table.unpack(keep)) .. '}}' keep = nil a = nil b = nil collectgarbage()");
+    let src = format!(
+        "{setup} src = 'return {{' .. string.format(string.rep('%q,', #keep), table.unpack(keep)) .. '}}' keep = nil a = nil b = nil collectgarbage()"
+    );
     let aimed = aimed_strings(super::common::TEST_SEED, 3000, 14);
     let other = "local x = a[1] .. 'zzzzzzzz'";
     assert_metered(
@@ -358,11 +378,17 @@ fn s5gc_4_math_random_does_not_give_away_the_hash_seed() {
             let n = 2000;
             let plain = fuel_of(&mut lua, &colliding_strings(guess ^ 0xdead_beef, n));
             let crafted = fuel_of(&mut lua, &colliding_strings(guess, n));
-            assert!(crafted < plain * 2, "fast {fast} seed {seed:?}: crafted strings cost {crafted} fuel, plain {plain}");
+            assert!(
+                crafted < plain * 2,
+                "fast {fast} seed {seed:?}: crafted strings cost {crafted} fuel, plain {plain}"
+            );
             if let Some(s) = seed {
                 // The check has teeth: strings made for the real seed do cost more.
                 let real = fuel_of(&mut lua, &colliding_strings(s, n));
-                assert!(real > plain * 10, "fast {fast}: strings for the real seed cost {real} fuel, plain {plain}");
+                assert!(
+                    real > plain * 10,
+                    "fast {fast}: strings for the real seed cost {real} fuel, plain {plain}"
+                );
             }
         }
     }
@@ -502,7 +528,8 @@ fn s5gc_7_call_frames_are_charged() {
         let per_level = (lua.memory_used() - base) as f64 / (50.0 * 1900.0);
         assert!(per_level > 100.0, "fast {fast}: {per_level:.0} bytes charged a level");
         // At the limit, a memory error, not a process past it.
-        let r = lua.exec(format!("{park} local more = {{}} for i = 1, 100000 do more[i] = mk() end"), "=more");
+        let r =
+            lua.exec(format!("{park} local more = {{}} for i = 1, 100000 do more[i] = mk() end"), "=more");
         assert!(matches!(r, Err(Error::Limit(LimitKind::Memory))), "{r:?}");
         // Finished or dropped, they give it all back.
         lua.exec("for i = 1, #cs do coroutine.close(cs[i]) end cs = nil", "=drop").unwrap();
@@ -515,7 +542,6 @@ fn s5gc_7_call_frames_are_charged() {
              local co = coroutine.wrap(function() return f(1500) end) local a = co() local b = f(1700) return a > 0, b > 0";
     assert_eq!(super::common::remedy(p, 1 << 30), Ok("true true".to_owned()));
 }
-
 
 /// What held: weak tables, ephemerons and coroutines give C Lua's results with a whole
 /// collection at every allocation (`set_gc_stress`), on a 64 KiB native stack, with the
@@ -553,7 +579,9 @@ fn s5gc_held_weak_tables_and_coroutines_under_stress() {
             lua.set_fast_loop(fast);
             lua.collect_garbage().unwrap();
             let base = lua.memory_used();
-            let r = lua.exec(chains, "=chains").map(|v| v.iter().map(|x| super::common::show(&lua, *x)).collect::<Vec<_>>());
+            let r = lua
+                .exec(chains, "=chains")
+                .map(|v| v.iter().map(|x| super::common::show(&lua, *x)).collect::<Vec<_>>());
             lua.collect_garbage().unwrap();
             (r, lua.memory_used().saturating_sub(base))
         });

@@ -35,24 +35,98 @@ impl Rng {
 }
 
 const LITERALS: &[&str] = &[
-    "0", "1", "-1", "2", "3", "7", "10", "-7", "255", "1000000", "math.maxinteger", "math.mininteger", "0.0", "-0.0",
-    "0.5", "1.5", "-2.25", "3.0", "1e10", "1e300", "2^53", "math.huge", "-math.huge", "0.1", "1/3", "\"10\"",
-    "\"0x1F\"", "\"1e2\"", "\"abc\"", "\"\"", "\" 5 \"", "\"3.5\"", "true", "false", "nil", "a", "b", "c", "s", "t",
-    "t[1]", "#t", "t.x",
+    "0",
+    "1",
+    "-1",
+    "2",
+    "3",
+    "7",
+    "10",
+    "-7",
+    "255",
+    "1000000",
+    "math.maxinteger",
+    "math.mininteger",
+    "0.0",
+    "-0.0",
+    "0.5",
+    "1.5",
+    "-2.25",
+    "3.0",
+    "1e10",
+    "1e300",
+    "2^53",
+    "math.huge",
+    "-math.huge",
+    "0.1",
+    "1/3",
+    "\"10\"",
+    "\"0x1F\"",
+    "\"1e2\"",
+    "\"abc\"",
+    "\"\"",
+    "\" 5 \"",
+    "\"3.5\"",
+    "true",
+    "false",
+    "nil",
+    "a",
+    "b",
+    "c",
+    "s",
+    "t",
+    "t[1]",
+    "#t",
+    "t.x",
 ];
 
-const BINOPS: &[&str] =
-    &["+", "-", "*", "/", "//", "%", "^", "&", "|", "~", "<<", ">>", "..", "==", "~=", "<", "<=", ">", ">=", "and", "or"];
+const BINOPS: &[&str] = &[
+    "+", "-", "*", "/", "//", "%", "^", "&", "|", "~", "<<", ">>", "..", "==", "~=", "<", "<=", ">", ">=",
+    "and", "or",
+];
 
 const CALLS: &[&str] = &[
-    "(type(%) == 'table' and 'table' or tostring(%))", "tonumber(%)", "type(%)", "math.type(%)", "math.floor(%)", "math.ceil(%)", "math.abs(%)",
-    "math.tointeger(%)", "math.max(%, 2)", "math.min(%, 2)", "math.fmod(%, 3)", "string.len(%)", "string.upper(%)",
-    "string.rep(%, 2)", "string.format('%d', %)", "string.format('%5.2f', %)", "string.format('%g', %)",
-    "string.format('%q', %)", "string.format('%s', %)", "string.format('%x', %)", "select('#', %)", "(%)",
-    "string.sub('hello world', %)", "string.byte('hello', %)", "string.char(%)", "('x'):rep((%) % 64)",
-    "string.find('hello world', %)", "string.match('key=123', %)", "string.gsub('hello', 'l', %)",
-    "utf8.char(%)", "math.ult(%, 5)", "-(%)", "not (%)", "~(%)", "#(%)", "rawlen(%)", "rawequal(%, 1)",
-    "string.reverse(%)", "table.concat({1, 2, %}, ',')", "select(2, pcall(error, %))", "string.pack('i4', %)",
+    "(type(%) == 'table' and 'table' or tostring(%))",
+    "tonumber(%)",
+    "type(%)",
+    "math.type(%)",
+    "math.floor(%)",
+    "math.ceil(%)",
+    "math.abs(%)",
+    "math.tointeger(%)",
+    "math.max(%, 2)",
+    "math.min(%, 2)",
+    "math.fmod(%, 3)",
+    "string.len(%)",
+    "string.upper(%)",
+    "string.rep(%, 2)",
+    "string.format('%d', %)",
+    "string.format('%5.2f', %)",
+    "string.format('%g', %)",
+    "string.format('%q', %)",
+    "string.format('%s', %)",
+    "string.format('%x', %)",
+    "select('#', %)",
+    "(%)",
+    "string.sub('hello world', %)",
+    "string.byte('hello', %)",
+    "string.char(%)",
+    "('x'):rep((%) % 64)",
+    "string.find('hello world', %)",
+    "string.match('key=123', %)",
+    "string.gsub('hello', 'l', %)",
+    "utf8.char(%)",
+    "math.ult(%, 5)",
+    "-(%)",
+    "not (%)",
+    "~(%)",
+    "#(%)",
+    "rawlen(%)",
+    "rawequal(%, 1)",
+    "string.reverse(%)",
+    "table.concat({1, 2, %}, ',')",
+    "select(2, pcall(error, %))",
+    "string.pack('i4', %)",
 ];
 
 fn expr(r: &mut Rng, depth: usize) -> String {
@@ -141,10 +215,11 @@ fn normalize(r: Result<String, String>) -> Result<String, String> {
         // Every "what it was" note goes: C Lua names more operands in long and/or chains,
         // where its jump lists know more than RemedyLua's simpler code (the conformance
         // suite checks the notes where code is plain).
-        while let Some(i) = [" (constant '", " (upvalue '", " (local '", " (global '", " (field '", " (method '"]
-            .iter()
-            .filter_map(|p| rest.find(p))
-            .min()
+        while let Some(i) =
+            [" (constant '", " (upvalue '", " (local '", " (global '", " (field '", " (method '"]
+                .iter()
+                .filter_map(|p| rest.find(p))
+                .min()
         {
             out.push_str(&rest[..i]);
             let after = &rest[i + 2..];
@@ -172,7 +247,8 @@ fn check(seed: u64, program: &str) -> Option<String> {
     if theirs.as_ref().is_err_and(|e| skip(e)) || theirs.as_ref().is_ok_and(|e| skip(e)) {
         return None;
     }
-    (ours != theirs && !common::c_limit_only_outcome(&ours, &theirs)).then(|| format!("seed {seed}:\n{program}\n  remedy: {ours:?}\n  c lua:  {theirs:?}"))
+    (ours != theirs && !common::c_limit_only_outcome(&ours, &theirs))
+        .then(|| format!("seed {seed}:\n{program}\n  remedy: {ours:?}\n  c lua:  {theirs:?}"))
 }
 
 #[test]

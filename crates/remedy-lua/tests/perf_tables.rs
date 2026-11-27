@@ -88,8 +88,12 @@ fn table_insert_and_remove_in_place_stop_where_the_full_path_stops() {
 /// the same results and memory account with and without the fast loop, and as C Lua.
 #[test]
 fn big_arrays_grow_with_the_same_account() {
-    same_as_c("local t = {} for i = 1, 300000 do t[i] = i end local u = {} for i = 1, 70000 do u[#u + 1] = i end return #t, t[300000], #u, collectgarbage('count') > 0");
-    same_as_c("local t = {} for i = 1, 100 do t[i] = i end for i = 1, 100 do t[i] = nil end for i = 1, 5000 do t[i] = -i end return #t, t[5000]");
+    same_as_c(
+        "local t = {} for i = 1, 300000 do t[i] = i end local u = {} for i = 1, 70000 do u[#u + 1] = i end return #t, t[300000], #u, collectgarbage('count') > 0",
+    );
+    same_as_c(
+        "local t = {} for i = 1, 100 do t[i] = i end for i = 1, 100 do t[i] = nil end for i = 1, 5000 do t[i] = -i end return #t, t[5000]",
+    );
 }
 
 /// Reads and writes with constant integer keys (`t[1]`, `GetTableK`/`SetTableK`): the array
@@ -155,8 +159,13 @@ fn probe_moves() {
         for fast in [true, false] {
             let base = super::sweep5b_open::baseline(fast);
             for (i, setup) in shapes(n).iter().enumerate() {
-                for body in [format!("table.move(t, 1, {n}, 2)"), "table.insert(t, 1, 0) table.remove(t, 1)".to_owned()] {
-                    let r = (0..2).map(|_| super::sweep5b_open::ns_per_unit(setup, &body, 3_000_000, fast) / base).fold(f64::MAX, f64::min);
+                for body in [
+                    format!("table.move(t, 1, {n}, 2)"),
+                    "table.insert(t, 1, 0) table.remove(t, 1)".to_owned(),
+                ] {
+                    let r = (0..2)
+                        .map(|_| super::sweep5b_open::ns_per_unit(setup, &body, 3_000_000, fast) / base)
+                        .fold(f64::MAX, f64::min);
                     println!("fast {fast} shape {i}: {r:.1}x  {body}");
                 }
             }
@@ -176,13 +185,18 @@ fn integer_keys_in_a_big_part_of_other_keys_are_paid() {
     super::common::small_stack(|| {
         // The fuel of `body` alone, over a table of `n` string keys built first.
         let fuel_of = |n: usize, seed: u64, fast: bool| {
-            let mut lua = remedy_lua::Lua::new(remedy_lua::Limits::default().memory(512 << 20).fuel(1 << 40).hash_seed(seed), remedy_lua::Libs::ALL);
+            let mut lua = remedy_lua::Lua::new(
+                remedy_lua::Limits::default().memory(512 << 20).fuel(1 << 40).hash_seed(seed),
+                remedy_lua::Libs::ALL,
+            );
             lua.set_fast_loop(fast);
-            lua.exec(format!("t = {{}} for i = 1, {n} do t['k' .. i] = i end collectgarbage()"), "=setup").unwrap();
+            lua.exec(format!("t = {{}} for i = 1, {n} do t['k' .. i] = i end collectgarbage()"), "=setup")
+                .unwrap();
             let body = "table.move(t, 1, 100000, 2) local s = 0 for i = 1, 100000 do if t[i] == nil then s = s + 1 end end return s";
             let f = lua.load(body, "=body").unwrap();
             // (Each call from the host gets the whole budget.)
-            let out = format!("{:?}", lua.call(f.value(), &[]).unwrap().first().map(|v| lua.to_string_lossy(*v)));
+            let out =
+                format!("{:?}", lua.call(f.value(), &[]).unwrap().first().map(|v| lua.to_string_lossy(*v)));
             (out, lua.limits().fuel - lua.fuel_left())
         };
         let big = fuel_of(800_000, super::common::TEST_SEED, true);
@@ -208,7 +222,16 @@ fn moves_over_a_big_part_of_other_keys_cost_what_they_are_charged() {
         let setup = format!("t = {{}} for i = 1, {n} do t['k' .. i] = i end");
         for fast in [true, false] {
             let base = super::sweep5b_open::baseline(fast);
-            let r = (0..3).map(|_| super::sweep5b_open::ns_per_unit(&setup, &format!("table.move(t, 1, {n}, 2)"), 3_000_000, fast) / base).fold(f64::MAX, f64::min);
+            let r = (0..3)
+                .map(|_| {
+                    super::sweep5b_open::ns_per_unit(
+                        &setup,
+                        &format!("table.move(t, 1, {n}, 2)"),
+                        3_000_000,
+                        fast,
+                    ) / base
+                })
+                .fold(f64::MAX, f64::min);
             println!("fast {fast}: {r:.1}x");
             assert!(r < 4.0, "fast {fast}: table.move over string keys at {r:.1}x plain code per unit");
         }
@@ -293,12 +316,20 @@ fn lr32_pairs_over_a_big_part_finds_its_place_cheaply() {
         let setup = format!("t = {{}} for i = 1, {n} do t['k' .. i] = i end");
         for fast in [true, false] {
             let base = super::sweep5b_open::baseline(fast);
-            let r = (0..3).map(|_| super::sweep5b_open::ns_per_unit(&setup, "for _ in pairs(t) do end", 20_000_000, fast) / base).fold(f64::MAX, f64::min);
+            let r = (0..3)
+                .map(|_| {
+                    super::sweep5b_open::ns_per_unit(&setup, "for _ in pairs(t) do end", 20_000_000, fast)
+                        / base
+                })
+                .fold(f64::MAX, f64::min);
             assert!(r < 5.0, "fast {fast}: pairs over {n} string keys at {r:.1}x plain code");
         }
         let mut fuel = Vec::new();
         for (fast, seed) in [(true, 1u64), (false, 1), (true, 7), (true, 0xdead_beef)] {
-            let mut lua = remedy_lua::Lua::new(remedy_lua::Limits::default().memory(512 << 20).fuel(1 << 40).hash_seed(seed), remedy_lua::Libs::ALL);
+            let mut lua = remedy_lua::Lua::new(
+                remedy_lua::Limits::default().memory(512 << 20).fuel(1 << 40).hash_seed(seed),
+                remedy_lua::Libs::ALL,
+            );
             lua.set_fast_loop(fast);
             lua.exec(&setup, "=setup").unwrap();
             // (Each call from the host gets the whole budget: what this one used.)

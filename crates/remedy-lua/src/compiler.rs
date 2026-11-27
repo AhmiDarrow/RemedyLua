@@ -106,7 +106,12 @@ fn operands(i: &Instr, top: Reg, out: &mut Vec<(Reg, Reg, Use)>) {
     let mut one = |r: Reg, u: Use| out.push((r, 1, u));
     let rk = |k: Rk| (!k.is_const()).then_some(k.index() as Reg);
     match *i {
-        Op::Move { a, b } | Op::Unm { a, b } | Op::BNot { a, b } | Op::Not { a, b } | Op::Len { a, b } | Op::ToStr { a, b } => {
+        Op::Move { a, b }
+        | Op::Unm { a, b }
+        | Op::BNot { a, b }
+        | Op::Not { a, b }
+        | Op::Len { a, b }
+        | Op::ToStr { a, b } => {
             one(b, Read);
             one(a, Write);
         }
@@ -128,7 +133,19 @@ fn operands(i: &Instr, top: Reg, out: &mut Vec<(Reg, Reg, Use)>) {
                 one(r, Read);
             }
         }
-        Op::GetTable { a, b, c } | Op::Add { a, b, c } | Op::Sub { a, b, c } | Op::Mul { a, b, c } | Op::Div { a, b, c } | Op::Mod { a, b, c } | Op::IDiv { a, b, c } | Op::Pow { a, b, c } | Op::BAnd { a, b, c } | Op::BOr { a, b, c } | Op::BXor { a, b, c } | Op::Shl { a, b, c } | Op::Shr { a, b, c } => {
+        Op::GetTable { a, b, c }
+        | Op::Add { a, b, c }
+        | Op::Sub { a, b, c }
+        | Op::Mul { a, b, c }
+        | Op::Div { a, b, c }
+        | Op::Mod { a, b, c }
+        | Op::IDiv { a, b, c }
+        | Op::Pow { a, b, c }
+        | Op::BAnd { a, b, c }
+        | Op::BOr { a, b, c }
+        | Op::BXor { a, b, c }
+        | Op::Shl { a, b, c }
+        | Op::Shr { a, b, c } => {
             one(b, Read);
             one(c, Read);
             one(a, Write);
@@ -175,7 +192,12 @@ fn operands(i: &Instr, top: Reg, out: &mut Vec<(Reg, Reg, Use)>) {
             }
             one(a, Write);
         }
-        Op::EqK { a, .. } | Op::EqI { a, .. } | Op::LtI { a, .. } | Op::LeI { a, .. } | Op::GtI { a, .. } | Op::GeI { a, .. } => one(a, Read),
+        Op::EqK { a, .. }
+        | Op::EqI { a, .. }
+        | Op::LtI { a, .. }
+        | Op::LeI { a, .. }
+        | Op::GtI { a, .. }
+        | Op::GeI { a, .. } => one(a, Read),
         Op::Eq { b, c, .. } | Op::Lt { b, c, .. } | Op::Le { b, c, .. } => {
             for k in [b, c] {
                 if let Some(r) = rk(k) {
@@ -194,15 +216,24 @@ fn operands(i: &Instr, top: Reg, out: &mut Vec<(Reg, Reg, Use)>) {
             let res = if c == 0xffff { 1 } else { Reg::from(c).max(1) };
             out.push((a, args.max(res), Both));
         }
-        Op::TailCall { a, b } => out.push((a, if b == 0xffff { top.saturating_sub(a).max(1) } else { Reg::from(b) + 1 }, Read)),
-        Op::Return { a, b } => out.push((a, if b == 0xffff { top.saturating_sub(a).max(1) } else { Reg::from(b).max(1) }, Read)),
+        Op::TailCall { a, b } => {
+            out.push((a, if b == 0xffff { top.saturating_sub(a).max(1) } else { Reg::from(b) + 1 }, Read))
+        }
+        Op::Return { a, b } => {
+            out.push((a, if b == 0xffff { top.saturating_sub(a).max(1) } else { Reg::from(b).max(1) }, Read))
+        }
         Op::VarArg { a, n } => out.push((a, if n == 0xffff { 1 } else { Reg::from(n).max(1) }, Write)),
         Op::SetList { a, n, .. } => out.push((a, Reg::from(n) + 1, Read)),
         Op::ForPrep { a, .. } | Op::ForLoop { a, .. } => out.push((a, 4, Both)),
         Op::TForPrep { a, .. } | Op::TForLoop { a, .. } => out.push((a, 5, Both)),
         Op::TForCall { a, c } => out.push((a, 4 + Reg::from(c), Both)),
         Op::Return1 { a } => one(a, Read),
-        Op::Jmp { .. } | Op::Window { .. } | Op::MoveAbs { .. } | Op::SetTop { .. } | Op::PadNil { .. } | Op::Return0 => {}
+        Op::Jmp { .. }
+        | Op::Window { .. }
+        | Op::MoveAbs { .. }
+        | Op::SetTop { .. }
+        | Op::PadNil { .. }
+        | Op::Return0 => {}
     }
 }
 
@@ -357,85 +388,318 @@ struct ExplistSt<'a> {
 enum Task<'a> {
     /// An error found before a construct that C Lua reports after it (compiled first).
     Fail(Box<Diagnostic>),
-    Block { b: &'a Block, repeat: bool },
-    ExprToReg { e: &'a Expr, dst: Reg },
+    Block {
+        b: &'a Block,
+        repeat: bool,
+    },
+    ExprToReg {
+        e: &'a Expr,
+        dst: Reg,
+    },
     ExprNext(&'a Expr),
     ExprAnyReg(&'a Expr),
     ExprRk(&'a Expr),
     KeyRef(&'a Expr),
-    CondJump { e: &'a Expr, when: bool },
-    Multi { e: &'a Expr, n: Reg },
+    CondJump {
+        e: &'a Expr,
+        when: bool,
+    },
+    Multi {
+        e: &'a Expr,
+        n: Reg,
+    },
     Function(&'a FuncBody),
 
     // ---- continuations ----
-    BlockNext { b: &'a Block, i: usize, repeat: bool },
+    BlockNext {
+        b: &'a Block,
+        i: usize,
+        repeat: bool,
+    },
     LeaveBlock(Pos),
     FunctionEnd(&'a FuncBody),
     ExprNextCall(Pos),
-    CallFinish { e: &'a Expr, want: Want, base: Reg },
-    SetupArgs { args: &'a [Expr], pos: Pos },
-    SetupMethod { e: &'a Expr, base: Reg },
+    CallFinish {
+        e: &'a Expr,
+        want: Want,
+        base: Reg,
+    },
+    SetupArgs {
+        args: &'a [Expr],
+        pos: Pos,
+    },
+    SetupMethod {
+        e: &'a Expr,
+        base: Reg,
+    },
     SetupMethodArgs,
-    MultiFinish { e: &'a Expr, n: Reg, base: Reg },
+    MultiFinish {
+        e: &'a Expr,
+        n: Reg,
+        base: Reg,
+    },
     ExplistNext(ExplistSt<'a>),
-    ExplistAfterMulti { st: ExplistSt<'a>, needed: usize },
+    ExplistAfterMulti {
+        st: ExplistSt<'a>,
+        needed: usize,
+    },
     ExplistRetMulti,
-    IndexObj { key: &'a Expr, dst: Reg, pos: Pos, save: Reg },
-    IndexKey { t: Reg, dst: Reg, pos: Pos, save: Reg },
-    CallToReg { dst: Reg, save: Reg },
-    FuncToReg { dst: Reg, pos: Pos, save: Reg },
-    ConcatNext { parts: &'a [Expr], i: usize, base: Reg, dst: Reg, pos: Pos, save: Reg },
-    InterpExpr { parts: &'a [InterpExpr], i: usize, base: Reg, dst: Reg, pos: Pos, save: Reg },
-    UnTo { op: UnOp, dst: Reg, pos: Pos, save: Reg },
+    IndexObj {
+        key: &'a Expr,
+        dst: Reg,
+        pos: Pos,
+        save: Reg,
+    },
+    IndexKey {
+        t: Reg,
+        dst: Reg,
+        pos: Pos,
+        save: Reg,
+    },
+    CallToReg {
+        dst: Reg,
+        save: Reg,
+    },
+    FuncToReg {
+        dst: Reg,
+        pos: Pos,
+        save: Reg,
+    },
+    ConcatNext {
+        parts: &'a [Expr],
+        i: usize,
+        base: Reg,
+        dst: Reg,
+        pos: Pos,
+        save: Reg,
+    },
+    InterpExpr {
+        parts: &'a [InterpExpr],
+        i: usize,
+        base: Reg,
+        dst: Reg,
+        pos: Pos,
+        save: Reg,
+    },
+    UnTo {
+        op: UnOp,
+        dst: Reg,
+        pos: Pos,
+        save: Reg,
+    },
     TablePos(TableSt<'a>),
     TableMulti(TableSt<'a>),
-    TableKey { st: TableSt<'a>, save: Reg },
-    TableKeyVal { st: TableSt<'a>, save: Reg, kr: KeyRef },
-    LogicL { op: BinOp, r: &'a Expr, target: Reg, dst: Reg, pos: Pos, save: Reg },
-    LogicR { j: usize, target: Reg, dst: Reg, save: Reg },
-    CmpToReg { dst: Reg, save: Reg },
-    ConcatL { r: &'a Expr, base: Reg, dst: Reg, pos: Pos, save: Reg },
-    ConcatR { base: Reg, dst: Reg, pos: Pos, save: Reg },
-    ArithL { op: BinOp, r: &'a Expr, dst: Reg, pos: Pos, save: Reg },
-    ArithR { op: BinOp, b: Rk, dst: Reg, pos: Pos, save: Reg },
-    SpineFirst { spine: Vec<(BinOp, &'a Expr, Pos)>, acc: Reg, dst: Reg, save: Reg },
-    SpineNext { spine: Vec<(BinOp, &'a Expr, Pos)>, acc: Reg, dst: Reg, save: Reg, b: Rk, op: BinOp, pos: Pos, save2: Reg },
+    TableKey {
+        st: TableSt<'a>,
+        save: Reg,
+    },
+    TableKeyVal {
+        st: TableSt<'a>,
+        save: Reg,
+        kr: KeyRef,
+    },
+    LogicL {
+        op: BinOp,
+        r: &'a Expr,
+        target: Reg,
+        dst: Reg,
+        pos: Pos,
+        save: Reg,
+    },
+    LogicR {
+        j: usize,
+        target: Reg,
+        dst: Reg,
+        save: Reg,
+    },
+    CmpToReg {
+        dst: Reg,
+        save: Reg,
+    },
+    ConcatL {
+        r: &'a Expr,
+        base: Reg,
+        dst: Reg,
+        pos: Pos,
+        save: Reg,
+    },
+    ConcatR {
+        base: Reg,
+        dst: Reg,
+        pos: Pos,
+        save: Reg,
+    },
+    ArithL {
+        op: BinOp,
+        r: &'a Expr,
+        dst: Reg,
+        pos: Pos,
+        save: Reg,
+    },
+    ArithR {
+        op: BinOp,
+        b: Rk,
+        dst: Reg,
+        pos: Pos,
+        save: Reg,
+    },
+    SpineFirst {
+        spine: Vec<(BinOp, &'a Expr, Pos)>,
+        acc: Reg,
+        dst: Reg,
+        save: Reg,
+    },
+    SpineNext {
+        spine: Vec<(BinOp, &'a Expr, Pos)>,
+        acc: Reg,
+        dst: Reg,
+        save: Reg,
+        b: Rk,
+        op: BinOp,
+        pos: Pos,
+        save2: Reg,
+    },
     /// `l and r` / `l or r` as a jump where the jumps of `l` are patched after `r`.
-    CondSkip { r: &'a Expr, when: bool },
+    CondSkip {
+        r: &'a Expr,
+        when: bool,
+    },
     CondSkipEnd(Vec<usize>),
     /// ... and where the jumps of both are the result.
-    CondBoth { r: &'a Expr, when: bool },
+    CondBoth {
+        r: &'a Expr,
+        when: bool,
+    },
     CondBothEnd(Vec<usize>),
-    CmpL { op: BinOp, r: &'a Expr, pos: Pos, when: bool, save: Reg },
-    CmpR { op: BinOp, a: Rk, pos: Pos, when: bool, save: Reg },
-    TestJump { pos: Pos, when: bool, save: Reg },
+    CmpL {
+        op: BinOp,
+        r: &'a Expr,
+        pos: Pos,
+        when: bool,
+        save: Reg,
+    },
+    CmpR {
+        op: BinOp,
+        a: Rk,
+        pos: Pos,
+        when: bool,
+        save: Reg,
+    },
+    TestJump {
+        pos: Pos,
+        when: bool,
+        save: Reg,
+    },
     PlaceObj(&'a Expr),
     PlaceKey(Reg),
     // statements
-    LocalAfter { s: &'a Stat, base: Reg, konst: Option<Value> },
-    AssignPlace { s: &'a Stat, places: Vec<Place> },
-    AssignOne { p: Place, pos: Pos },
-    AssignMulti { places: Vec<Place>, base: Reg, pos: Pos },
+    LocalAfter {
+        s: &'a Stat,
+        base: Reg,
+        konst: Option<Value>,
+    },
+    AssignPlace {
+        s: &'a Stat,
+        places: Vec<Place>,
+    },
+    AssignOne {
+        p: Place,
+        pos: Pos,
+    },
+    AssignMulti {
+        places: Vec<Place>,
+        base: Reg,
+        pos: Pos,
+    },
     OpAssignPlace(&'a Stat),
-    OpConcatEnd { p: Place, a: Reg, dst: Reg, base: Reg, pos: Pos },
-    OpArithEnd { p: Place, cur: Reg, op: BinOp, pos: Pos },
-    WhileCond { body: &'a Block, start: usize },
-    WhileBody { body: &'a Block, start: usize, exits: Vec<usize> },
-    RepeatBody { body: &'a Block, cond: &'a Expr, start: usize },
-    RepeatCond { body: &'a Block, start: usize },
-    IfCond { s: &'a Stat, i: usize, to_end: Vec<usize> },
-    IfBlock { s: &'a Stat, i: usize, to_end: Vec<usize>, skip: Vec<usize> },
-    IfElseEnd { end: Pos, to_end: Vec<usize> },
-    NumForStart { s: &'a Stat, base: Reg },
-    NumForLimit { s: &'a Stat, base: Reg },
-    NumForStep { s: &'a Stat, base: Reg },
-    NumForEnd { s: &'a Stat, base: Reg, prep: usize, body_start: usize },
-    GenForExprs { s: &'a Stat, base: Reg },
-    GenForEnd { s: &'a Stat, base: Reg, prep: usize, body_start: usize },
-    Closure { r: Reg, pos: Pos, place: Option<Place> },
-    RetTail { base: Reg, pos: Pos },
+    OpConcatEnd {
+        p: Place,
+        a: Reg,
+        dst: Reg,
+        base: Reg,
+        pos: Pos,
+    },
+    OpArithEnd {
+        p: Place,
+        cur: Reg,
+        op: BinOp,
+        pos: Pos,
+    },
+    WhileCond {
+        body: &'a Block,
+        start: usize,
+    },
+    WhileBody {
+        body: &'a Block,
+        start: usize,
+        exits: Vec<usize>,
+    },
+    RepeatBody {
+        body: &'a Block,
+        cond: &'a Expr,
+        start: usize,
+    },
+    RepeatCond {
+        body: &'a Block,
+        start: usize,
+    },
+    IfCond {
+        s: &'a Stat,
+        i: usize,
+        to_end: Vec<usize>,
+    },
+    IfBlock {
+        s: &'a Stat,
+        i: usize,
+        to_end: Vec<usize>,
+        skip: Vec<usize>,
+    },
+    IfElseEnd {
+        end: Pos,
+        to_end: Vec<usize>,
+    },
+    NumForStart {
+        s: &'a Stat,
+        base: Reg,
+    },
+    NumForLimit {
+        s: &'a Stat,
+        base: Reg,
+    },
+    NumForStep {
+        s: &'a Stat,
+        base: Reg,
+    },
+    NumForEnd {
+        s: &'a Stat,
+        base: Reg,
+        prep: usize,
+        body_start: usize,
+    },
+    GenForExprs {
+        s: &'a Stat,
+        base: Reg,
+    },
+    GenForEnd {
+        s: &'a Stat,
+        base: Reg,
+        prep: usize,
+        body_start: usize,
+    },
+    Closure {
+        r: Reg,
+        pos: Pos,
+        place: Option<Place>,
+    },
+    RetTail {
+        base: Reg,
+        pos: Pos,
+    },
     RetOne(Pos),
-    RetMulti { base: Reg, pos: Pos },
+    RetMulti {
+        base: Reg,
+        pos: Pos,
+    },
 }
 
 pub(crate) struct Compiler<'a, 'h> {
@@ -484,11 +748,23 @@ pub(crate) fn compile_with(block: &Block, chunk: &str, heap: &mut Heap, reuse: b
 /// is reported where it ends.
 /// The blocks closed at the cut end at `cut`; `follow` tells whether the token there ends
 /// a block (for a label just before it).
-pub(crate) fn compile_prefix(block: &Block, chunk: &str, heap: &mut Heap, cut: Pos, follow: bool) -> CResult<u32> {
+pub(crate) fn compile_prefix(
+    block: &Block,
+    chunk: &str,
+    heap: &mut Heap,
+    cut: Pos,
+    follow: bool,
+) -> CResult<u32> {
     compile_as(block, chunk, heap, true, Some((cut, follow)))
 }
 
-fn compile_as(block: &Block, chunk: &str, heap: &mut Heap, reuse: bool, prefix: Option<(Pos, bool)>) -> CResult<u32> {
+fn compile_as(
+    block: &Block,
+    chunk: &str,
+    heap: &mut Heap,
+    reuse: bool,
+    prefix: Option<(Pos, bool)>,
+) -> CResult<u32> {
     heap.blocked += 1;
     let mut c = Compiler {
         heap,
@@ -539,7 +815,9 @@ fn release_big<T: Send + 'static>(v: Vec<T>) {
 
 /// `release_big` for a map: only a big one is worth the pieces (thousands of nested
 /// functions' empty maps, each deferred, held 9 MB).
-fn release_map<K: std::hash::Hash + Eq + crate::diag::KeyHeap + Send + 'static, V: Send + 'static>(m: crate::shardmap::ShardMap<K, V>) {
+fn release_map<K: std::hash::Hash + Eq + crate::diag::KeyHeap + Send + 'static, V: Send + 'static>(
+    m: crate::shardmap::ShardMap<K, V>,
+) {
     if m.capacity() >= 1024 {
         crate::diag::release(m.into_pieces());
     }
@@ -724,13 +1002,17 @@ impl<'a, 'h> Compiler<'a, 'h> {
         if let Some(lo) = lo_span {
             off = off.min(lo);
         }
-        let far: Vec<(Reg, Use)> = ops.iter().filter(|o| o.1 == 1 && (o.0 as usize) < off).map(|o| (o.0, o.2)).collect();
+        let far: Vec<(Reg, Use)> =
+            ops.iter().filter(|o| o.1 == 1 && (o.0 as usize) < off).map(|o| (o.0, o.2)).collect();
         let fits = ops.iter().all(|&(r, n, _)| (r as usize) < off || (r as usize + n as usize) <= off + WIN)
             && (far.is_empty() || scratch + far.len() <= off + WIN)
             && Reg::try_from(scratch + far.len()).is_ok();
         if !fits {
             if self.emit_error.is_none() {
-                self.emit_error = Some(self.err(Pos { line, col: 1 }, "too many registers in one instruction (one call, return or list of values)"));
+                self.emit_error = Some(self.err(
+                    Pos { line, col: 1 },
+                    "too many registers in one instruction (one call, return or list of values)",
+                ));
             }
             return self.fsr().code.len();
         }
@@ -982,11 +1264,15 @@ impl<'a, 'h> Compiler<'a, 'h> {
     fn stack_room_grow(&mut self) -> CResult<()> {
         let tight = |cap: usize, len: usize| cap - len < 8;
         let grow = |cap: usize, len: usize| if tight(cap, len) { cap.max(8) } else { 0 };
-        let (gt, gf) = (grow(self.tasks.capacity(), self.tasks.len()), grow(self.fs.capacity(), self.fs.len()));
+        let (gt, gf) =
+            (grow(self.tasks.capacity(), self.tasks.len()), grow(self.fs.capacity(), self.fs.len()));
         // While moving: the old buffers, and the new ones of the grown size.
         let moving = self.tasks.capacity() * std::mem::size_of::<Task<'a>>() * usize::from(gt > 0)
             + self.fs.capacity() * std::mem::size_of::<FuncState>() * usize::from(gf > 0);
-        let need = self.stacks_bytes() + gt * std::mem::size_of::<Task<'a>>() + gf * std::mem::size_of::<FuncState>() + moving;
+        let need = self.stacks_bytes()
+            + gt * std::mem::size_of::<Task<'a>>()
+            + gf * std::mem::size_of::<FuncState>()
+            + moving;
         if need > self.charged {
             self.charge_more(need)?;
         }
@@ -1100,7 +1386,9 @@ impl<'a, 'h> Compiler<'a, 'h> {
             Task::SetupArgs { args, pos } => self.explist(args, Want::Multi, pos),
             Task::SetupMethod { e, base } => {
                 let o = self.take_reg();
-                let ExprKind::Method(_, name, npos, args) = &e.kind else { return Err(self.err(e.pos, "internal: not a call")) };
+                let ExprKind::Method(_, name, npos, args) = &e.kind else {
+                    return Err(self.err(e.pos, "internal: not a call"));
+                };
                 self.set_freereg(us(base));
                 self.reserve(2, e.pos)?;
                 let k = self.str_const(name.as_bytes(), e.pos)?;
@@ -1166,7 +1454,8 @@ impl<'a, 'h> Compiler<'a, 'h> {
             }
             Task::ConcatNext { parts, i, base, dst, pos, save } => {
                 if let Some(p) = parts.get(i) {
-                    return self.then(Task::ConcatNext { parts, i: i + 1, base, dst, pos, save }, Task::ExprNext(p));
+                    return self
+                        .then(Task::ConcatNext { parts, i: i + 1, base, dst, pos, save }, Task::ExprNext(p));
                 }
                 self.at(pos);
                 if !self.merge_concat(base, parts.len()) {
@@ -1219,7 +1508,8 @@ impl<'a, 'h> Compiler<'a, 'h> {
             }
             Task::TableKeyVal { st, save, kr } => {
                 let val = self.take_rk();
-                if let Some(Field::Named(_, v, pos) | Field::Keyed(Expr { pos, .. }, v)) = st.fields.get(st.i) {
+                if let Some(Field::Named(_, v, pos) | Field::Keyed(Expr { pos, .. }, v)) = st.fields.get(st.i)
+                {
                     self.at(*pos);
                     self.at(field_store_pos(v));
                 }
@@ -1255,7 +1545,9 @@ impl<'a, 'h> Compiler<'a, 'h> {
                 self.emit(Instr::LoadBool { a: dst, v: true });
                 self.restore(save, dst)
             }
-            Task::ConcatL { r, base, dst, pos, save } => self.then(Task::ConcatR { base, dst, pos, save }, Task::ExprNext(r)),
+            Task::ConcatL { r, base, dst, pos, save } => {
+                self.then(Task::ConcatR { base, dst, pos, save }, Task::ExprNext(r))
+            }
             Task::ConcatR { base, dst, pos, save } => {
                 self.at(pos);
                 if !self.merge_concat(base, 2) {
@@ -1594,7 +1886,11 @@ impl<'a, 'h> Compiler<'a, 'h> {
         if !long && let Some(&i) = self.fsr().str_map.get(s) {
             return Ok(i);
         }
-        let r = if long { self.long_const(s, pos)? } else { self.heap.intern(s).map_err(|()| self.err(pos, "not enough memory"))? };
+        let r = if long {
+            self.long_const(s, pos)?
+        } else {
+            self.heap.intern(s).map_err(|()| self.err(pos, "not enough memory"))?
+        };
         let fs = self.fs();
         let i = fs.consts.len() as u32;
         if i >= (1 << 24) {
@@ -1915,7 +2211,9 @@ impl<'a, 'h> Compiler<'a, 'h> {
         crate::diag::compile_work(dup.map_or(self.fsr().labels.len(), |i| i + 1));
         if let Some(l) = dup.and_then(|i| self.fsr().labels.get(i)) {
             let line = l.line;
-            return Err(self.err(pos, format!("label '{name}' already defined on line {line}")).lua_line(report));
+            return Err(self
+                .err(pos, format!("label '{name}' already defined on line {line}"))
+                .lua_line(report));
         }
         let bl_nact = self.fsr().blocks.last().map_or(0, |b| b.nactvar);
         let first_goto = self.fsr().blocks.last().map_or(0, |b| b.first_goto);
@@ -1947,7 +2245,14 @@ impl<'a, 'h> Compiler<'a, 'h> {
         Ok(j)
     }
 
-    fn create_label(&mut self, name: &str, line: u32, at_end: Option<usize>, first_goto: usize, report: Option<u32>) -> CResult<()> {
+    fn create_label(
+        &mut self,
+        name: &str,
+        line: u32,
+        at_end: Option<usize>,
+        first_goto: usize,
+        report: Option<u32>,
+    ) -> CResult<()> {
         let pc = self.pc();
         let nactvar = at_end.unwrap_or(self.fsr().actives.len());
         // Gotos that close from past what a jump's 16-bit field holds: one `Close` at the
@@ -1983,11 +2288,12 @@ impl<'a, 'h> Compiler<'a, 'h> {
             if g.nactvar < nactvar {
                 let var = self.fsr().actives.get(g.nactvar).map(|v| v.name.to_string()).unwrap_or_default();
                 let what = if name == CONTINUE { "continue".to_owned() } else { format!("goto {name}") };
-                return Err(self.err(
-                    Pos { line: g.line, col: 1 },
-                    format!("<{what}> at line {} jumps into the scope of local '{var}'", g.line),
-                )
-                .lua_line(report.unwrap_or(g.line)));
+                return Err(self
+                    .err(
+                        Pos { line: g.line, col: 1 },
+                        format!("<{what}> at line {} jumps into the scope of local '{var}'", g.line),
+                    )
+                    .lua_line(report.unwrap_or(g.line)));
             }
             self.patch_jump(g.pc, pc, g.close);
         }
@@ -2252,10 +2558,14 @@ impl<'a, 'h> Compiler<'a, 'h> {
             }
             let base = self.freereg();
             let rest = exprs.get(..exprs.len() - 1).unwrap_or_default();
-            return self.seq(Task::LocalAfter { s, base, konst: Some(v) }, |c| c.explist(rest, Want::Fixed(names.len() - 1), s.pos));
+            return self.seq(Task::LocalAfter { s, base, konst: Some(v) }, |c| {
+                c.explist(rest, Want::Fixed(names.len() - 1), s.pos)
+            });
         }
         let base = self.freereg();
-        self.seq(Task::LocalAfter { s, base, konst: None }, |c| c.explist(exprs, Want::Fixed(names.len()), s.pos))
+        self.seq(Task::LocalAfter { s, base, konst: None }, |c| {
+            c.explist(exprs, Want::Fixed(names.len()), s.pos)
+        })
     }
 
     fn local_after(&mut self, s: &'a Stat, base: Reg, konst: Option<Value>) -> CResult<()> {
@@ -2327,7 +2637,9 @@ impl<'a, 'h> Compiler<'a, 'h> {
                     _ => return Ok(None),
                 },
                 Step::Un(op) => {
-                    let Some(v) = vals.pop().and_then(|v| crate::ast::fold_un(op, v)) else { return Ok(None) };
+                    let Some(v) = vals.pop().and_then(|v| crate::ast::fold_un(op, v)) else {
+                        return Ok(None);
+                    };
                     vals.push(v);
                 }
                 Step::Bin(op) => {
@@ -2343,7 +2655,8 @@ impl<'a, 'h> Compiler<'a, 'h> {
     /// Refuses an assignment to a const variable, reported at `line` (C Lua's: the token
     /// after the target, S6-FRONT-7).
     fn check_assignable(&self, pos: Pos, line: u32, v: &Option<VarRef>, name: &str) -> CResult<()> {
-        let refuse = || Err(self.err(pos, format!("attempt to assign to const variable '{name}'")).lua_line(line));
+        let refuse =
+            || Err(self.err(pos, format!("attempt to assign to const variable '{name}'")).lua_line(line));
         match v {
             Some(VarRef::Const(_)) | Some(VarRef::Local(_, _, Attrib::Const | Attrib::Close)) => refuse(),
             Some(VarRef::Upval(_)) => {
@@ -2418,7 +2731,6 @@ impl<'a, 'h> Compiler<'a, 'h> {
             _ => Err(self.err(t.pos, "syntax error (cannot assign to this expression)")),
         }
     }
-
 
     /// C Lua's `check_conflict`, when a target has just been read (the last of `places`):
     /// a local or upvalue that an earlier target's table (or key register) is gets copied
@@ -2512,15 +2824,17 @@ impl<'a, 'h> Compiler<'a, 'h> {
             ExprKind::False => Some(self.num_const(Value::Bool(false), key.pos)?),
             // A `<const>` local, or operators on constants, is the constant it folds to, as
             // in C Lua (`t[k]` with `k <const> = 5` is `t[5]`; S5COR-13).
-            ExprKind::Name(_) | ExprKind::Paren(_) | ExprKind::Un(..) | ExprKind::Bin(..) => match self.const_value(key)? {
-                Some(Value::Str(r)) => {
-                    let bytes = self.heap.str_bytes(r).to_vec();
-                    Some(self.str_const(&bytes, key.pos)?)
+            ExprKind::Name(_) | ExprKind::Paren(_) | ExprKind::Un(..) | ExprKind::Bin(..) => {
+                match self.const_value(key)? {
+                    Some(Value::Str(r)) => {
+                        let bytes = self.heap.str_bytes(r).to_vec();
+                        Some(self.str_const(&bytes, key.pos)?)
+                    }
+                    Some(v @ (Value::Int(_) | Value::Bool(_))) => Some(self.num_const(v, key.pos)?),
+                    Some(Value::Num(f)) if !f.is_nan() => Some(self.num_const(Value::Num(f), key.pos)?),
+                    _ => None,
                 }
-                Some(v @ (Value::Int(_) | Value::Bool(_))) => Some(self.num_const(v, key.pos)?),
-                Some(Value::Num(f)) if !f.is_nan() => Some(self.num_const(Value::Num(f), key.pos)?),
-                _ => None,
-            },
+            }
             _ => None,
         };
         if let Some(k) = k
@@ -2720,7 +3034,13 @@ impl<'a, 'h> Compiler<'a, 'h> {
         self.then(Task::GenForEnd { s, base, prep, body_start }, Task::Block { b: body, repeat: false })
     }
 
-    fn func_stat(&mut self, path: &[String], method: Option<&str>, body: &'a FuncBody, pos: Pos) -> CResult<()> {
+    fn func_stat(
+        &mut self,
+        path: &[String],
+        method: Option<&str>,
+        body: &'a FuncBody,
+        pos: Pos,
+    ) -> CResult<()> {
         let Some(first) = path.first() else { return Ok(()) };
         if path.len() == 1 && method.is_none() {
             // A const `x` in `function x() ... end`: C Lua's `funcstat` checks it after the
@@ -2739,7 +3059,9 @@ impl<'a, 'h> Compiler<'a, 'h> {
         // a.b.c[:m]: evaluate a.b, then store the closure under the last name.
         let (last, prefix) = match method {
             Some(m) => (m.to_owned(), path),
-            None => (path.last().cloned().unwrap_or_default(), path.get(..path.len() - 1).unwrap_or_default()),
+            None => {
+                (path.last().cloned().unwrap_or_default(), path.get(..path.len() - 1).unwrap_or_default())
+            }
         };
         let t = self.path_any_reg(prefix, pos)?;
         let k = self.str_const(last.as_bytes(), pos)?;
@@ -2750,7 +3072,9 @@ impl<'a, 'h> Compiler<'a, 'h> {
     /// `expr_any_reg` of `a.b.c` (the path of `function a.b.c.d()`), as a loop: down the
     /// path each level takes its register, then up it each loads its field.
     fn path_any_reg(&mut self, prefix: &[String], pos: Pos) -> CResult<Reg> {
-        let Some((first, rest)) = prefix.split_first() else { return Err(self.err(pos, "internal: empty path")) };
+        let Some((first, rest)) = prefix.split_first() else {
+            return Err(self.err(pos, "internal: empty path"));
+        };
         let mut levels = Vec::with_capacity(rest.len());
         for key in rest.iter().rev() {
             let r = self.alloc_reg(pos)?;
@@ -2828,7 +3152,10 @@ impl<'a, 'h> Compiler<'a, 'h> {
                     Want::Fixed(w) => {
                         let needed = w.saturating_sub(n - 1);
                         if needed != 0 {
-                            return self.then(Task::ExplistAfterMulti { st, needed }, Task::Multi { e, n: needed as Reg });
+                            return self.then(
+                                Task::ExplistAfterMulti { st, needed },
+                                Task::Multi { e, n: needed as Reg },
+                            );
                         }
                     }
                 }
@@ -2884,7 +3211,9 @@ impl<'a, 'h> Compiler<'a, 'h> {
     /// argument count field.
     fn call_setup(&mut self, e: &'a Expr, base: Reg) -> CResult<()> {
         match &e.kind {
-            ExprKind::Call(f, args) => self.seq(Task::SetupArgs { args, pos: e.pos }, |c| c.start(Task::ExprNext(f))),
+            ExprKind::Call(f, args) => {
+                self.seq(Task::SetupArgs { args, pos: e.pos }, |c| c.start(Task::ExprNext(f)))
+            }
             ExprKind::Method(obj, ..) => self.then(Task::SetupMethod { e, base }, Task::ExprAnyReg(obj)),
             _ => Err(self.err(e.pos, "internal: not a call")),
         }
@@ -3043,7 +3372,10 @@ impl<'a, 'h> Compiler<'a, 'h> {
             ExprKind::Index(obj, key) => {
                 // (C Lua reads a field where its key ends.)
                 if self.chains_into(obj, dst) {
-                    return self.then(Task::IndexObj { key, dst, pos: e.end, save }, Task::ExprToReg { e: obj, dst });
+                    return self.then(
+                        Task::IndexObj { key, dst, pos: e.end, save },
+                        Task::ExprToReg { e: obj, dst },
+                    );
                 }
                 return self.then(Task::IndexObj { key, dst, pos: e.end, save }, Task::ExprAnyReg(obj));
             }
@@ -3051,7 +3383,9 @@ impl<'a, 'h> Compiler<'a, 'h> {
                 self.push(Task::CallToReg { dst, save });
                 return self.call(e, Want::Fixed(1));
             }
-            ExprKind::Func(f) => return self.then(Task::FuncToReg { dst, pos: e.pos, save }, Task::Function(f)),
+            ExprKind::Func(f) => {
+                return self.then(Task::FuncToReg { dst, pos: e.pos, save }, Task::Function(f));
+            }
             ExprKind::Table(fields) => return self.table(fields, dst, e.pos, save),
             ExprKind::Concat(parts) => {
                 // In `dst` itself only when it is a temporary (a local may be read by the
@@ -3074,7 +3408,10 @@ impl<'a, 'h> Compiler<'a, 'h> {
             }
             ExprKind::Un(op, inner) => {
                 if self.chains_into(inner, dst) {
-                    return self.then(Task::UnTo { op: *op, dst, pos: e.pos, save }, Task::ExprToReg { e: inner, dst });
+                    return self.then(
+                        Task::UnTo { op: *op, dst, pos: e.pos, save },
+                        Task::ExprToReg { e: inner, dst },
+                    );
                 }
                 return self.then(Task::UnTo { op: *op, dst, pos: e.pos, save }, Task::ExprAnyReg(inner));
             }
@@ -3087,11 +3424,21 @@ impl<'a, 'h> Compiler<'a, 'h> {
     /// temporary `dst` goes to `dst` too: when it is itself one (`not not x`, `-(-x)`,
     /// `t.a.b`), so a chain takes one register, as in C Lua, not one a level.
     fn chains_into(&self, e: &Expr, dst: Reg) -> bool {
-        self.reuse && matches!(e.kind, ExprKind::Un(..) | ExprKind::Index(..)) && us(dst) >= self.fsr().nvarstack()
+        self.reuse
+            && matches!(e.kind, ExprKind::Un(..) | ExprKind::Index(..))
+            && us(dst) >= self.fsr().nvarstack()
     }
 
     /// The parts of an interpolated string from `i` on.
-    fn interp_next(&mut self, parts: &'a [InterpExpr], mut i: usize, base: Reg, dst: Reg, pos: Pos, save: Reg) -> CResult<()> {
+    fn interp_next(
+        &mut self,
+        parts: &'a [InterpExpr],
+        mut i: usize,
+        base: Reg,
+        dst: Reg,
+        pos: Pos,
+        save: Reg,
+    ) -> CResult<()> {
         while let Some(p) = parts.get(i) {
             match p {
                 InterpExpr::Lit(b) => {
@@ -3135,7 +3482,8 @@ impl<'a, 'h> Compiler<'a, 'h> {
         // A final call or `...` is not counted in Lua's array size (`lastlistfield`): the
         // table is made with room for it, sized as C Lua sizes it (`NEWTABLE_MULTRET`).
         let multret = matches!(fields.last(), Some(Field::Pos(e)) if e.kind.is_multi());
-        let hash = nhash.min(crate::bytecode::NEWTABLE_HASH_MAX as usize) as u16 | if multret { crate::bytecode::NEWTABLE_MULTRET } else { 0 };
+        let hash = nhash.min(crate::bytecode::NEWTABLE_HASH_MAX as usize) as u16
+            | if multret { crate::bytecode::NEWTABLE_MULTRET } else { 0 };
         self.emit(Instr::NewTable { a: t, arr: narr.min(u16::MAX as usize) as u16, hash });
         self.table_next(TableSt { fields, i: 0, t, dst, pos, pending: 0, stored: 0, save })
     }
@@ -3191,9 +3539,13 @@ impl<'a, 'h> Compiler<'a, 'h> {
                     self.at(pos);
                     self.emit(Instr::TestSet { a: target, b: lr, k: op == BinOp::Or });
                     let j = self.jump();
-                    return self.then(Task::LogicR { j, target, dst, save }, Task::ExprToReg { e: r, dst: target });
+                    return self
+                        .then(Task::LogicR { j, target, dst, save }, Task::ExprToReg { e: r, dst: target });
                 }
-                self.then(Task::LogicL { op, r, target, dst, pos, save }, Task::ExprToReg { e: fl, dst: target })
+                self.then(
+                    Task::LogicL { op, r, target, dst, pos, save },
+                    Task::ExprToReg { e: fl, dst: target },
+                )
             }
             BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge => {
                 self.push(Task::CmpToReg { dst, save });
@@ -3226,7 +3578,14 @@ impl<'a, 'h> Compiler<'a, 'h> {
         }
     }
 
-    fn spine_next(&mut self, mut spine: Vec<(BinOp, &'a Expr, Pos)>, acc: Reg, dst: Reg, save: Reg, b: Rk) -> CResult<()> {
+    fn spine_next(
+        &mut self,
+        mut spine: Vec<(BinOp, &'a Expr, Pos)>,
+        acc: Reg,
+        dst: Reg,
+        save: Reg,
+        b: Rk,
+    ) -> CResult<()> {
         if let Some((op, r, pos)) = spine.pop() {
             let save2 = self.freereg();
             return self.then(Task::SpineNext { spine, acc, dst, save, b, op, pos, save2 }, Task::ExprRk(r));
@@ -3274,7 +3633,11 @@ impl<'a, 'h> Compiler<'a, 'h> {
                 }
                 return self.then(Task::CondSkip { r, when: false }, Task::CondJump { e: l, when: true });
             }
-            ExprKind::Bin(op @ (BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge), l, r) => {
+            ExprKind::Bin(
+                op @ (BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge),
+                l,
+                r,
+            ) => {
                 return self.compare(*op, l, r, r.end, when);
             }
             _ => {}
@@ -3536,14 +3899,19 @@ pub(crate) fn arith_op(op: BinOp) -> Option<ArithOp> {
 }
 
 pub(crate) fn block_ends_in_jump(b: &Block) -> bool {
-    matches!(b.stats.last().map(|s| &s.kind), Some(StatKind::Return(_) | StatKind::Break | StatKind::Goto(..)))
+    matches!(
+        b.stats.last().map(|s| &s.kind),
+        Some(StatKind::Return(_) | StatKind::Break | StatKind::Goto(..))
+    )
 }
 
 /// Whether `l op r` is just `r` because `l` is a constant: a true constant before `and`,
 /// `nil` or `false` before `or`.
 pub(crate) fn decided_by_constant(op: BinOp, l: &Expr) -> bool {
     match op {
-        BinOp::And => matches!(l.kind, ExprKind::True | ExprKind::Int(_) | ExprKind::Num(_) | ExprKind::Str(_)),
+        BinOp::And => {
+            matches!(l.kind, ExprKind::True | ExprKind::Int(_) | ExprKind::Num(_) | ExprKind::Str(_))
+        }
         BinOp::Or => matches!(l.kind, ExprKind::Nil | ExprKind::False),
         _ => false,
     }

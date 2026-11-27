@@ -31,7 +31,11 @@ fn squeeze(lua: &mut Lua, junk: Value) {
 #[test]
 fn api1_host_made_values_survive_until_the_next_call() {
     for mut lua in states() {
-        lua.exec("junk = setmetatable({}, {__index = function() for i = 1, 300 do local _ = {i} end end})", "=s").unwrap();
+        lua.exec(
+            "junk = setmetatable({}, {__index = function() for i = 1, 300 do local _ = {i} end end})",
+            "=s",
+        )
+        .unwrap();
         let junk = lua.get_global("junk").unwrap();
         // set_global: the name's string is made after `t` was checked.
         let t = lua.create_table().unwrap();
@@ -70,7 +74,10 @@ fn api1_host_made_values_survive_until_the_next_call() {
                 "=check",
             )
             .unwrap();
-        assert_eq!(lua.to_string_lossy(r[0]).as_deref(), Some("a value long enough not to be interned, made by the host"));
+        assert_eq!(
+            lua.to_string_lossy(r[0]).as_deref(),
+            Some("a value long enough not to be interned, made by the host")
+        );
         assert_eq!(lua.to_string_lossy(r[1]).as_deref(), Some("userdata"));
         assert!(matches!(r[2..], [Value::Int(1), Value::Int(1), Value::Int(5)]), "{r:?}");
         // Values held for the host go at the next call: memory returns to its baseline.
@@ -204,8 +211,7 @@ fn api_reentrancy_probes() {
             lua.exec(src, "=inner")
         })
         .unwrap();
-        lua.register("callf", |lua, a| lua.call(a[0], &[]))
-            .unwrap();
+        lua.register("callf", |lua, a| lua.call(a[0], &[])).unwrap();
         let r = lua.exec(
             "local t = {} for i = 1, 100 do t[i] = {i} end gc() local s = 0 for i = 1, 100 do s = s + t[i][1] end
              local a, b = run('return 1, 2')
@@ -215,11 +221,17 @@ fn api_reentrancy_probes() {
             "=t",
         );
         let r = r.unwrap();
-        assert!(matches!(r[..4], [Value::Int(5050), Value::Int(1), Value::Int(2), Value::Bool(false)]), "{r:?}");
+        assert!(
+            matches!(r[..4], [Value::Int(5050), Value::Int(1), Value::Int(2), Value::Bool(false)]),
+            "{r:?}"
+        );
         assert!(lua.to_string_lossy(r[4]).unwrap().contains("yield"), "{:?}", lua.to_string_lossy(r[4]));
         // A yield from the host's own call, outside any coroutine.
         let r = lua.exec("coroutine.yield(1)", "=t");
-        assert!(matches!(&r, Err(Error::Runtime { message, .. }) if message.contains("outside a coroutine")), "{r:?}");
+        assert!(
+            matches!(&r, Err(Error::Runtime { message, .. }) if message.contains("outside a coroutine")),
+            "{r:?}"
+        );
         assert!(lua.exec("return 1", "=t").is_ok());
     }
 }
@@ -230,7 +242,11 @@ fn api_reentrancy_probes() {
 #[test]
 fn api1_from_data_survives_nested_calls_in_a_host_function() {
     for mut lua in states() {
-        lua.exec("function churn() local t = {} for i = 1, 2000 do t[i] = {i} end collectgarbage() end", "=s").unwrap();
+        lua.exec(
+            "function churn() local t = {} for i = 1, 2000 do t[i] = {i} end collectgarbage() end",
+            "=s",
+        )
+        .unwrap();
         lua.register("dispatch", |lua, _| {
             let s = lua.from_data(&Data::Table(vec![(Data::Str("k".into()), Data::Int(7))]))?;
             let churn = lua.get_global("churn")?;
@@ -292,7 +308,8 @@ fn api10_userdata_owned_size_is_charged() {
         lua.collect_garbage().unwrap();
         assert!(lua.memory_used() < base + 10_000, "{} vs {base}", lua.memory_used());
         // Asked for in a loop under pcall: stopped by the memory limit, uncatchably.
-        let r = lua.exec("local t = {} while true do pcall(function() t[#t + 1] = buffer(1000000) end) end", "=t");
+        let r = lua
+            .exec("local t = {} while true do pcall(function() t[#t + 1] = buffer(1000000) end) end", "=t");
         assert!(matches!(r, Err(Error::Limit(remedy_lua::LimitKind::Memory))), "{r:?}");
         assert!(lua.memory_used() <= 8 << 20);
     }

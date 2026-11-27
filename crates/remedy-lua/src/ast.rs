@@ -221,8 +221,18 @@ pub(crate) enum StatKind {
     NumFor(Box<ForNum>),
     /// `line`: where the token after `in` ends, the line C Lua gives the iterator's call;
     /// `do_line`: the line of its `do` (the loop's preparation).
-    GenFor { names: Vec<LocalName>, exprs: Vec<Expr>, body: Block, line: u32, do_line: u32 },
-    Function { path: Vec<String>, method: Option<String>, body: Box<FuncBody> },
+    GenFor {
+        names: Vec<LocalName>,
+        exprs: Vec<Expr>,
+        body: Block,
+        line: u32,
+        do_line: u32,
+    },
+    Function {
+        path: Vec<String>,
+        method: Option<String>,
+        body: Box<FuncBody>,
+    },
     LocalFunction(LocalName, Box<FuncBody>),
     Return(Vec<Expr>),
     Break,
@@ -256,7 +266,11 @@ pub(crate) enum Type {
     Optional(Box<Type>),
     Union(Vec<Type>),
     /// `(a, b) -> (c, d)`; `...` last for variadic.
-    Func { params: Vec<Type>, ret: Vec<Type>, vararg: bool },
+    Func {
+        params: Vec<Type>,
+        ret: Vec<Type>,
+        vararg: bool,
+    },
     /// `{T}`.
     Array(Box<Type>),
     /// `{[K]: V}`.
@@ -446,7 +460,9 @@ impl Dropper {
                     push_expr(c, st);
                     take_block(&mut b, st);
                 }),
-                Node::Names(v) => list(v, &mut budget, stack, Node::Names, |mut n, st| take_ty(n.ty.take(), st)),
+                Node::Names(v) => {
+                    list(v, &mut budget, stack, Node::Names, |mut n, st| take_ty(n.ty.take(), st))
+                }
                 Node::Type(mut t) => {
                     budget -= 1;
                     take_type(&mut t, stack);
@@ -468,7 +484,13 @@ pub(crate) fn shed<T>(v: &mut Vec<T>) {
 
 /// Takes apart up to `budget` elements of a list from its end (at most a stretch, then it
 /// gives back what it no longer uses), and puts what is left of it back on the stack.
-fn list<T>(mut v: Vec<T>, budget: &mut usize, stack: &mut Vec<Node>, node: fn(Vec<T>) -> Node, mut each: impl FnMut(T, &mut Vec<Node>)) {
+fn list<T>(
+    mut v: Vec<T>,
+    budget: &mut usize,
+    stack: &mut Vec<Node>,
+    node: fn(Vec<T>) -> Node,
+    mut each: impl FnMut(T, &mut Vec<Node>),
+) {
     let k = (*budget).min(4096).min(v.len()).max(1);
     *budget = budget.saturating_sub(k);
     for _ in 0..k {
@@ -597,7 +619,8 @@ fn take_expr(k: &mut ExprKind, stack: &mut Vec<Node>) {
 fn take_stat(k: &mut StatKind, stack: &mut Vec<Node>) {
     fn ex(e: &mut Expr, stack: &mut Vec<Node>) {
         if !expr_is_leaf(&e.kind) {
-            stack.push(Node::Expr(std::mem::replace(e, Expr { kind: ExprKind::Nil, pos: e.pos, end: e.end })));
+            stack
+                .push(Node::Expr(std::mem::replace(e, Expr { kind: ExprKind::Nil, pos: e.pos, end: e.end })));
         }
     }
     fn exs(v: &mut Vec<Expr>, stack: &mut Vec<Node>) {
@@ -766,7 +789,9 @@ pub(crate) fn fold_bin(op: BinOp, a: crate::Value, b: crate::Value) -> Option<cr
             }));
         }
         BinOp::Div | BinOp::IDiv | BinOp::Mod if y == 0.0 => return None,
-        BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::IDiv | BinOp::Mod if matches!((a, b), (Int(_), Int(_))) => {
+        BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::IDiv | BinOp::Mod
+            if matches!((a, b), (Int(_), Int(_))) =>
+        {
             let (Int(i), Int(j)) = (a, b) else { return None };
             return Some(Int(match op {
                 BinOp::Add => i.wrapping_add(j),
@@ -985,7 +1010,12 @@ fn part_bytes<'a>(p: Part<'a>, todo: &mut Vec<Part<'a>>) -> usize {
                 todo.push(Part::Expr(f));
                 boxed + s.capacity() + exprs(args, todo)
             }
-            ExprKind::Nil | ExprKind::True | ExprKind::False | ExprKind::Dots | ExprKind::Int(_) | ExprKind::Num(_) => 0,
+            ExprKind::Nil
+            | ExprKind::True
+            | ExprKind::False
+            | ExprKind::Dots
+            | ExprKind::Int(_)
+            | ExprKind::Num(_) => 0,
         },
         Part::Block(b) => {
             todo.extend(b.stats.iter().map(Part::Stat));
@@ -1103,7 +1133,10 @@ fn stat_bytes<'a>(
         }
         StatKind::Function { path, method, body } => {
             todo.push(Part::Func(body));
-            cap(path) + path.iter().map(String::capacity).sum::<usize>() + method.as_ref().map_or(0, String::capacity) + std::mem::size_of::<FuncBody>()
+            cap(path)
+                + path.iter().map(String::capacity).sum::<usize>()
+                + method.as_ref().map_or(0, String::capacity)
+                + std::mem::size_of::<FuncBody>()
         }
         StatKind::LocalFunction(n, body) => {
             todo.push(Part::Name(n));

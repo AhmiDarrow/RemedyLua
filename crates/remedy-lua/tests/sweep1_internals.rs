@@ -6,9 +6,7 @@
 
 use super::common;
 
-
-
-use remedy_lua::{Error, LimitKind, Libs, Limits, Lua, Value};
+use remedy_lua::{Error, Libs, LimitKind, Limits, Lua, Value};
 
 /// RemedyLua's outcome must equal C Lua's (when the oracle is built); returns RemedyLua's.
 fn same(prog: &str) -> Result<String, String> {
@@ -414,13 +412,22 @@ fn gc_program(seed: u64) -> String {
             2 => format!("if N[{i}] then rawset(N[{i}], 'r', {{N[{j}], 'x' .. {i}}}) end"),
             3 => format!("if N[{i}] then setmetatable(N[{i}], {{__index = N[{j}], tag = 't' .. {j}}}) end"),
             4 => format!("N[{i}] = nil"),
-            5 => format!("do local up = N[{j}] or {{v = -{j}}}; F[{i}] = function(x) if x then up = x end return up end end"),
+            5 => format!(
+                "do local up = N[{j}] or {{v = -{j}}}; F[{i}] = function(x) if x then up = x end return up end end"
+            ),
             6 => format!("if F[{i}] then F[{i}](N[{j}] or {{v = {j} * 100}}) end"),
             7 => format!("W[N[{i}] or {i}] = N[{j}] or 'w{j}'"),
             8 => format!("V['k{i}'] = N[{j}] or ('wv' .. {j})"), // array-part strings: INT-4
-            9 => format!("C[{i}] = coroutine.wrap(function(a) local mine = {{a}}; while true do local nxt = {{mine, coroutine.yield(mine)}} mine = nxt end end)"),
-            10 => format!("if C[{i}] then local ok, x = pcall(C[{i}], N[{j}] or {j}) if ok then K[{i}] = x end end"),
-            11 => format!("do local t = {{}} for k = 1, {} do t[k] = {{k, tostring(k)}} end N[{i}] = t end", r.below(40) + 1),
+            9 => format!(
+                "C[{i}] = coroutine.wrap(function(a) local mine = {{a}}; while true do local nxt = {{mine, coroutine.yield(mine)}} mine = nxt end end)"
+            ),
+            10 => format!(
+                "if C[{i}] then local ok, x = pcall(C[{i}], N[{j}] or {j}) if ok then K[{i}] = x end end"
+            ),
+            11 => format!(
+                "do local t = {{}} for k = 1, {} do t[k] = {{k, tostring(k)}} end N[{i}] = t end",
+                r.below(40) + 1
+            ),
             12 => format!("for k, v in pairs(N) do if k % {} == 0 then N[k] = nil end end", r.below(5) + 2),
             13 => format!("S[{i}] = table.concat({{'a', {i}, 'b', {j}}})"),
             14 => format!("collectgarbage()"),
@@ -550,7 +557,11 @@ return acc
             "=t",
         );
         match r {
-            Ok(v) => assert!(matches!(v[0], Value::Int(_)), "cap {cap}: {}", lua.to_string_lossy(v[0]).unwrap_or_default()),
+            Ok(v) => assert!(
+                matches!(v[0], Value::Int(_)),
+                "cap {cap}: {}",
+                lua.to_string_lossy(v[0]).unwrap_or_default()
+            ),
             Err(Error::Limit(LimitKind::Memory)) => {}
             Err(e) => panic!("cap {cap}: {e}"),
         }
@@ -862,7 +873,9 @@ fn co_program(seed: u64) -> String {
         }
         let s = match r.below(9) {
             0 => format!("L('p{me}', pcall(function() {inner} {inner2} end))"),
-            1 => format!("L('x{me}', xpcall(function() {inner} {inner2} end, function(m) L('h{me}') return 'H' .. tostring(type(m) == 'table' and m.code or m) end))"),
+            1 => format!(
+                "L('x{me}', xpcall(function() {inner} {inner2} end, function(m) L('h{me}') return 'H' .. tostring(type(m) == 'table' and m.code or m) end))"
+            ),
             2 => format!(
                 "do local co = coroutine.create(function() {inner} {inner2} end) \
                  for i = 1, 4 do L('R{me}', coroutine.resume(co, i)) end L('S{me}=' .. coroutine.status(co)) \
@@ -873,10 +886,18 @@ fn co_program(seed: u64) -> String {
                  L('W{me}', pcall(w)) L('W{me}b', pcall(function() return w() end)) end"
             ),
             4 => format!("do local z <close> = T('c{me}') {inner} {inner2} end"),
-            5 => format!("pcall(table.sort, {{3, 1, 2}}, function(a, b) {inner} return a < b end) L('so{me}')"),
-            6 => format!("for i = 1, 2 do local q <close> = T('f{me}' .. i) if i == 2 then break end {inner} end"),
-            7 => format!("L('g{me}', select(2, pcall(string.gsub, 'ab', '%w', function(c) {inner} return c end)))"),
-            _ => format!("do local ok = pcall(function() local z <close> = T('pc{me}') {inner} end) L('pc{me}', ok) {inner2} end"),
+            5 => {
+                format!("pcall(table.sort, {{3, 1, 2}}, function(a, b) {inner} return a < b end) L('so{me}')")
+            }
+            6 => format!(
+                "for i = 1, 2 do local q <close> = T('f{me}' .. i) if i == 2 then break end {inner} end"
+            ),
+            7 => format!(
+                "L('g{me}', select(2, pcall(string.gsub, 'ab', '%w', function(c) {inner} return c end)))"
+            ),
+            _ => format!(
+                "do local ok = pcall(function() local z <close> = T('pc{me}') {inner} end) L('pc{me}', ok) {inner2} end"
+            ),
         };
         out.push_str(&s);
     }
@@ -1320,7 +1341,10 @@ return #t
         lua.collect_garbage().unwrap();
     }
     let after = lua.memory_used();
-    assert!(after <= base + (64 << 10), "memory used grew from {base} to {after} bytes over 15 identical rounds");
+    assert!(
+        after <= base + (64 << 10),
+        "memory used grew from {base} to {after} bytes over 15 identical rounds"
+    );
 }
 
 /// INT-19 (minor): "cannot resume dead coroutine" from a `wrap` function called directly
@@ -1373,7 +1397,10 @@ return table.concat(log, "|")
         "closed:b2|false:b2|attempt to yield across a C-call boundary|5"
     );
     // A limit raised under a host function is not catchable either.
-    assert_eq!(lua.exec("pcall(callback, function() while true do end end)", "=t"), Err(Error::Limit(LimitKind::Fuel)));
+    assert_eq!(
+        lua.exec("pcall(callback, function() while true do end end)", "=t"),
+        Err(Error::Limit(LimitKind::Fuel))
+    );
     assert_eq!(lua.exec("return 1", "=t").unwrap(), vec![Value::Int(1)]);
 }
 

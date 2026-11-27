@@ -62,7 +62,9 @@ fn same_after_format(src: &str, name: &str) {
     let run = |s: &str| {
         let mut lua = Lua::new(Limits::default(), Libs::ALL);
         match lua.exec(s, &format!("={name}")) {
-            Ok(v) => v.iter().map(|x| format!("{:?}", lua.to_string_lossy(*x))).collect::<Vec<_>>().join(", "),
+            Ok(v) => {
+                v.iter().map(|x| format!("{:?}", lua.to_string_lossy(*x))).collect::<Vec<_>>().join(", ")
+            }
             Err(e) => format!("error: {e}"),
         }
     };
@@ -115,8 +117,9 @@ fn s5c_front_2_scan_work_reads_the_interrupt() {
     // A short parse, a long compile: each use of the first local compares its long name
     // with 100,000 others of the same length.
     let name = |i: usize| format!("{}{i:07}", "v".repeat(64));
-    let mut src: String =
-        (0..500).map(|j| format!("local {}\n", (0..200).map(|i| name(j * 200 + i)).collect::<Vec<_>>().join(","))).collect();
+    let mut src: String = (0..500)
+        .map(|j| format!("local {}\n", (0..200).map(|i| name(j * 200 + i)).collect::<Vec<_>>().join(",")))
+        .collect();
     src += &format!("x = {}\n", name(0)).repeat(5000);
     for at in [400, 700] {
         let mut lua = Lua::new(Limits::unmetered().memory(1 << 30), Libs::NONE);
@@ -175,7 +178,12 @@ fn s5c_front_3_check_and_format_parse_within_memory() {
     // reports the one real type error in it, not a memory or work limit.
     let src = format!("local x: {}number{} = 1", "{".repeat(n), "}".repeat(n));
     let d = remedy_lua::check(src.as_bytes(), "t.rlua");
-    assert!(d.len() == 1 && d[0].message.starts_with("local 'x': expected {{{") && d[0].message.ends_with("got integer"), "{d:?}");
+    assert!(
+        d.len() == 1
+            && d[0].message.starts_with("local 'x': expected {{{")
+            && d[0].message.ends_with("got integer"),
+        "{d:?}"
+    );
     assert!(remedy_lua::format(&src, "t.rlua").is_ok());
 }
 
@@ -199,7 +207,10 @@ fn s5c_front_4_format_keeps_what_strings_hold() {
         same_after_format(src, name);
     }
     // Re-indenting still happens outside strings.
-    assert_eq!(remedy_lua::format("if x then\ny = `a\n  b`\nend", "t.rlua").unwrap(), "if x then\n    y = `a\n  b`\nend");
+    assert_eq!(
+        remedy_lua::format("if x then\ny = `a\n  b`\nend", "t.rlua").unwrap(),
+        "if x then\n    y = `a\n  b`\nend"
+    );
 }
 
 /// The message `load` gives for `src` (chunk `=t`), in RemedyLua (inside a call and from
@@ -307,13 +318,17 @@ fn s5c_front_8_binary_chunk_message_names_the_chunk() {
 #[test]
 fn s5c_front_9_string_bytes_count_against_the_parse() {
     for (mb, fits) in [(15, false), (4, true)] {
-        let mut lua = Lua::new(Limits::default().fuel(1 << 30).memory(32 << 20).string_len(64 << 20), Libs::ALL);
+        let mut lua =
+            Lua::new(Limits::default().fuel(1 << 30).memory(32 << 20).string_len(64 << 20), Libs::ALL);
         let src = format!("return [[{}]]", "x".repeat(mb << 20));
         let s = lua.create_string(src.as_bytes()).unwrap();
         lua.set_global("src", s).unwrap();
         let r = lua.exec("local f = assert(load(src)) return #f()", "=c");
         if fits {
-            assert!(matches!(r.as_deref(), Ok([remedy_lua::Value::Int(n)]) if *n == (mb << 20) as i64), "{r:?}");
+            assert!(
+                matches!(r.as_deref(), Ok([remedy_lua::Value::Int(n)]) if *n == (mb << 20) as i64),
+                "{r:?}"
+            );
         } else {
             assert!(matches!(r, Err(Error::Limit(LimitKind::Memory))), "{r:?}");
         }
@@ -325,7 +340,11 @@ fn s5c_front_9_string_bytes_count_against_the_parse() {
 /// as written; C Lua's message has each (`\r\n`, a lone `\r`) as one `\n`.
 #[test]
 fn s5c_front_10_long_string_near_text_has_lua_line_breaks() {
-    same_load_errors_as_c(&["x = [[e]] [[a\r\nb\rc\n\rd]]", "local t = { [=[x]=] [==[\r\r\n\r]==] }", "x = [[\r\na\r\n]] [[\r\nb\r\n]]"]);
+    same_load_errors_as_c(&[
+        "x = [[e]] [[a\r\nb\rc\n\rd]]",
+        "local t = { [=[x]=] [==[\r\r\n\r]==] }",
+        "x = [[\r\na\r\n]] [[\r\nb\r\n]]",
+    ]);
 }
 
 /// S5C-FRONT-11 (medium): `format` trimmed lines with `str::trim`, which also removes a
@@ -349,7 +368,9 @@ fn s5c_front_11_format_keeps_lone_carriage_returns() {
 fn s5c_front_12_huge_load_stops_promptly_wherever_interrupted() {
     let n = 300_000;
     let src: String = (0..n / 200)
-        .map(|j| format!("local {}\n", (0..200).map(|i| format!("v{}", j * 200 + i)).collect::<Vec<_>>().join(",")))
+        .map(|j| {
+            format!("local {}\n", (0..200).map(|i| format!("v{}", j * 200 + i)).collect::<Vec<_>>().join(","))
+        })
         .collect();
     // How long the whole load takes, to spread the interrupts over it.
     let full = {

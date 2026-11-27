@@ -7,11 +7,11 @@ use std::time::Instant;
 use remedy_lua::{Libs, Limits, Lua};
 
 const BENCHES: &[(&str, &str)] = &[
-    ("fib(27)", "local function fib(n) if n < 2 then return n end return fib(n-1) + fib(n-2) end return fib(27)"),
     (
-        "loop sum 10M",
-        "local s = 0 for i = 1, 10000000 do s = s + i % 7 end return s",
+        "fib(27)",
+        "local function fib(n) if n < 2 then return n end return fib(n-1) + fib(n-2) end return fib(27)",
     ),
+    ("loop sum 10M", "local s = 0 for i = 1, 10000000 do s = s + i % 7 end return s"),
     (
         "table churn",
         "local n = 0 for i = 1, 200000 do local t = {i, i + 1, x = i, y = 'a'} t[#t + 1] = t.x n = n + #t end return n",
@@ -24,10 +24,7 @@ const BENCHES: &[(&str, &str)] = &[
         "string building",
         "local parts = {} for i = 1, 200000 do parts[#parts + 1] = tostring(i) .. ',' end local s = table.concat(parts) return #s",
     ),
-    (
-        "string concat ..",
-        "local s = '' for i = 1, 20000 do s = s .. 'x' end return #s",
-    ),
+    ("string concat ..", "local s = '' for i = 1, 20000 do s = s .. 'x' end return #s"),
     (
         "method calls",
         "local P = {} P.__index = P function P.new(x) return setmetatable({x = x}, P) end function P:get() return self.x end function P:add(n) self.x = self.x + n end local p = P.new(0) for i = 1, 2000000 do p:add(1) end return p:get()",
@@ -71,7 +68,11 @@ fn main() {
             ours_t.as_secs_f64() * 1000.0,
             c_t.map_or("-".into(), |c| format!("{:.1}", c.as_secs_f64() * 1000.0)),
             ratio.map_or("-".into(), |r| format!("{r:.2}x")),
-            if !c_v.contains(ours_v.trim_end_matches(".0")) { format!("(results differ: {ours_v} vs {c_v})") } else { String::new() }
+            if !c_v.contains(ours_v.trim_end_matches(".0")) {
+                format!("(results differ: {ours_v} vs {c_v})")
+            } else {
+                String::new()
+            }
         );
     }
 }

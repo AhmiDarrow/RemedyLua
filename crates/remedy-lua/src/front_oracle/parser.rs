@@ -136,7 +136,11 @@ impl<'a> Parser<'a> {
         // About the token; Lua's message gives the line where it ends.
         let end = self.tok_end();
         // A NUL byte is token 0 in C Lua, which its message leaves out.
-        let text = if matches!(self.tok(), Tok::Other(0)) { msg.to_owned() } else { format!("{msg} near {}", self.near()) };
+        let text = if matches!(self.tok(), Tok::Other(0)) {
+            msg.to_owned()
+        } else {
+            format!("{msg} near {}", self.near())
+        };
         Diagnostic::error(self.chunk, self.pos(), text).to(end).lua_line(end.line)
     }
 
@@ -211,7 +215,8 @@ impl<'a> Parser<'a> {
     fn ret_stat(&mut self) -> PResult<Stat> {
         let pos = self.pos();
         self.advance();
-        let exprs = if self.block_follow(true) || self.check(&Tok::Semi) { Vec::new() } else { self.exprlist()? };
+        let exprs =
+            if self.block_follow(true) || self.check(&Tok::Semi) { Vec::new() } else { self.exprlist()? };
         self.accept(&Tok::Semi);
         Ok(Stat { kind: StatKind::Return(exprs), pos })
     }
@@ -240,9 +245,8 @@ impl<'a> Parser<'a> {
                 );
                 (!continues_expr).then_some("continue")
             }
-            "type" => {
-                (matches!(self.tok_at(1), Tok::Name(_)) && matches!(self.tok_at(2), Tok::Assign)).then_some("type")
-            }
+            "type" => (matches!(self.tok_at(1), Tok::Name(_)) && matches!(self.tok_at(2), Tok::Assign))
+                .then_some("type"),
             _ => None,
         }
     }
@@ -297,7 +301,10 @@ impl<'a> Parser<'a> {
                     let name = self.name()?;
                     let at = self.pos();
                     let body = self.func_body(false, at)?;
-                    StatKind::LocalFunction(LocalName { name, attrib: Attrib::None, ty: None, pos: npos }, Box::new(body))
+                    StatKind::LocalFunction(
+                        LocalName { name, attrib: Attrib::None, ty: None, pos: npos },
+                        Box::new(body),
+                    )
                 } else {
                     self.local_stat()?
                 }
@@ -387,7 +394,11 @@ impl<'a> Parser<'a> {
             names.push(LocalName { name: n, attrib: Attrib::None, ty, pos });
         }
         if !self.check(&Tok::In) {
-            return Err(self.error_near(if names.len() > 1 { "'in' expected" } else { "'=' or 'in' expected" }));
+            return Err(self.error_near(if names.len() > 1 {
+                "'in' expected"
+            } else {
+                "'=' or 'in' expected"
+            }));
         }
         self.advance();
         let line = self.tok_end().line;
@@ -462,7 +473,11 @@ impl<'a> Parser<'a> {
         }
         if let Tok::OpAssign(op) = *self.tok() {
             if !matches!(e.kind, ExprKind::Name(_) | ExprKind::Index(..)) {
-                return Err(Diagnostic::error(self.chunk, e.pos, "syntax error (cannot assign to this expression)"));
+                return Err(Diagnostic::error(
+                    self.chunk,
+                    e.pos,
+                    "syntax error (cannot assign to this expression)",
+                ));
             }
             self.advance();
             let v = self.expr()?;
@@ -675,7 +690,11 @@ impl<'a> Parser<'a> {
                     let n = self.name()?;
                     let pos = self.pos();
                     let args = self.args()?;
-                    e = Expr { kind: ExprKind::Method(Box::new(e), n, npos, args), pos, end: self.last_end() };
+                    e = Expr {
+                        kind: ExprKind::Method(Box::new(e), n, npos, args),
+                        pos,
+                        end: self.last_end(),
+                    };
                 }
                 Tok::LParen | Tok::Str(_) | Tok::LBrace => {
                     let pos = self.pos();
@@ -951,7 +970,9 @@ fn fold_unary(op: UnOp, e: Expr, pos: Pos) -> Expr {
 /// Folds arithmetic on numeric constants as Lua's `constfolding` does (`ast::fold_bin`).
 fn fold_binary(op: BinOp, l: Expr, r: Expr, pos: Pos) -> Expr {
     let end = r.end;
-    let num = |e: &ExprKind| matches!(e, ExprKind::Int(_) | ExprKind::Num(_)).then(|| crate::ast::literal_value(e)).flatten();
+    let num = |e: &ExprKind| {
+        matches!(e, ExprKind::Int(_) | ExprKind::Num(_)).then(|| crate::ast::literal_value(e)).flatten()
+    };
     if let (Some(a), Some(b)) = (num(&l.kind), num(&r.kind))
         && let Some(kind) = crate::ast::fold_bin(op, a, b).and_then(crate::ast::literal_kind)
     {

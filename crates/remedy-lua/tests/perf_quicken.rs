@@ -19,6 +19,10 @@ fn self_reads_as_c() {
         "local co = coroutine.wrap(function() local function f(n) coroutine.yield(n) if n > 0 then return f(n - 1) end end f(2) end)\nreturn co(), co(), co()",
         "local function f() local function g() return f end return g() end\nreturn f() == f",
     ] {
-        assert_eq!(remedy(program, 10_000_000), oracle(program, 10_000_000), "differs from C Lua:\n{program}");
+        assert_eq!(
+            remedy(program, 10_000_000),
+            oracle(program, 10_000_000),
+            "differs from C Lua:\n{program}"
+        );
     }
 }

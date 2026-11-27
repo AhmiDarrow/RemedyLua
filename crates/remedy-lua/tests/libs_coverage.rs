@@ -192,7 +192,11 @@ fn getenv_is_opt_in_and_reads_only_the_hosts_map() {
     assert!(std::env::var_os("PATH").is_some());
     let r = lua.exec("return os.getenv('PATH'), os.time, os.setlocale, type(os.getenv)", "=t").unwrap();
     assert_eq!(r[0], remedy_lua::Value::Nil, "the process environment leaked");
-    assert_eq!((r[1], r[2]), (remedy_lua::Value::Nil, remedy_lua::Value::Nil), "ENV alone opens only os.getenv");
+    assert_eq!(
+        (r[1], r[2]),
+        (remedy_lua::Value::Nil, remedy_lua::Value::Nil),
+        "ENV alone opens only os.getenv"
+    );
     assert_eq!(common::show(&lua, r[3]), "function");
     lua.set_env("K", Some(b"v\0w"));
     let r = lua.exec("return os.getenv('K')", "=t").unwrap();
@@ -211,7 +215,10 @@ fn getenv_is_opt_in_and_reads_only_the_hosts_map() {
 fn getenv_is_metered() {
     use remedy_lua::Libs;
     let run = |seed: u64, fast: bool, src: &str| {
-        let mut lua = remedy_lua::Lua::new(remedy_lua::Limits::default().fuel(FUEL).hash_seed(seed), Libs::ALL | Libs::ENV);
+        let mut lua = remedy_lua::Lua::new(
+            remedy_lua::Limits::default().fuel(FUEL).hash_seed(seed),
+            Libs::ALL | Libs::ENV,
+        );
         lua.set_fast_loop(fast);
         lua.set_env("BIG", Some(&vec![b'x'; 1 << 20]));
         lua.set_env("A", Some(b"1"));
@@ -246,15 +253,18 @@ fn getenv_is_metered() {
 /// two temporary files (removed after). Returns both outcomes. The prefixes are one line,
 /// so positions in messages agree.
 fn io_both(program: &str) -> (Result<String, String>, Result<String, String>) {
-    use remedy_lua::{Libs, Limits, Lua};
     use common::MemoryFiles;
+    use remedy_lua::{Libs, Limits, Lua};
     let ours_src = format!(
         "local NAME, NAME2 = '/tmp/remedylua_io_a', '/tmp/remedylua_io_b' local function body() {program}\nend return body()"
     );
     let mut runs = Vec::new();
     for fast in [true, false] {
         let fs = MemoryFiles::new();
-        let mut lua = Lua::new(Limits::default().fuel(FUEL).hash_seed(common::TEST_SEED), common::ALL_OPT_IN | Libs::IO);
+        let mut lua = Lua::new(
+            Limits::default().fuel(FUEL).hash_seed(common::TEST_SEED),
+            common::ALL_OPT_IN | Libs::IO,
+        );
         lua.set_fast_loop(fast);
         let opener = fs.clone();
         lua.set_file_opener(Some(move |n: &str, m: &str| opener.open(n, m)));
@@ -282,10 +292,22 @@ fn io_matches_c_lua() {
     let (ol, cl): (Vec<_>, Vec<_>) = (ours.lines().collect(), c.lines().collect());
     // The error code is the C library's: Windows' sets none for a read from a file opened
     // to write, and calls an empty name an invalid argument.
-    let errno = |l: &&str| cfg!(windows) && ["read from write-only =>", "io.output missing =>"].iter().any(|p| l.starts_with(p));
-    let diffs: Vec<String> =
-        ol.iter().zip(&cl).filter(|(a, b)| a != b && !errno(a)).map(|(a, b)| format!("ours: {a}\n   C: {b}")).collect();
-    assert!(diffs.is_empty() && ol.len() == cl.len(), "{} of {} differ:\n{}", diffs.len(), ol.len(), diffs.join("\n"));
+    let errno = |l: &&str| {
+        cfg!(windows) && ["read from write-only =>", "io.output missing =>"].iter().any(|p| l.starts_with(p))
+    };
+    let diffs: Vec<String> = ol
+        .iter()
+        .zip(&cl)
+        .filter(|(a, b)| a != b && !errno(a))
+        .map(|(a, b)| format!("ours: {a}\n   C: {b}"))
+        .collect();
+    assert!(
+        diffs.is_empty() && ol.len() == cl.len(),
+        "{} of {} differ:\n{}",
+        diffs.len(),
+        ol.len(),
+        diffs.join("\n")
+    );
 }
 
 /// `Libs::IO` is off unless a host opts in; with it and no opener, nothing opens; the
@@ -317,8 +339,8 @@ fn io_is_opt_in_and_reaches_only_the_hosts_streams() {
 /// full disk.
 #[test]
 fn io_uses_the_hosts_streams_and_files() {
-    use remedy_lua::{IoError, Libs, Limits, Lua, Stream};
     use common::MemoryFiles;
+    use remedy_lua::{IoError, Libs, Limits, Lua, Stream};
     use std::sync::{Arc, Mutex};
     struct Shared(Arc<Mutex<Vec<u8>>>);
     impl Stream for Shared {
@@ -361,8 +383,8 @@ fn io_uses_the_hosts_streams_and_files() {
 /// are cut, and fuel is the same across seeds and with the fast loop on and off.
 #[test]
 fn io_is_metered() {
-    use remedy_lua::{Error, IoError, LimitKind, Libs, Limits, Lua, Stream};
     use common::MemoryFiles;
+    use remedy_lua::{Error, IoError, Libs, LimitKind, Limits, Lua, Stream};
     struct Endless;
     impl Stream for Endless {
         fn read(&mut self, buf: &mut [u8]) -> Result<usize, IoError> {
@@ -392,14 +414,28 @@ fn io_is_metered() {
     assert!(*fuels.first().unwrap() >= 2 * (4 << 20) / 32, "{fuels:?}");
     // Past the memory limit, and past `string_len`.
     let mut lua = state(Limits::default().memory(2 << 20), 1, true);
-    assert!(matches!(lua.exec("return io.open('big'):read('a')", "=t"), Err(Error::Limit(LimitKind::Memory))));
+    assert!(matches!(
+        lua.exec("return io.open('big'):read('a')", "=t"),
+        Err(Error::Limit(LimitKind::Memory))
+    ));
     let mut lua = state(Limits::default().string_len(1 << 20), 1, true);
-    assert!(matches!(lua.exec("return io.open('big'):read('a')", "=t"), Err(Error::Limit(LimitKind::Memory))));
+    assert!(matches!(
+        lua.exec("return io.open('big'):read('a')", "=t"),
+        Err(Error::Limit(LimitKind::Memory))
+    ));
     // An endless stream: `a`, a line, a huge count.
-    for src in ["return io.read('a')", "return io.read('l')", "return io.read(1 << 40)", "for l in io.lines(nil, 100) do end"] {
+    for src in [
+        "return io.read('a')",
+        "return io.read('l')",
+        "return io.read(1 << 40)",
+        "for l in io.lines(nil, 100) do end",
+    ] {
         let mut lua = state(Limits::default().fuel(200_000), 1, true);
         let t = std::time::Instant::now();
-        assert!(matches!(lua.exec(src, "=t"), Err(Error::Limit(LimitKind::Fuel | LimitKind::Memory))), "{src}");
+        assert!(
+            matches!(lua.exec(src, "=t"), Err(Error::Limit(LimitKind::Fuel | LimitKind::Memory))),
+            "{src}"
+        );
         assert!(t.elapsed() < std::time::Duration::from_secs(2), "{src}: {:?}", t.elapsed());
     }
     // File handles count their read-ahead: 10,000 open files need 40 MB.
@@ -420,8 +456,16 @@ fn lines_same_as_c(program: &str) {
     let ours = common::remedy_libs(program, FUEL, common::ALL_OPT_IN).unwrap();
     let c = common::oracle(program, FUEL).unwrap();
     let (ol, cl): (Vec<_>, Vec<_>) = (ours.lines().collect(), c.lines().collect());
-    let diffs: Vec<String> = ol.iter().zip(&cl).filter(|(a, b)| a != b).map(|(a, b)| format!("ours: {a}\n   C: {b}")).collect();
-    assert!(diffs.is_empty() && ol.len() == cl.len(), "{} of {} ({} in C) differ:\n{}", diffs.len(), ol.len(), cl.len(), diffs.iter().take(40).cloned().collect::<Vec<_>>().join("\n"));
+    let diffs: Vec<String> =
+        ol.iter().zip(&cl).filter(|(a, b)| a != b).map(|(a, b)| format!("ours: {a}\n   C: {b}")).collect();
+    assert!(
+        diffs.is_empty() && ol.len() == cl.len(),
+        "{} of {} ({} in C) differ:\n{}",
+        diffs.len(),
+        ol.len(),
+        cl.len(),
+        diffs.iter().take(40).cloned().collect::<Vec<_>>().join("\n")
+    );
 }
 
 /// `string.format`'s whole spec matrix: every conversion, flag set, width and precision,

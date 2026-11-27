@@ -3,7 +3,7 @@
 //! RemedyLua with the fast loop on and off (results, fuel and memory identical) and is
 //! compared with C Lua.
 
-use remedy_lua::{Error, LimitKind, Libs, Limits, Lua};
+use remedy_lua::{Error, Libs, LimitKind, Limits, Lua};
 
 use super::common;
 
@@ -316,7 +316,11 @@ fn generic_for_over_library_iterators() {
     same_as_c(ITERATION);
     let used = common::remedy_measured(ITERATION, 100_000_000, true).1;
     for cut in (1..60).map(|i| used * i / 60) {
-        assert_eq!(common::remedy_measured(ITERATION, cut, true), common::remedy_measured(ITERATION, cut, false), "cut at {cut}");
+        assert_eq!(
+            common::remedy_measured(ITERATION, cut, true),
+            common::remedy_measured(ITERATION, cut, false),
+            "cut at {cut}"
+        );
     }
 }
 
@@ -373,7 +377,11 @@ fn gsub_reads_in_place() {
     same_as_c(GSUB_IN_PLACE);
     let used = common::remedy_measured(GSUB_IN_PLACE, 100_000_000, true).1;
     for cut in (1..40).map(|i| used * i / 40) {
-        assert_eq!(common::remedy_measured(GSUB_IN_PLACE, cut, true), common::remedy_measured(GSUB_IN_PLACE, cut, false), "cut at {cut}");
+        assert_eq!(
+            common::remedy_measured(GSUB_IN_PLACE, cut, true),
+            common::remedy_measured(GSUB_IN_PLACE, cut, false),
+            "cut at {cut}"
+        );
     }
 }
 
@@ -399,10 +407,17 @@ fn short_concat_in_fast_loop() {
     same_as_c(SHORT_CONCATS);
     let used = common::remedy_measured(SHORT_CONCATS, 100_000_000, true).1;
     for cut in (1..50).map(|i| used * i / 50) {
-        assert_eq!(common::remedy_measured(SHORT_CONCATS, cut, true), common::remedy_measured(SHORT_CONCATS, cut, false), "cut at {cut}");
+        assert_eq!(
+            common::remedy_measured(SHORT_CONCATS, cut, true),
+            common::remedy_measured(SHORT_CONCATS, cut, false),
+            "cut at {cut}"
+        );
     }
     let run = |fast: bool| {
-        let mut lua = Lua::new(Limits::default().fuel(100_000_000).memory(3 << 20).hash_seed(common::TEST_SEED), Libs::ALL);
+        let mut lua = Lua::new(
+            Limits::default().fuel(100_000_000).memory(3 << 20).hash_seed(common::TEST_SEED),
+            Libs::ALL,
+        );
         lua.set_fast_loop(fast);
         let r = lua.exec("local t = {} for i = 1, 1000000 do t[i] = 'k' .. i end return #t", "=t");
         (r.map(|v| v.len()), lua.fuel_left(), lua.memory_used())
@@ -522,7 +537,8 @@ fn fixed_hash_seed_replays_exactly() {
     "#;
     for prog in [include_str!("../benches/lua/json.lua"), ORDER] {
         let run = |fast: bool| {
-            let mut lua = Lua::new(Limits::default().fuel(1_000_000_000).memory(1 << 30).hash_seed(42), Libs::ALL);
+            let mut lua =
+                Lua::new(Limits::default().fuel(1_000_000_000).memory(1 << 30).hash_seed(42), Libs::ALL);
             lua.set_fast_loop(fast);
             let v = lua.exec(prog, "=t").unwrap();
             (v.first().and_then(|x| lua.to_string_lossy(*x)), lua.fuel_left(), lua.memory_used())

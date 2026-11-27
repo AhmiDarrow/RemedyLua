@@ -212,21 +212,43 @@ impl<'a> Gen<'a> {
         match self.rng.below(6) {
             0 => {
                 self.hit("lib:io.write/read");
-                c!("(function() local f = io.open(IOF, 'w') f:write(", a, ", 1, 2.5) f:close() local g = io.open(IOF) local s = g:read('a') g:close() return s end)()")
+                c!(
+                    "(function() local f = io.open(IOF, 'w') f:write(",
+                    a,
+                    ", 1, 2.5) f:close() local g = io.open(IOF) local s = g:read('a') g:close() return s end)()"
+                )
             }
             1 => {
                 self.hit("lib:io.read formats");
                 let (f1, f2) = (f(self.rng), f(self.rng));
-                c!("(function() local f = io.open(IOF, 'w+') f:write(", a, ") f:seek('set') local x, y = f:read(", f1, ", ", f2, ") f:close() return tostring(x) .. '|' .. tostring(y) end)()")
+                c!(
+                    "(function() local f = io.open(IOF, 'w+') f:write(",
+                    a,
+                    ") f:seek('set') local x, y = f:read(",
+                    f1,
+                    ", ",
+                    f2,
+                    ") f:close() return tostring(x) .. '|' .. tostring(y) end)()"
+                )
             }
             2 => {
                 self.hit("lib:io.lines");
                 let f1 = f(self.rng);
-                c!("(function() local f = io.open(IOF, 'w') f:write(", a, ") f:close() local t = {} for l in io.lines(IOF, ", f1, ") do t[#t + 1] = tostring(l) end return table.concat(t, ',') end)()")
+                c!(
+                    "(function() local f = io.open(IOF, 'w') f:write(",
+                    a,
+                    ") f:close() local t = {} for l in io.lines(IOF, ",
+                    f1,
+                    ") do t[#t + 1] = tostring(l) end return table.concat(t, ',') end)()"
+                )
             }
             3 => {
                 self.hit("lib:io.input/output");
-                c!("(function() io.output(IOF) io.write(", a, ") io.close() io.output(io.stdout) io.input(IOF) local s = io.read('L') io.close(io.input()) io.input(io.stdin) return tostring(s) end)()")
+                c!(
+                    "(function() io.output(IOF) io.write(",
+                    a,
+                    ") io.close() io.output(io.stdout) io.input(IOF) local s = io.read('L') io.close(io.input()) io.input(io.stdin) return tostring(s) end)()"
+                )
             }
             4 => {
                 self.hit("lib:os.setlocale");
@@ -236,7 +258,11 @@ impl<'a> Gen<'a> {
             }
             _ => {
                 self.hit("lib:os.getenv");
-                c!("tostring(os.getenv(", self.rng.pick(&["'HOME'", "'PATH'", "'REMEDYLUA_NONE'"]).to_string(), "))")
+                c!(
+                    "tostring(os.getenv(",
+                    self.rng.pick(&["'HOME'", "'PATH'", "'REMEDYLUA_NONE'"]).to_string(),
+                    "))"
+                )
             }
         }
     }
@@ -270,8 +296,12 @@ impl<'a> Gen<'a> {
     }
 
     fn var_of(&mut self, ty: Ty) -> Option<String> {
-        let vs: Vec<String> =
-            self.visible().into_iter().filter(|v| ty == Ty::Any || v.ty == ty).map(|v| v.name.clone()).collect();
+        let vs: Vec<String> = self
+            .visible()
+            .into_iter()
+            .filter(|v| ty == Ty::Any || v.ty == ty)
+            .map(|v| v.name.clone())
+            .collect();
         if vs.is_empty() { None } else { Some(self.rng.pick(&vs).clone()) }
     }
 
@@ -313,11 +343,28 @@ impl<'a> Gen<'a> {
             7 => self.rng.range(13, 100000).to_string(),
             8 => format!("0x{:x}", self.rng.range(0, 4096)),
             9 => format!("0X{:X}", self.rng.range(0, 255)),
-            10 => self.rng.pick(&["9223372036854775807", "0x7fffffffffffffff", "0x7FFFFFFFFFFFFFFF"]).to_string(),
-            11 => self.rng.pick(&["0xffffffffffffffff", "0x8000000000000000", "0x10000000000000000", "0xfffffffffffffffff"]).to_string(),
-            12 => self.rng.pick(&["math.maxinteger", "math.mininteger", "(-9223372036854775807 - 1)"]).to_string(),
+            10 => self
+                .rng
+                .pick(&["9223372036854775807", "0x7fffffffffffffff", "0x7FFFFFFFFFFFFFFF"])
+                .to_string(),
+            11 => self
+                .rng
+                .pick(&[
+                    "0xffffffffffffffff",
+                    "0x8000000000000000",
+                    "0x10000000000000000",
+                    "0xfffffffffffffffff",
+                ])
+                .to_string(),
+            12 => self
+                .rng
+                .pick(&["math.maxinteger", "math.mininteger", "(-9223372036854775807 - 1)"])
+                .to_string(),
             13 => self.rng.pick(&["00", "007", "0x0", "0xa", "0x1F", "1000000000000"]).to_string(),
-            14 => self.rng.pick(&["255", "256", "65535", "2147483647", "4294967296", "4611686018427387904"]).to_string(),
+            14 => self
+                .rng
+                .pick(&["255", "256", "65535", "2147483647", "4294967296", "4611686018427387904"])
+                .to_string(),
             _ => self.rng.range(-3, 3).to_string().replace('-', "- "),
         }
     }
@@ -325,10 +372,47 @@ impl<'a> Gen<'a> {
     fn flt_lit(&mut self) -> String {
         self.hit("numeral:float");
         let pool = [
-            "1.5", ".5", "5.", "0.0", "3.0", "1e3", "1E+3", "2.5e-3", "1e-300", "1e308", "1e309", "4.9e-324", "0.1",
-            "0x1p4", "0x.8", "0xA.8p1", "0x1P-2", "0x.1p-1", "0X1.8P+1", "0xA.", "123456789012345678901", "9223372036854775808",
-            "-0.0", "2^53", "2^63", "1/0", "-1/0", "0/0", "math.pi", "math.huge", "-math.huge", "1e15", "1e16", "1e100",
-            "3.14159", "100.25", "-2.5", "6.02e23", "1.7976931348623157e308", "2.2250738585072014e-308", "0.30000000000000004",
+            "1.5",
+            ".5",
+            "5.",
+            "0.0",
+            "3.0",
+            "1e3",
+            "1E+3",
+            "2.5e-3",
+            "1e-300",
+            "1e308",
+            "1e309",
+            "4.9e-324",
+            "0.1",
+            "0x1p4",
+            "0x.8",
+            "0xA.8p1",
+            "0x1P-2",
+            "0x.1p-1",
+            "0X1.8P+1",
+            "0xA.",
+            "123456789012345678901",
+            "9223372036854775808",
+            "-0.0",
+            "2^53",
+            "2^63",
+            "1/0",
+            "-1/0",
+            "0/0",
+            "math.pi",
+            "math.huge",
+            "-math.huge",
+            "1e15",
+            "1e16",
+            "1e100",
+            "3.14159",
+            "100.25",
+            "-2.5",
+            "6.02e23",
+            "1.7976931348623157e308",
+            "2.2250738585072014e-308",
+            "0.30000000000000004",
         ];
         if self.rng.pct(40) {
             let a = self.rng.range(0, 99);
@@ -353,15 +437,33 @@ impl<'a> Gen<'a> {
                 3 => s.push_str(if q == '"' { "\\\"" } else { "\\'" }),
                 4 => s.push_str(&format!("\\x{:02x}", self.rng.range(0, 255))),
                 5 => s.push_str(&format!("\\{:03}", self.rng.range(0, 255))),
-                6 => s.push_str(&format!("\\u{{{:X}}}", self.rng.pick(&[0x41i64, 0xE9, 0x20AC, 0x1F600, 0x7FF, 0x10FFFF, 0x7FFFFFFF, 0]))),
+                6 => s.push_str(&format!(
+                    "\\u{{{:X}}}",
+                    self.rng.pick(&[0x41i64, 0xE9, 0x20AC, 0x1F600, 0x7FF, 0x10FFFF, 0x7FFFFFFF, 0])
+                )),
                 7 => s.push_str("\\z  \n   "),
-                8 => s.push_str(self.rng.pick(&["\\a", "\\b", "\\f", "\\v", "\\r", "\\0", "\\x00", "\\065\\066", "\\\n"])),
-                9 => s.push_str(self.rng.pick(&["%", "%%", "%d", "%s", "[", "]", "(", ")", ".", "-", "^", "$"])),
+                8 => s.push_str(self.rng.pick(&[
+                    "\\a",
+                    "\\b",
+                    "\\f",
+                    "\\v",
+                    "\\r",
+                    "\\0",
+                    "\\x00",
+                    "\\065\\066",
+                    "\\\n",
+                ])),
+                9 => s.push_str(
+                    self.rng.pick(&["%", "%%", "%d", "%s", "[", "]", "(", ")", ".", "-", "^", "$"]),
+                ),
                 10 => s.push(if q == '"' { '\'' } else { '"' }),
                 11 => s.push_str(self.rng.pick(&["é", "€", "日本", "\u{1F600}"])),
-                12 => s.push_str(self.rng.pick(&["0x10", " 12 ", "1e2", "  -3", "5.", "inf", "nan", "0x", "1e"])),
+                12 => s.push_str(
+                    self.rng.pick(&["0x10", " 12 ", "1e2", "  -3", "5.", "inf", "nan", "0x", "1e"]),
+                ),
                 _ => {
-                    let w = self.rng.pick(&["a", "b", "x", "hello", "Lua", "k", "abc", "A B", " ", "_", "z9"]);
+                    let w =
+                        self.rng.pick(&["a", "b", "x", "hello", "Lua", "k", "abc", "A B", " ", "_", "z9"]);
                     s.push_str(w);
                 }
             }
@@ -379,7 +481,9 @@ impl<'a> Gen<'a> {
             body.push('\n');
         }
         for _ in 0..self.rng.below(5) {
-            body.push_str(self.rng.pick(&["abc", "\n", "]", "[[", "\\n", "x]=]y", "%d", "  ", "\t", "\"'", "--", "]]"]));
+            body.push_str(
+                self.rng.pick(&["abc", "\n", "]", "[[", "\\n", "x]=]y", "%d", "  ", "\t", "\"'", "--", "]]"]),
+            );
         }
         // Never close early: drop a closing bracket of our level.
         let close = format!("]{eq}]");
@@ -402,8 +506,16 @@ impl<'a> Gen<'a> {
         let mut caps = 0;
         for _ in 0..n {
             let item = match self.rng.below(14) {
-                0 => self.rng.pick(&["%a", "%d", "%s", "%w", "%p", "%l", "%u", "%c", "%x", "%g", "%A", "%D", "%S", "%W"]).to_string(),
-                1 => self.rng.pick(&["[abc]", "[^a-z]", "[%a_]", "[%d%.]", "[]]", "[^]]", "[a-]", "[-a]", "[%]]"]).to_string(),
+                0 => self
+                    .rng
+                    .pick(&[
+                        "%a", "%d", "%s", "%w", "%p", "%l", "%u", "%c", "%x", "%g", "%A", "%D", "%S", "%W",
+                    ])
+                    .to_string(),
+                1 => self
+                    .rng
+                    .pick(&["[abc]", "[^a-z]", "[%a_]", "[%d%.]", "[]]", "[^]]", "[a-]", "[-a]", "[%]]"])
+                    .to_string(),
                 2 => ".".into(),
                 3 => self.rng.pick(&["a", "b", "l", "x", " ", "1"]).to_string(),
                 4 => "%b()".into(),
@@ -485,7 +597,11 @@ impl<'a> Gen<'a> {
             Ty::Str => self.str_expr(d, leaf),
             Ty::Bool => self.bool_expr(d, leaf),
             Ty::Nil => {
-                if let (false, Some(v)) = (leaf, self.var_of(Ty::Nil)) { c!(v) } else { c!("nil") }
+                if let (false, Some(v)) = (leaf, self.var_of(Ty::Nil)) {
+                    c!(v)
+                } else {
+                    c!("nil")
+                }
             }
             Ty::Tab => self.tab_expr(d, leaf),
             Ty::Fun => self.fun_expr(d, leaf),
@@ -563,7 +679,11 @@ impl<'a> Gen<'a> {
             4 => {
                 let op = *self.rng.pick(&["//", "%"]);
                 let a = self.expr(Ty::Int, d);
-                let b = if self.rng.pct(90) { c!(self.rng.pick(&["3", "7", "-2", "1", "-1", "16"]).to_string()) } else { self.expr(Ty::Int, d) };
+                let b = if self.rng.pct(90) {
+                    c!(self.rng.pick(&["3", "7", "-2", "1", "-1", "16"]).to_string())
+                } else {
+                    self.expr(Ty::Int, d)
+                };
                 self.binop(a, op, b)
             }
             5 => {
@@ -614,7 +734,16 @@ impl<'a> Gen<'a> {
             }
             13 => {
                 self.hit("lib:tonumber");
-                let s = *self.rng.pick(&["\"10\"", "\"0x1F\"", "\" 42 \"", "\"7\", 8", "\"zz\", 36", "\"-0x10\"", "\"1e2\"", "\"10\", 2"]);
+                let s = *self.rng.pick(&[
+                    "\"10\"",
+                    "\"0x1F\"",
+                    "\" 42 \"",
+                    "\"7\", 8",
+                    "\"zz\", 36",
+                    "\"-0x10\"",
+                    "\"1e2\"",
+                    "\"10\", 2",
+                ]);
                 c!("(math.tointeger(tonumber(", s, ")) or -1)")
             }
             14 => {
@@ -677,7 +806,17 @@ impl<'a> Gen<'a> {
                 self.unop("-", e)
             }
             5 => {
-                let f = *self.rng.pick(&["math.sqrt", "math.abs", "math.exp", "math.log", "math.sin", "math.cos", "math.atan", "math.floor", "math.ceil"]);
+                let f = *self.rng.pick(&[
+                    "math.sqrt",
+                    "math.abs",
+                    "math.exp",
+                    "math.log",
+                    "math.sin",
+                    "math.cos",
+                    "math.atan",
+                    "math.floor",
+                    "math.ceil",
+                ]);
                 self.hit("lib:math.fn");
                 let a = self.num_expr(d);
                 c!(f, "(", a, ") + 0.0")
@@ -686,7 +825,11 @@ impl<'a> Gen<'a> {
                 self.hit("lib:math.fmod/modf");
                 let a = self.num_expr(d);
                 let b = self.num_expr(d);
-                if self.rng.pct(50) { c!("math.fmod(", a, ", ", b, ") + 0.0") } else { c!("(math.modf(", a, "))") }
+                if self.rng.pct(50) {
+                    c!("math.fmod(", a, ", ", b, ") + 0.0")
+                } else {
+                    c!("(math.modf(", a, "))")
+                }
             }
             7 => {
                 self.hit("lib:math.log2");
@@ -702,7 +845,15 @@ impl<'a> Gen<'a> {
             }
             9 => {
                 self.hit("lib:tonumber");
-                let s = *self.rng.pick(&["\"1.25\"", "\"1e-2\"", "\"0x1.8p1\"", "\"inf\"", "\"  2.  \"", "\".\"", "\"1e\""]);
+                let s = *self.rng.pick(&[
+                    "\"1.25\"",
+                    "\"1e-2\"",
+                    "\"0x1.8p1\"",
+                    "\"inf\"",
+                    "\"  2.  \"",
+                    "\".\"",
+                    "\"1e\"",
+                ]);
                 c!("(tonumber(", s, ") or 0.5) + 0.0")
             }
             10 => {
@@ -741,7 +892,11 @@ impl<'a> Gen<'a> {
                 self.hit("lib:string.rep");
                 let s = self.expr(Ty::Str, d);
                 let n = self.rng.range(-1, 4);
-                if self.rng.pct(50) { c!("string.rep(", s, ", ", n.to_string(), ")") } else { c!("string.rep(", s, ", ", n.to_string(), ", \",\")") }
+                if self.rng.pct(50) {
+                    c!("string.rep(", s, ", ", n.to_string(), ")")
+                } else {
+                    c!("string.rep(", s, ", ", n.to_string(), ", \",\")")
+                }
             }
             4 => {
                 let m = *self.rng.pick(&["upper", "lower", "reverse"]);
@@ -793,7 +948,9 @@ impl<'a> Gen<'a> {
                 let s = self.expr(Ty::Str, d);
                 let p = self.pattern();
                 let repl = match self.rng.below(4) {
-                    0 => c!(self.rng.pick(&["\"%0%0\"", "\"<%1>\"", "\"x\"", "\"%%\"", "\"%2\""]).to_string()),
+                    0 => {
+                        c!(self.rng.pick(&["\"%0%0\"", "\"<%1>\"", "\"x\"", "\"%%\"", "\"%2\""]).to_string())
+                    }
                     1 => c!("{a = \"A\", [\"1\"] = 1, b = false}"),
                     2 => c!("function(c) return c .. \"!\" end"),
                     _ => c!("string.upper"),
@@ -834,7 +991,12 @@ impl<'a> Gen<'a> {
             }
             15 => {
                 self.hit("lib:os.date");
-                let f = *self.rng.pick(&["\"!%Y-%m-%d %H:%M:%S\"", "\"!%j %a %b %p\"", "\"!%c\"", "\"!%x %X %y\""]);
+                let f = *self.rng.pick(&[
+                    "\"!%Y-%m-%d %H:%M:%S\"",
+                    "\"!%j %a %b %p\"",
+                    "\"!%c\"",
+                    "\"!%x %X %y\"",
+                ]);
                 let t = self.rng.range(0, 4_000_000_000);
                 c!("os.date(", f, ", ", t.to_string(), ")")
             }
@@ -851,7 +1013,10 @@ impl<'a> Gen<'a> {
             18 => {
                 self.hit("op:concat-chain");
                 let n = 3 + self.rng.below(4);
-                let xs: Vec<Out> = (0..n).map(|_| if self.rng.pct(70) { self.expr(Ty::Str, d) } else { self.expr(Ty::Int, d) }).map(|e| c!("(", e, ")")).collect();
+                let xs: Vec<Out> = (0..n)
+                    .map(|_| if self.rng.pct(70) { self.expr(Ty::Str, d) } else { self.expr(Ty::Int, d) })
+                    .map(|e| c!("(", e, ")"))
+                    .collect();
                 join(&xs, " .. ")
             }
             19 => {
@@ -1000,7 +1165,11 @@ impl<'a> Gen<'a> {
                 }
                 5 if i + 1 == n => {
                     self.hit("table:multret-last");
-                    if self.vararg && self.rng.pct(50) { c!("...") } else { c!("string.byte(\"abc\", 1, -1)") }
+                    if self.vararg && self.rng.pct(50) {
+                        c!("...")
+                    } else {
+                        c!("string.byte(\"abc\", 1, -1)")
+                    }
                 }
                 _ => self.expr(Ty::Int, d + 1),
             };
@@ -1053,9 +1222,32 @@ impl<'a> Gen<'a> {
     fn metatable(&mut self, d: usize) -> Out {
         let mut fields: Vec<Out> = vec![];
         let names = [
-            "__index", "__newindex", "__call", "__add", "__sub", "__mul", "__div", "__mod", "__pow", "__unm", "__idiv", "__band",
-            "__bor", "__bxor", "__shl", "__shr", "__bnot", "__concat", "__len", "__eq", "__lt", "__le", "__tostring", "__name",
-            "__close", "__metatable",
+            "__index",
+            "__newindex",
+            "__call",
+            "__add",
+            "__sub",
+            "__mul",
+            "__div",
+            "__mod",
+            "__pow",
+            "__unm",
+            "__idiv",
+            "__band",
+            "__bor",
+            "__bxor",
+            "__shl",
+            "__shr",
+            "__bnot",
+            "__concat",
+            "__len",
+            "__eq",
+            "__lt",
+            "__le",
+            "__tostring",
+            "__name",
+            "__close",
+            "__metatable",
         ];
         for _ in 0..1 + self.rng.below(5) {
             let n = *self.rng.pick(&names);
@@ -1068,17 +1260,41 @@ impl<'a> Gen<'a> {
                 },
                 "__newindex" => {
                     if self.rng.pct(50) {
-                        c!("function(t, k, v) if __enter() then return end rawset(t, k, v) __emit(\"newindex\", k) end")
+                        c!(
+                            "function(t, k, v) if __enter() then return end rawset(t, k, v) __emit(\"newindex\", k) end"
+                        )
                     } else {
                         c!("{}")
                     }
                 }
-                "__call" => c!("function(self, a, b) if __enter() then return end return __tag(self), a, b end"),
-                "__tostring" => c!(self.rng.pick(&["function(t) return \"T\" .. tostring(rawget(t, \"v\")) end", "function() return 42 end"]).to_string()),
+                "__call" => {
+                    c!("function(self, a, b) if __enter() then return end return __tag(self), a, b end")
+                }
+                "__tostring" => c!(self
+                    .rng
+                    .pick(&[
+                        "function(t) return \"T\" .. tostring(rawget(t, \"v\")) end",
+                        "function() return 42 end"
+                    ])
+                    .to_string()),
                 "__name" => c!("\"MyType\""),
                 "__metatable" => c!("\"locked\""),
-                "__len" => c!(self.rng.pick(&["function() return 7 end", "function() return \"len\" end", "function() return 2.5 end"]).to_string()),
-                "__eq" | "__lt" | "__le" => c!(self.rng.pick(&["function(a, b) return __tag(a) == __tag(b) end", "function() return 1 end", "function() return nil end"]).to_string()),
+                "__len" => c!(self
+                    .rng
+                    .pick(&[
+                        "function() return 7 end",
+                        "function() return \"len\" end",
+                        "function() return 2.5 end"
+                    ])
+                    .to_string()),
+                "__eq" | "__lt" | "__le" => c!(self
+                    .rng
+                    .pick(&[
+                        "function(a, b) return __tag(a) == __tag(b) end",
+                        "function() return 1 end",
+                        "function() return nil end"
+                    ])
+                    .to_string()),
                 "__close" => c!("function(o, e) __emit(\"close-mt\", __tag(o), e) end"),
                 "__unm" | "__bnot" => c!("function(a) if __enter() then return end return __tag(a) end"),
                 _ => {
@@ -1100,7 +1316,20 @@ impl<'a> Gen<'a> {
                 return c!(v);
             }
             self.hit("expr:library-function-value");
-            return c!(self.rng.pick(&["string.upper", "math.max", "tostring", "select", "type", "string.len", "print", "rawlen", "next"]).to_string());
+            return c!(self
+                .rng
+                .pick(&[
+                    "string.upper",
+                    "math.max",
+                    "tostring",
+                    "select",
+                    "type",
+                    "string.len",
+                    "print",
+                    "rawlen",
+                    "next"
+                ])
+                .to_string());
         }
         self.func_literal(d)
     }
@@ -1109,7 +1338,10 @@ impl<'a> Gen<'a> {
     fn func_literal(&mut self, _d: usize) -> Out {
         self.hit("expr:function");
         let (params, vararg) = self.params();
-        let body = { let nn = 2 + self.rng.below(3); self.func_body(&params, vararg, nn) };
+        let body = {
+            let nn = 2 + self.rng.below(3);
+            self.func_body(&params, vararg, nn)
+        };
         let (pr, pl) = self.param_text(&params, vararg);
         let (ret_r, ret_l) = self.ret_annot();
         c!(split(format!("function({pr}){ret_r}"), format!("function({pl}){ret_l}")), "\n", body, "end")
@@ -1117,7 +1349,9 @@ impl<'a> Gen<'a> {
 
     fn params(&mut self) -> (Vec<(String, Ty)>, bool) {
         let n = self.rng.below(4);
-        let ps = (0..n).map(|_| (self.fresh("p"), *self.rng.pick(&[Ty::Any, Ty::Int, Ty::Str, Ty::Any]))).collect();
+        let ps = (0..n)
+            .map(|_| (self.fresh("p"), *self.rng.pick(&[Ty::Any, Ty::Int, Ty::Str, Ty::Any])))
+            .collect();
         (ps, self.rng.pct(40))
     }
 
@@ -1132,7 +1366,9 @@ impl<'a> Gen<'a> {
             Ty::Str => *self.rng.pick(&["string", "string | nil", "\"lit\" | string"]),
             Ty::Bool => "boolean",
             Ty::Nil => "nil",
-            Ty::Tab => *self.rng.pick(&["{number}", "{x: number, y: string?}", "{[string]: number}", "table"]),
+            Ty::Tab => {
+                *self.rng.pick(&["{number}", "{x: number, y: string?}", "{[string]: number}", "table"])
+            }
             Ty::Fun => *self.rng.pick(&["(number, string) -> boolean", "() -> ()", "function"]),
             Ty::Any => *self.rng.pick(&["any", "unknown", "number | string", "Foo.Bar"]),
         };
@@ -1192,7 +1428,11 @@ impl<'a> Gen<'a> {
         let mut xs: Vec<Out> = (0..n).map(|_| self.expr(Ty::Any, d + 1)).collect();
         if self.rng.pct(20) {
             self.hit("call:multret-last-arg");
-            xs.push(if self.vararg && self.rng.pct(50) { c!("...") } else { c!("string.byte(\"xyz\", 1, 3)") });
+            xs.push(if self.vararg && self.rng.pct(50) {
+                c!("...")
+            } else {
+                c!("string.byte(\"xyz\", 1, 3)")
+            });
         }
         join(&xs, ", ")
     }
@@ -1267,7 +1507,17 @@ impl<'a> Gen<'a> {
             }
             9 if self.vararg => {
                 self.hit("vararg:expr");
-                c!(self.rng.pick(&["(...)", "select(2, ...)", "(select(-1, ...))", "select('#', ...)", "...", "(select(1, ...))"]).to_string())
+                c!(self
+                    .rng
+                    .pick(&[
+                        "(...)",
+                        "select(2, ...)",
+                        "(select(-1, ...))",
+                        "select('#', ...)",
+                        "...",
+                        "(select(1, ...))"
+                    ])
+                    .to_string())
             }
             10 => {
                 self.hit("op:and-or");
@@ -1310,7 +1560,12 @@ impl<'a> Gen<'a> {
                     "\"return 2^63 == math.maxinteger + 1.0\"",
                 ]);
                 let chunk = if self.rng.pct(30) { ", \"=chunk\"" } else { "" };
-                c!("select(2, pcall(function() local f, e = load(", code, chunk, ") if not f then return e end return f(5, 6) end))")
+                c!(
+                    "select(2, pcall(function() local f, e = load(",
+                    code,
+                    chunk,
+                    ") if not f then return e end return f(5, 6) end))"
+                )
             }
             14 => {
                 self.hit("expr:paren-truncate");
@@ -1386,7 +1641,10 @@ impl<'a> Gen<'a> {
             3 => self.emit_stat(),
             4 => {
                 self.hit("stat:do");
-                let b = { let nn = 1 + self.rng.below(3); self.block(nn) };
+                let b = {
+                    let nn = 1 + self.rng.below(3);
+                    self.block(nn)
+                };
                 c!("do\n", b, "end\n")
             }
             5 => self.if_stat(),
@@ -1516,7 +1774,15 @@ impl<'a> Gen<'a> {
 
     fn compound_stat(&mut self) -> Out {
         self.hit("rlua:compound-assign");
-        let ops = [("+=", "+", Ty::Int), ("-=", "-", Ty::Flt), ("*=", "*", Ty::Int), ("/=", "/", Ty::Flt), ("//=", "//", Ty::Int), ("%=", "%", Ty::Int), ("..=", "..", Ty::Str)];
+        let ops = [
+            ("+=", "+", Ty::Int),
+            ("-=", "-", Ty::Flt),
+            ("*=", "*", Ty::Int),
+            ("/=", "/", Ty::Flt),
+            ("//=", "//", Ty::Int),
+            ("%=", "%", Ty::Int),
+            ("..=", "..", Ty::Str),
+        ];
         let (ro, lo, ty) = *self.rng.pick(&ops);
         let target = if self.rng.pct(30) {
             match self.var_of(Ty::Tab) {
@@ -1535,7 +1801,12 @@ impl<'a> Gen<'a> {
         };
         let e = self.expr(ty, 1);
         let sp = if self.rng.pct(20) { "" } else { " " };
-        c!(split(format!("{target}{sp}{ro}{sp}"), format!("{target} = {target} {lo} (")), e, split("", ")"), "\n")
+        c!(
+            split(format!("{target}{sp}{ro}{sp}"), format!("{target} = {target} {lo} (")),
+            e,
+            split("", ")"),
+            "\n"
+        )
     }
 
     fn call_stat(&mut self) -> Out {
@@ -1585,17 +1856,26 @@ impl<'a> Gen<'a> {
     fn if_stat(&mut self) -> Out {
         self.hit("stat:if");
         let c0 = self.cond();
-        let b0 = { let nn = 1 + self.rng.below(3); self.block(nn) };
+        let b0 = {
+            let nn = 1 + self.rng.below(3);
+            self.block(nn)
+        };
         let mut o = c!("if ", c0, " then\n", b0);
         for _ in 0..self.rng.below(3) {
             self.hit("stat:elseif");
             let c1 = self.cond();
-            let b1 = { let nn = 1 + self.rng.below(2); self.block(nn) };
+            let b1 = {
+                let nn = 1 + self.rng.below(2);
+                self.block(nn)
+            };
             o = c!(o, "elseif ", c1, " then\n", b1);
         }
         if self.rng.pct(50) {
             self.hit("stat:else");
-            let b = { let nn = 1 + self.rng.below(2); self.block(nn) };
+            let b = {
+                let nn = 1 + self.rng.below(2);
+                self.block(nn)
+            };
             o = c!(o, "else\n", b);
         }
         c!(o, "end\n")
@@ -1620,17 +1900,36 @@ impl<'a> Gen<'a> {
         let g = self.fresh("w");
         let k = self.rng.range(0, 4);
         let c0 = self.cond();
-        let body = { let nn = 1 + self.rng.below(3); self.loop_body(LoopKind::While, nn) };
-        c!(format!("local {g} = 0\nwhile {g} < {k} and "), self.paren(c0), " do\n", format!("{g} = {g} + 1\n"), body, "end\n")
+        let body = {
+            let nn = 1 + self.rng.below(3);
+            self.loop_body(LoopKind::While, nn)
+        };
+        c!(
+            format!("local {g} = 0\nwhile {g} < {k} and "),
+            self.paren(c0),
+            " do\n",
+            format!("{g} = {g} + 1\n"),
+            body,
+            "end\n"
+        )
     }
 
     fn repeat_stat(&mut self) -> Out {
         self.hit("stat:repeat");
         let g = self.fresh("w");
         let k = self.rng.range(1, 4);
-        let body = { let nn = 1 + self.rng.below(3); self.loop_body(LoopKind::Repeat, nn) };
+        let body = {
+            let nn = 1 + self.rng.below(3);
+            self.loop_body(LoopKind::Repeat, nn)
+        };
         let c0 = self.cond();
-        c!(format!("local {g} = 0\nrepeat\n{g} = {g} + 1\n"), body, format!("until {g} >= {k} or "), self.paren(c0), "\n")
+        c!(
+            format!("local {g} = 0\nrepeat\n{g} = {g} + 1\n"),
+            body,
+            format!("until {g} >= {k} or "),
+            self.paren(c0),
+            "\n"
+        )
     }
 
     fn numfor_stat(&mut self) -> Out {
@@ -1649,7 +1948,14 @@ impl<'a> Gen<'a> {
             }
             5 => {
                 self.hit("for:float");
-                let h = *self.rng.pick(&["1, 2, 0.25", "0.5, 2", "1.0, 3", "3, 1, -0.5", "0.1, 0.35, 0.1", "1, 2.5"]);
+                let h = *self.rng.pick(&[
+                    "1, 2, 0.25",
+                    "0.5, 2",
+                    "1.0, 3",
+                    "3, 1, -0.5",
+                    "0.1, 0.35, 0.1",
+                    "1, 2.5",
+                ]);
                 (h.to_owned(), false, Ty::Flt)
             }
             6 => {
@@ -1672,7 +1978,15 @@ impl<'a> Gen<'a> {
             }
             7 => {
                 self.hit("for:error");
-                let h = *self.rng.pick(&["1, 3, 0", "\"1\", 2", "1, \"2\"", "1, 2, \"1\"", "1, nil", "1.5, 2, 0", "{}, 1"]);
+                let h = *self.rng.pick(&[
+                    "1, 3, 0",
+                    "\"1\", 2",
+                    "1, \"2\"",
+                    "1, 2, \"1\"",
+                    "1, nil",
+                    "1.5, 2, 0",
+                    "{}, 1",
+                ]);
                 (h.to_owned(), true, Ty::Any)
             }
             _ => {
@@ -1685,11 +1999,24 @@ impl<'a> Gen<'a> {
         self.declare(&v, ty, false);
         let an = self.annot(ty);
         let gname = self.fresh("k");
-        let body = { let nn = 1 + self.rng.below(3); self.loop_body(LoopKind::For, nn) };
+        let body = {
+            let nn = 1 + self.rng.below(3);
+            self.loop_body(LoopKind::For, nn)
+        };
         self.scopes.pop();
-        let guard = if guarded { format!("{gname} = {gname} + 1 if {gname} > 4 then break end\n") } else { String::new() };
+        let guard = if guarded {
+            format!("{gname} = {gname} + 1 if {gname} > 4 then break end\n")
+        } else {
+            String::new()
+        };
         let pre = if guarded { format!("local {gname} = 0\n") } else { String::new() };
-        c!(pre, split(format!("for {v}{an} = {head} do\n"), format!("for {v} = {head} do\n")), guard, body, "end\n")
+        c!(
+            pre,
+            split(format!("for {v}{an} = {head} do\n"), format!("for {v} = {head} do\n")),
+            guard,
+            body,
+            "end\n"
+        )
     }
 
     fn genfor_stat(&mut self) -> Out {
@@ -1714,7 +2041,11 @@ impl<'a> Gen<'a> {
                 let t = self.expr(Ty::Tab, 1);
                 let c0 = self.fresh("cnt");
                 let nx = if self.rng.pct(50) { c!("pairs(", t, ")") } else { c!("next, ", t) };
-                return c!(format!("do local {c0} = 0\nfor {k}, {v} in "), nx, format!(" do {c0} = {c0} + 1 end\n__emit(\"count\", {c0})\nend\n"));
+                return c!(
+                    format!("do local {c0} = 0\nfor {k}, {v} in "),
+                    nx,
+                    format!(" do {c0} = {c0} + 1 end\n__emit(\"count\", {c0})\nend\n")
+                );
             }
             3 => {
                 self.hit("for:gmatch");
@@ -1731,26 +2062,36 @@ impl<'a> Gen<'a> {
                 self.hit("for:closure-iterator");
                 let n = self.rng.range(0, 4);
                 (
-                    c!(format!("(function() local i = 0 return function() i = i + 1 if i <= {n} then return i, i * 2 end end end)()")),
+                    c!(format!(
+                        "(function() local i = 0 return function() i = i + 1 if i <= {n} then return i, i * 2 end end end)()"
+                    )),
                     vec![(k.clone(), Ty::Int), (v.clone(), Ty::Int)],
                 )
             }
             6 => {
                 self.hit("for:stateless-iterator");
-                (c!("function(s, c) if c < 3 then return c + 1, s end end, \"st\", 0"), vec![(k.clone(), Ty::Int), (v.clone(), Ty::Str)])
+                (
+                    c!("function(s, c) if c < 3 then return c + 1, s end end, \"st\", 0"),
+                    vec![(k.clone(), Ty::Int), (v.clone(), Ty::Str)],
+                )
             }
             7 => {
                 self.hit("for:4th-closing-value");
                 let id = self.fresh("fc");
                 (
-                    c!(format!("next, {{1, 2}}, nil, setmetatable({{}}, {{__close = function(o, e) __emit(\"for-close\", \"{id}\", e) end}})")),
+                    c!(format!(
+                        "next, {{1, 2}}, nil, setmetatable({{}}, {{__close = function(o, e) __emit(\"for-close\", \"{id}\", e) end}})"
+                    )),
                     vec![(k.clone(), Ty::Any), (v.clone(), Ty::Any)],
                 )
             }
             _ => {
                 self.hit("for:string.gmatch-captures");
                 let s = self.expr(Ty::Str, 1);
-                (c!("string.gmatch(", s, ", \"(%a)(%d*)\")"), vec![(k.clone(), Ty::Str), (v.clone(), Ty::Str)])
+                (
+                    c!("string.gmatch(", s, ", \"(%a)(%d*)\")"),
+                    vec![(k.clone(), Ty::Str), (v.clone(), Ty::Str)],
+                )
             }
         };
         // `for k, v in next, {1, 2}` with a 4th value: order of next over an array part.
@@ -1758,7 +2099,10 @@ impl<'a> Gen<'a> {
         for (n, t) in &vars {
             self.declare(n, *t, false);
         }
-        let body = { let nn = 1 + self.rng.below(3); self.loop_body(LoopKind::For, nn) };
+        let body = {
+            let nn = 1 + self.rng.below(3);
+            self.loop_body(LoopKind::For, nn)
+        };
         self.scopes.pop();
         let mut names_r = vec![];
         let mut names_l = vec![];
@@ -1766,7 +2110,13 @@ impl<'a> Gen<'a> {
             names_r.push(format!("{n}{}", self.annot(*t)));
             names_l.push(n.clone());
         }
-        c!(split(format!("for {} in ", names_r.join(", ")), format!("for {} in ", names_l.join(", "))), head, " do\n", body, "end\n")
+        c!(
+            split(format!("for {} in ", names_r.join(", ")), format!("for {} in ", names_l.join(", "))),
+            head,
+            " do\n",
+            body,
+            "end\n"
+        )
     }
 
     fn local_function(&mut self) -> Out {
@@ -1776,8 +2126,18 @@ impl<'a> Gen<'a> {
         let (pr, pl) = self.param_text(&params, vararg);
         let (ret_r, ret_l) = self.ret_annot();
         self.declare(&name, Ty::Fun, false);
-        let body = { let nn = 1 + self.rng.below(4); self.func_body(&params, vararg, nn) };
-        c!(split(format!("local function {name}({pr}){ret_r}\n"), format!("local function {name}({pl}){ret_l}\n")), body, "end\n")
+        let body = {
+            let nn = 1 + self.rng.below(4);
+            self.func_body(&params, vararg, nn)
+        };
+        c!(
+            split(
+                format!("local function {name}({pr}){ret_r}\n"),
+                format!("local function {name}({pl}){ret_l}\n")
+            ),
+            body,
+            "end\n"
+        )
     }
 
     fn function_stat(&mut self) -> Out {
@@ -1795,7 +2155,10 @@ impl<'a> Gen<'a> {
             }
             _ => (self.fresh("Gf"), true),
         };
-        let body = { let nn = 1 + self.rng.below(3); self.func_body(&params, vararg, nn) };
+        let body = {
+            let nn = 1 + self.rng.below(3);
+            self.func_body(&params, vararg, nn)
+        };
         if is_global {
             self.hit("function:global");
             // Visible afterwards as a global function.
@@ -1814,12 +2177,17 @@ impl<'a> Gen<'a> {
         let (pr, pl) = self.param_text(&params, vararg);
         let mut ps = vec![("self".to_owned(), Ty::Tab)];
         ps.extend(params);
-        let body = { let nn = 1 + self.rng.below(3); self.func_body(&ps, vararg, nn) };
+        let body = {
+            let nn = 1 + self.rng.below(3);
+            self.func_body(&ps, vararg, nn)
+        };
         self.set_methods(&o, m.clone());
         let nested = if self.rng.pct(30) {
             self.hit("function:a.b:c");
             let m2 = self.fresh("m");
-            format!("{o}.inner = {{w = 5}}\nfunction {o}.inner:{m2}(a) if __enter() then return end return self.w, a end\n__emit({o}.inner:{m2}(3))\n")
+            format!(
+                "{o}.inner = {{w = 5}}\nfunction {o}.inner:{m2}(a) if __enter() then return end return self.w, a end\n__emit({o}.inner:{m2}(3))\n"
+            )
         } else {
             String::new()
         };
@@ -1839,7 +2207,10 @@ impl<'a> Gen<'a> {
                 self.hit("goto:forward");
                 let l = self.fresh("L");
                 let c0 = self.cond();
-                let b = { let nn = 1 + self.rng.below(2); self.block(nn) };
+                let b = {
+                    let nn = 1 + self.rng.below(2);
+                    self.block(nn)
+                };
                 c!("if ", c0, format!(" then goto {l} end\ndo\n"), b, format!("end\n::{l}::\n"))
             }
             1 => {
@@ -1847,8 +2218,15 @@ impl<'a> Gen<'a> {
                 let l = self.fresh("L");
                 let g = self.fresh("g");
                 let n = self.rng.range(1, 3);
-                let b = { let nn = 1 + self.rng.below(2); self.block(nn) };
-                c!(format!("do\nlocal {g} = 0\n::{l}::\n{g} = {g} + 1\ndo\n"), b, format!("end\nif {g} < {n} then goto {l} end\nend\n"))
+                let b = {
+                    let nn = 1 + self.rng.below(2);
+                    self.block(nn)
+                };
+                c!(
+                    format!("do\nlocal {g} = 0\n::{l}::\n{g} = {g} + 1\ndo\n"),
+                    b,
+                    format!("end\nif {g} < {n} then goto {l} end\nend\n")
+                )
             }
             _ => {
                 if self.loops.is_empty() {
@@ -1885,15 +2263,35 @@ impl<'a> Gen<'a> {
         self.hit("stat:pcall-block");
         let (params, vararg) = self.params();
         let (pr, pl) = self.param_text(&params, vararg);
-        let body = { let nn = 1 + self.rng.below(4); self.func_body(&params, vararg, nn) };
+        let body = {
+            let nn = 1 + self.rng.below(4);
+            self.func_body(&params, vararg, nn)
+        };
         let args = self.args(1);
         let sep = if args.l.is_empty() { "" } else { ", " };
         if self.rng.pct(25) {
             self.hit("lib:xpcall");
-            let h = *self.rng.pick(&["function(e) return \"handled: \" .. tostring(e) end", "function(e) return e, 2 end", "function(e) error(\"in handler\") end", "__tag"]);
-            return c!(split(format!("__emit(xpcall(function({pr})\n"), format!("__emit(xpcall(function({pl})\n")), body, format!("end, {h}{sep}"), args, "))\n");
+            let h = *self.rng.pick(&[
+                "function(e) return \"handled: \" .. tostring(e) end",
+                "function(e) return e, 2 end",
+                "function(e) error(\"in handler\") end",
+                "__tag",
+            ]);
+            return c!(
+                split(format!("__emit(xpcall(function({pr})\n"), format!("__emit(xpcall(function({pl})\n")),
+                body,
+                format!("end, {h}{sep}"),
+                args,
+                "))\n"
+            );
         }
-        c!(split(format!("__emit(pcall(function({pr})\n"), format!("__emit(pcall(function({pl})\n")), body, format!("end{sep}"), args, "))\n")
+        c!(
+            split(format!("__emit(pcall(function({pr})\n"), format!("__emit(pcall(function({pl})\n")),
+            body,
+            format!("end{sep}"),
+            args,
+            "))\n"
+        )
     }
 
     fn close_stat(&mut self) -> Out {
@@ -1903,11 +2301,21 @@ impl<'a> Gen<'a> {
             0 => "nil".to_owned(),
             1 => "false".to_owned(),
             2 => "{}".to_owned(), // error: no __close
-            _ => format!("setmetatable({{v = \"{id}\"}}, {{__close = function(o, e) __emit(\"close\", __tag(o), e) end}})"),
+            _ => format!(
+                "setmetatable({{v = \"{id}\"}}, {{__close = function(o, e) __emit(\"close\", __tag(o), e) end}})"
+            ),
         };
-        let b = { let nn = 1 + self.rng.below(3); self.block(nn) };
+        let b = {
+            let nn = 1 + self.rng.below(3);
+            self.block(nn)
+        };
         let an = if self.rl && self.rng.pct(30) { ": any" } else { "" };
-        c!("do\n", split(format!("local {id} <close>{an} = {v}\n"), format!("local {id} <close> = {v}\n")), b, "end\n")
+        c!(
+            "do\n",
+            split(format!("local {id} <close>{an} = {v}\n"), format!("local {id} <close> = {v}\n")),
+            b,
+            "end\n"
+        )
     }
 
     fn error_stat(&mut self) -> Out {
@@ -1955,7 +2363,13 @@ impl<'a> Gen<'a> {
                 let t = self.fresh("t");
                 let x = self.expr(Ty::Int, 2);
                 let pos = self.rng.range(0, 5);
-                c!(format!("do local {t} = {{1, 2, 3}}\ntable.insert({t}, "), x, format!(")\n__emit(pcall(table.insert, {t}, {pos}, \"p\"))\n__emit(table.remove({t}), table.remove({t}, 1), pcall(table.remove, {t}, {pos}))\n__emit({t})\nend\n"))
+                c!(
+                    format!("do local {t} = {{1, 2, 3}}\ntable.insert({t}, "),
+                    x,
+                    format!(
+                        ")\n__emit(pcall(table.insert, {t}, {pos}, \"p\"))\n__emit(table.remove({t}), table.remove({t}, 1), pcall(table.remove, {t}, {pos}))\n__emit({t})\nend\n"
+                    )
+                )
             }
             1 => {
                 self.hit("lib:table.sort");
@@ -1963,15 +2377,25 @@ impl<'a> Gen<'a> {
                 let n = 1 + self.rng.below(8);
                 let ty = if self.rng.pct(50) { Ty::Int } else { Ty::Str };
                 let xs: Vec<Out> = (0..n).map(|_| self.expr(ty, 3)).collect();
-                let cmp = *self.rng.pick(&["", ", function(a, b) return a > b end", ", function(a, b) return a < b end"]);
-                c!(format!("do local {t} = {{"), join(&xs, ", "), format!("}}\n__emit(pcall(table.sort, {t}{cmp}))\n__emit({t})\nend\n"))
+                let cmp = *self.rng.pick(&[
+                    "",
+                    ", function(a, b) return a > b end",
+                    ", function(a, b) return a < b end",
+                ]);
+                c!(
+                    format!("do local {t} = {{"),
+                    join(&xs, ", "),
+                    format!("}}\n__emit(pcall(table.sort, {t}{cmp}))\n__emit({t})\nend\n")
+                )
             }
             2 => {
                 self.hit("lib:table.move");
                 let a = self.rng.range(1, 3);
                 let e = self.rng.range(0, 4);
                 let t = self.rng.range(-1, 5);
-                c!(format!("__emit(table.move({{1, 2, 3, 4}}, {a}, {e}, {t}))\n__emit(table.move({{1, 2}}, 1, 2, 2, {{9}}))\n"))
+                c!(format!(
+                    "__emit(table.move({{1, 2, 3, 4}}, {a}, {e}, {t}))\n__emit(table.move({{1, 2}}, 1, 2, 2, {{9}}))\n"
+                ))
             }
             3 => {
                 self.hit("lib:table.unpack");
@@ -1995,13 +2419,26 @@ impl<'a> Gen<'a> {
             5 => {
                 self.hit("lib:utf8");
                 let s = self.expr(Ty::Str, 2);
-                let fs = *self.rng.pick(&["utf8.len(s)", "utf8.codepoint(s, 1, -1)", "utf8.offset(s, 2)", "utf8.offset(s, -1)", "utf8.len(s, 2, -2, true)", "utf8.codepoint(s, 1, 1, true)"]);
-                c!("do local s = ", s, format!("\n__emit(pcall(function() return {fs} end))\n__emit(utf8.charpattern)\nend\n"))
+                let fs = *self.rng.pick(&[
+                    "utf8.len(s)",
+                    "utf8.codepoint(s, 1, -1)",
+                    "utf8.offset(s, 2)",
+                    "utf8.offset(s, -1)",
+                    "utf8.len(s, 2, -2, true)",
+                    "utf8.codepoint(s, 1, 1, true)",
+                ]);
+                c!(
+                    "do local s = ",
+                    s,
+                    format!("\n__emit(pcall(function() return {fs} end))\n__emit(utf8.charpattern)\nend\n")
+                )
             }
             6 => {
                 self.hit("lib:math.random");
                 let s = self.rng.range(0, 100);
-                c!(format!("math.randomseed({s})\n__emit(math.random(1, 100), math.random(5), math.random(0) ~= nil, math.random() < 1)\n"))
+                c!(format!(
+                    "math.randomseed({s})\n__emit(math.random(1, 100), math.random(5), math.random(0) ~= nil, math.random() < 1)\n"
+                ))
             }
             7 => {
                 self.hit("lib:string.format-error");
@@ -2025,7 +2462,11 @@ impl<'a> Gen<'a> {
             10 => {
                 self.hit("lib:rawlen/rawget/rawset");
                 let t = self.expr(Ty::Tab, 2);
-                c!("do local t = ", t, "\n__emit(pcall(rawlen, t), rawget(t, 1), rawequal(t, t), pcall(rawset, t, \"rk\", 1))\nend\n")
+                c!(
+                    "do local t = ",
+                    t,
+                    "\n__emit(pcall(rawlen, t), rawget(t, 1), rawequal(t, t), pcall(rawset, t, \"rk\", 1))\nend\n"
+                )
             }
             11 => {
                 self.hit("lib:getmetatable");
@@ -2042,18 +2483,71 @@ impl<'a> Gen<'a> {
             _ => {
                 self.hit("lib:tostring-tonumber-edge");
                 let x = *self.rng.pick(&[
-                    "tonumber(\"0x\")", "tonumber(\"1e\")", "tonumber(\"  0x1p4  \")", "tonumber(\"10\", 16)", "tonumber(\"ff\", 16)",
-                    "tonumber(\"8\", 8)", "tonumber(\"1.5\", 10)", "tonumber(\"-zz\", 36)", "tonumber(\"9223372036854775808\")",
-                    "tostring(2^63)", "tostring(-0.0)", "tostring(1e15)", "tostring(1e16)", "tostring(0.1)", "tostring(1/3)",
-                    "math.tointeger(\"8\")", "math.tointeger(2^53)", "3 % -2", "-3 % 2", "3.5 % -2", "-3 // 0.0", "0.0 / 0.0 ~= 0.0 / 0.0",
-                    "math.mininteger // -1", "math.mininteger % -1", "1 << 64", "1 << 63", "-1 >> 1", "1 >> -1", "2^-1074",
-                    "math.maxinteger + 0.0 == math.maxinteger", "math.maxinteger < math.maxinteger + 0.0", "2^53 + 1 == 2^53 + 1.0",
-                    "\"10\" + 1", "\"3\" * \"4\"", "10 .. 20", "1e100 // 1", "math.fmod(-6, 4)", "math.fmod(6, -4.0)", "string.format(\"%.3f\", 2.5)",
-                    "string.format(\"%5.1f|%-8.3e|%g\", 3.14159, 1234.5, 1e20)", "string.format(\"%i\", 3.0)", "#\"\\0\\0\"",
-                    "string.rep(\"ab\", 3, \"\")", "(\"x\"):rep(0)", "math.abs(math.mininteger)", "math.floor(-0.0)", "math.ceil(-0.5)",
-                    "select(-1, 1, 2, 3)", "string.format(\"%q\", 1/0)", "string.format(\"%q\", math.mininteger)", "8 // 3 * 3 + 8 % 3",
-                    "2^2^3", "-2^2", "not nil == true", "1 .. 2 == \"12\"", "\"a\" < \"b\"", "\"Z\" < \"a\"", "\"\" < \"\\0\"",
-                    "math.type(1//1)", "math.type(1.0//1)", "7 // 2.0", "-7 // 2", "-7 % 2.0", "0x10p-1", "1e2 == 100",
+                    "tonumber(\"0x\")",
+                    "tonumber(\"1e\")",
+                    "tonumber(\"  0x1p4  \")",
+                    "tonumber(\"10\", 16)",
+                    "tonumber(\"ff\", 16)",
+                    "tonumber(\"8\", 8)",
+                    "tonumber(\"1.5\", 10)",
+                    "tonumber(\"-zz\", 36)",
+                    "tonumber(\"9223372036854775808\")",
+                    "tostring(2^63)",
+                    "tostring(-0.0)",
+                    "tostring(1e15)",
+                    "tostring(1e16)",
+                    "tostring(0.1)",
+                    "tostring(1/3)",
+                    "math.tointeger(\"8\")",
+                    "math.tointeger(2^53)",
+                    "3 % -2",
+                    "-3 % 2",
+                    "3.5 % -2",
+                    "-3 // 0.0",
+                    "0.0 / 0.0 ~= 0.0 / 0.0",
+                    "math.mininteger // -1",
+                    "math.mininteger % -1",
+                    "1 << 64",
+                    "1 << 63",
+                    "-1 >> 1",
+                    "1 >> -1",
+                    "2^-1074",
+                    "math.maxinteger + 0.0 == math.maxinteger",
+                    "math.maxinteger < math.maxinteger + 0.0",
+                    "2^53 + 1 == 2^53 + 1.0",
+                    "\"10\" + 1",
+                    "\"3\" * \"4\"",
+                    "10 .. 20",
+                    "1e100 // 1",
+                    "math.fmod(-6, 4)",
+                    "math.fmod(6, -4.0)",
+                    "string.format(\"%.3f\", 2.5)",
+                    "string.format(\"%5.1f|%-8.3e|%g\", 3.14159, 1234.5, 1e20)",
+                    "string.format(\"%i\", 3.0)",
+                    "#\"\\0\\0\"",
+                    "string.rep(\"ab\", 3, \"\")",
+                    "(\"x\"):rep(0)",
+                    "math.abs(math.mininteger)",
+                    "math.floor(-0.0)",
+                    "math.ceil(-0.5)",
+                    "select(-1, 1, 2, 3)",
+                    "string.format(\"%q\", 1/0)",
+                    "string.format(\"%q\", math.mininteger)",
+                    "8 // 3 * 3 + 8 % 3",
+                    "2^2^3",
+                    "-2^2",
+                    "not nil == true",
+                    "1 .. 2 == \"12\"",
+                    "\"a\" < \"b\"",
+                    "\"Z\" < \"a\"",
+                    "\"\" < \"\\0\"",
+                    "math.type(1//1)",
+                    "math.type(1.0//1)",
+                    "7 // 2.0",
+                    "-7 // 2",
+                    "-7 % 2.0",
+                    "0x10p-1",
+                    "1e2 == 100",
                 ]);
                 c!(format!("__emit(pcall(function() return {x} end))\n"))
             }
@@ -2072,7 +2566,10 @@ impl<'a> Gen<'a> {
         if self.rng.pct(35) {
             self.hit("lib:coroutine.wrap");
             return c!(
-                split(format!("do local {co} = coroutine.wrap(function({pr})\n"), format!("do local {co} = coroutine.wrap(function({pl})\n")),
+                split(
+                    format!("do local {co} = coroutine.wrap(function({pr})\n"),
+                    format!("do local {co} = coroutine.wrap(function({pl})\n")
+                ),
                 body,
                 format!("end)\nfor i = 1, {n} do __emit(\"wrap\", pcall({co}, i)) end\nend\n")
             );
@@ -2084,9 +2581,14 @@ impl<'a> Gen<'a> {
             String::new()
         };
         c!(
-            split(format!("do local {co} = coroutine.create(function({pr})\n"), format!("do local {co} = coroutine.create(function({pl})\n")),
+            split(
+                format!("do local {co} = coroutine.create(function({pr})\n"),
+                format!("do local {co} = coroutine.create(function({pl})\n")
+            ),
             body,
-            format!("end)\nfor i = 1, {n} do __emit(\"resume\", coroutine.resume({co}, i, \"r\")) end\n__emit(coroutine.status({co}))\n{close}end\n")
+            format!(
+                "end)\nfor i = 1, {n} do __emit(\"resume\", coroutine.resume({co}, i, \"r\")) end\n__emit(coroutine.status({co}))\n{close}end\n"
+            )
         )
     }
 
@@ -2109,7 +2611,9 @@ impl<'a> Gen<'a> {
                     0 => c!(format!("local {y} = coroutine.yield("), e, ")\n"),
                     1 => c!("__emit(\"got\", coroutine.yield(", e, ", 2))\n"),
                     2 => c!("__emit(\"in-pcall\", pcall(coroutine.yield, ", e, "))\n"),
-                    _ => c!("__emit(coroutine.running() ~= nil, coroutine.isyieldable(), coroutine.status((coroutine.running())))\n"),
+                    _ => c!(
+                        "__emit(coroutine.running() ~= nil, coroutine.isyieldable(), coroutine.status((coroutine.running())))\n"
+                    ),
                 }
             } else {
                 self.stat()
@@ -2188,10 +2692,20 @@ impl<'a> Gen<'a> {
                 self.hit("program:segment");
                 let (params, vararg) = self.params();
                 let (pr, pl) = self.param_text(&params, vararg);
-                let body = { let nn = 1 + self.rng.below(5); self.func_body(&params, vararg, nn) };
+                let body = {
+                    let nn = 1 + self.rng.below(5);
+                    self.func_body(&params, vararg, nn)
+                };
                 let args = self.args(1);
                 let sep = if args.l.is_empty() { "" } else { ", " };
-                o = c!(o, split(format!("__seg({seg}, function({pr})\n"), format!("__seg({seg}, function({pl})\n")), body, format!("end{sep}"), args, ")\n");
+                o = c!(
+                    o,
+                    split(format!("__seg({seg}, function({pr})\n"), format!("__seg({seg}, function({pl})\n")),
+                    body,
+                    format!("end{sep}"),
+                    args,
+                    ")\n"
+                );
             }
         }
         let vs: Vec<String> = self.visible().into_iter().take(4).map(|v| v.name.clone()).collect();
@@ -2209,7 +2723,9 @@ impl<'a> Gen<'a> {
             3 => format!("return {}1", "- ".repeat(n)),
             4 => format!("return {}1", "not ".repeat(n)),
             5 => format!("local x = 1 return x{}", " .. x".repeat(n)),
-            6 => format!("local f = function(...) return ... end return {}1{}", "f(".repeat(n), ")".repeat(n)),
+            6 => {
+                format!("local f = function(...) return ... end return {}1{}", "f(".repeat(n), ")".repeat(n))
+            }
             7 => format!("{}return 1{}", "local function f() ".repeat(n), " end".repeat(n)),
             8 => format!("{}local z = 1{}", "if true then ".repeat(n), " end".repeat(n)),
             9 => format!("local t = {{}} t{} = 1 return 1", ".a".repeat(n)),

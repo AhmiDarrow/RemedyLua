@@ -22,11 +22,27 @@ fn closures_of_every_upvalue_count_and_source() {
         // own upvalues and declares the rest; the inner closure captures all n, some from
         // the middle function's registers, some through its upvalues.
         let outer: Vec<String> = (0..n).map(|i| format!("u{i}")).collect();
-        let decl = if n == 0 { String::new() } else { format!("local {} = {}", outer.join(", "), (0..n).map(|i| (i * 3).to_string()).collect::<Vec<_>>().join(", ")) };
+        let decl = if n == 0 {
+            String::new()
+        } else {
+            format!(
+                "local {} = {}",
+                outer.join(", "),
+                (0..n).map(|i| (i * 3).to_string()).collect::<Vec<_>>().join(", ")
+            )
+        };
         let captured: Vec<&String> = outer.iter().step_by(2).collect();
         let fresh: Vec<String> = (0..n).filter(|i| i % 2 == 1).map(|i| format!("u{i}")).collect();
         let touch = captured.iter().map(|u| format!("local _ = {u}")).collect::<Vec<_>>().join("; ");
-        let fresh_decl = if fresh.is_empty() { String::new() } else { format!("local {} = {}", fresh.join(", "), fresh.iter().map(|_| "100").collect::<Vec<_>>().join(", ")) };
+        let fresh_decl = if fresh.is_empty() {
+            String::new()
+        } else {
+            format!(
+                "local {} = {}",
+                fresh.join(", "),
+                fresh.iter().map(|_| "100").collect::<Vec<_>>().join(", ")
+            )
+        };
         let sum = if n == 0 { "0".to_string() } else { outer.join(" + ") };
         let bump = outer.iter().map(|u| format!("{u} = {u} + k")).collect::<Vec<_>>().join("; ");
         src.push_str(&format!(
@@ -53,7 +69,6 @@ end
     same_as_c(&src);
 }
 
-
 /// A call between a function that needs more than one narrow register window and one
 /// that does not is made on the full path (the fast loop only calls functions of its own
 /// width): results, fuel and memory are the same either way.
@@ -71,7 +86,6 @@ fn calls_between_wide_and_narrow_functions() {
     let r = remedy(&src, 50_000_000);
     assert_eq!(r, Ok("6460".to_string()), "{r:?}");
 }
-
 
 /// An open upvalue is read and written in place only by its own thread: a coroutine using
 /// a local open on the main thread's stack, and the main thread using one open on a
@@ -103,7 +117,6 @@ fn upvalues_open_on_another_thread() {
         ",
     );
 }
-
 
 /// The fast loop's `return x` writes the one result from the register window straight to
 /// the function's slot when no upvalue needs closing; the rest (several results, nils to
@@ -140,7 +153,6 @@ fn returns_of_every_shape_reach_the_caller() {
         ",
     );
 }
-
 
 /// `obj:m()` reads the method through one `__index` class link at the instruction's hint
 /// (`SelfK`), falling back to `chain_from` for everything else: a method replaced or
@@ -181,7 +193,8 @@ fn method_lookups_through_one_class_link() {
     let mut fuel = Vec::new();
     for seed in 1..=8u64 {
         for fast in [true, false] {
-            let mut lua = remedy_lua::Lua::new(remedy_lua::Limits::default().hash_seed(seed), remedy_lua::Libs::ALL);
+            let mut lua =
+                remedy_lua::Lua::new(remedy_lua::Limits::default().hash_seed(seed), remedy_lua::Libs::ALL);
             lua.set_fast_loop(fast);
             lua.exec(src, "=t").unwrap();
             fuel.push(lua.fuel_left());
@@ -404,7 +417,10 @@ fn fast_loop_returns_out_of_a_callback() {
 fn host_calls_pass_every_count_of_arguments() {
     let mut seen = Vec::new();
     for fast in [true, false] {
-        let mut lua = remedy_lua::Lua::new(remedy_lua::Limits::default().hash_seed(crate::common::TEST_SEED), remedy_lua::Libs::ALL);
+        let mut lua = remedy_lua::Lua::new(
+            remedy_lua::Limits::default().hash_seed(crate::common::TEST_SEED),
+            remedy_lua::Libs::ALL,
+        );
         lua.set_fast_loop(fast);
         lua.exec("function f(...) local s = select('#', ...) for i = 1, s do s = s * 31 + (select(i, ...)) end return s end", "=t").unwrap();
         let mut out = Vec::new();
@@ -417,7 +433,8 @@ fn host_calls_pass_every_count_of_arguments() {
     }
     assert_eq!(seen[0], seen[1]);
     let expect = |n: i64| (1..=n).fold(n, |s, i| s.wrapping_mul(31).wrapping_add(i));
-    let want: Vec<String> = [0, 1, 2, 3, 20].iter().map(|&n| format!("{:?}", Some(remedy_lua::Value::Int(expect(n))))).collect();
+    let want: Vec<String> =
+        [0, 1, 2, 3, 20].iter().map(|&n| format!("{:?}", Some(remedy_lua::Value::Int(expect(n))))).collect();
     assert_eq!(seen[0].0, want);
 }
 

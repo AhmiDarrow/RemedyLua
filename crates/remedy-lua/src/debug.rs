@@ -93,12 +93,12 @@ pub(crate) fn sets_reg(i: &Instr, reg: Reg) -> bool {
         | Instr::TestSet { a, .. }
         | Instr::Closure { a, .. } => a == reg,
         Instr::SelfK { a, .. } => reg == a || reg == a.wrapping_add(1),
-        Instr::LoadNil { a, n } => a <= reg && u16::from(reg) <= u16::from(a) + u16::from(n),
+        Instr::LoadNil { a, n } => a <= reg && reg <= a + n,
         Instr::Call { a, .. } | Instr::TailCall { a, .. } => reg >= a,
-        Instr::TForCall { a, .. } => u16::from(reg) >= u16::from(a) + 2,
+        Instr::TForCall { a, .. } => reg >= a + 2,
         Instr::VarArg { a, .. } => reg >= a,
-        Instr::ForPrep { a, .. } | Instr::ForLoop { a, .. } => reg >= a && u16::from(reg) <= u16::from(a) + 3,
-        Instr::TForLoop { a, .. } => u16::from(reg) == u16::from(a) + 2,
+        Instr::ForPrep { a, .. } | Instr::ForLoop { a, .. } => reg >= a && reg <= a + 3,
+        Instr::TForLoop { a, .. } => reg == a + 2,
         _ => false,
     }
 }

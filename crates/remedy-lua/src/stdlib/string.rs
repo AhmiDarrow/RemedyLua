@@ -3,8 +3,8 @@
 use super::R;
 use super::pattern::{Cap, MatchState, Matcher, Watch, find_plain, no_specials};
 use crate::LimitKind;
-use crate::value::{StrRef, Value};
 use crate::bytecode::ArithOp;
+use crate::value::{StrRef, Value};
 use crate::vm::{Args, Lua, LuaError};
 
 pub(super) fn open(lua: &mut Lua) {
@@ -58,9 +58,7 @@ pub(super) fn open(lua: &mut Lua) {
 pub(crate) fn posrelat_i(pos: i64, len: usize) -> usize {
     if pos > 0 {
         usize::try_from(pos).unwrap_or(usize::MAX)
-    } else if pos == 0 {
-        1
-    } else if pos.unsigned_abs() > len as u64 {
+    } else if pos == 0 || pos.unsigned_abs() > len as u64 {
         1
     } else {
         len - pos.unsigned_abs() as usize + 1
@@ -314,9 +312,7 @@ fn pat_err(e: super::pattern::PatError) -> LuaError {
 fn cap_value(lua: &mut Lua, s: StrRef, c: Cap) -> Result<Value, LuaError> {
     match c {
         Cap::Pos(p) => Ok(Value::Int(p as i64)),
-        Cap::Str(x, y) => {
-            lua.new_derived(s, x, y, |src, dest| dest.copy_from_slice(src))
-        }
+        Cap::Str(x, y) => lua.new_derived(s, x, y, |src, dest| dest.copy_from_slice(src)),
     }
 }
 
@@ -346,7 +342,9 @@ fn find_aux(lua: &mut Lua, a: Args, find: bool) -> R {
             None => lua.ret1(Value::Nil),
         };
     }
-    let Some((st, e, caps)) = search(lua, s, p, init - 1, true, -1, !find, 1)? else { return lua.ret1(Value::Nil) };
+    let Some((st, e, caps)) = search(lua, s, p, init - 1, true, -1, !find, 1)? else {
+        return lua.ret1(Value::Nil);
+    };
     let mut out = [Value::Nil; super::pattern::MAX_CAPTURES + 2];
     let mut n = 0;
     if find {
@@ -411,7 +409,15 @@ type Found = Option<Result<(usize, usize, super::pattern::Captures), super::patt
 /// Shared with the in-place `find` and `match` (`in_place`), so both take the same steps.
 #[allow(clippy::too_many_arguments)]
 #[inline(always)]
-fn search_in(src: &[u8], pat: &[u8], mut s1: usize, anchor_ok: bool, last: i64, whole: bool, st: &mut MatchState) -> (Found, u64, Option<LimitKind>) {
+fn search_in(
+    src: &[u8],
+    pat: &[u8],
+    mut s1: usize,
+    anchor_ok: bool,
+    last: i64,
+    whole: bool,
+    st: &mut MatchState,
+) -> (Found, u64, Option<LimitKind>) {
     let anchor = anchor_ok && pat.first() == Some(&b'^');
     let pat = if anchor { pat.get(1..).unwrap_or_default() } else { pat };
     let mut m = Matcher::new(src, pat, st);
@@ -510,7 +516,12 @@ fn repl_len(rs: &[u8], m: &Matcher<'_>, pos: usize, e: usize) -> usize {
     n
 }
 
-fn gsub_into(lua: &mut Lua, a: Args, out: &mut super::OutBuf, steps_total: &mut u64) -> Result<i64, LuaError> {
+fn gsub_into(
+    lua: &mut Lua,
+    a: Args,
+    out: &mut super::OutBuf,
+    steps_total: &mut u64,
+) -> Result<i64, LuaError> {
     let s = lua.check_str(a, 0)?;
     let p = lua.check_str(a, 1)?;
     let repl = lua.arg(a, 2);
@@ -617,7 +628,12 @@ fn gsub_into(lua: &mut Lua, a: Args, out: &mut super::OutBuf, steps_total: &mut 
                             if c != b'%' {
                                 // A run of text, copied as a capture is (S6R-8: byte by byte,
                                 // 16 MiB of it went by with no look at the stop).
-                                let run = rs.get(i..).unwrap_or_default().iter().position(|&b| b == b'%').map_or(rs.len(), |k| i + k);
+                                let run = rs
+                                    .get(i..)
+                                    .unwrap_or_default()
+                                    .iter()
+                                    .position(|&b| b == b'%')
+                                    .map_or(rs.len(), |k| i + k);
                                 put(out, rs.get(i..run).unwrap_or_default())?;
                                 i = run;
                                 continue;
@@ -712,7 +728,10 @@ fn gsub_into(lua: &mut Lua, a: Args, out: &mut super::OutBuf, steps_total: &mut 
                     Value::Str(r) => copy_out(lua, out, r, 0, usize::MAX, limit)?,
                     Value::Int(_) | Value::Num(_) => lua.append_stringable(&mut **out, v),
                     other => {
-                        return Err(LuaError::msg(format!("invalid replacement value (a {})", other.type_name())));
+                        return Err(LuaError::msg(format!(
+                            "invalid replacement value (a {})",
+                            other.type_name()
+                        )));
                     }
                 }
                 pos = e;
@@ -733,13 +752,20 @@ fn gsub_into(lua: &mut Lua, a: Args, out: &mut super::OutBuf, steps_total: &mut 
 /// Bytes `from..to` of `s` onto gsub's output: past the string limit its memory error,
 /// else the room paid for first and the bytes copied a piece at a time between looks at
 /// the stop (`extend_watched`).
-fn copy_out(lua: &mut Lua, out: &mut super::OutBuf, s: StrRef, from: usize, to: usize, limit: usize) -> Result<(), LuaError> {
+fn copy_out(
+    lua: &mut Lua,
+    out: &mut super::OutBuf,
+    s: StrRef,
+    from: usize,
+    to: usize,
+    limit: usize,
+) -> Result<(), LuaError> {
     let n = lua.bytes(s).len().min(to).saturating_sub(from);
     if out.len().saturating_add(n) > limit {
         return Err(LuaError::Limit(LimitKind::Memory));
     }
     out.reserve(lua, n)?;
-    lua.extend_watched(&mut **out, s, from, from + n)
+    lua.extend_watched(out, s, from, from + n)
 }
 
 /// The string metatable's arithmetic (`__add` …): numbers from strings, else the other
@@ -755,13 +781,18 @@ fn str_unm(lua: &mut Lua, a: Args) -> R {
     match lua.tonumber_charged(x)? {
         Some(Value::Int(i)) => lua.ret1(Value::Int(i.wrapping_neg())),
         Some(Value::Num(f)) => lua.ret1(Value::Num(-f)),
-        _ => Err(LuaError::msg(format!("attempt to unm a '{}' with a '{}'", x.type_name(), lua.arg(a, 1).type_name()))),
+        _ => Err(LuaError::msg(format!(
+            "attempt to unm a '{}' with a '{}'",
+            x.type_name(),
+            lua.arg(a, 1).type_name()
+        ))),
     }
 }
 
 /// The library functions a call from Lua code runs in place (`Lua::call_in_place`), in
 /// this order: the string library's, then `tostring` and `type`.
-pub(crate) const IN_PLACE: [&str; 10] = ["byte", "sub", "find", "match", "upper", "lower", "rep", "char", "tostring", "type"];
+pub(crate) const IN_PLACE: [&str; 10] =
+    ["byte", "sub", "find", "match", "upper", "lower", "rep", "char", "tostring", "type"];
 
 /// Marks the functions of `t` named `names` as `IN_PLACE`'s from `first` on
 /// (`Func::Native::in_place`): a call to exactly that function value runs in place.
@@ -917,7 +948,11 @@ pub(crate) fn in_place(
                         // this one finishes.)
                         // Capped, and none whose scan alone passes the cap: the full path would
                         // repeat it (SEC7-N5, a 1 MiB miss was searched twice, 2x the CPU).
-                        let budget = u64::try_from(fuel).ok()?.saturating_mul(64).saturating_add(64).min(IN_PLACE_WORK);
+                        let budget = u64::try_from(fuel)
+                            .ok()?
+                            .saturating_mul(64)
+                            .saturating_add(64)
+                            .min(IN_PLACE_WORK);
                         if hay.len() - (init - 1) > IN_PLACE_WORK as usize {
                             return None;
                         }
@@ -933,18 +968,27 @@ pub(crate) fn in_place(
                     }
                     // The library's step cap (`step_cap`, the fuel in hand only), or fewer;
                     // the watch kept for the library's next call (never looked at here).
-                    let cap = max_steps(l).min(u64::try_from(fuel).ok()?.saturating_add(1).saturating_mul(STEPS_PER_FUEL)).min(IN_PLACE_STEPS);
+                    let cap = max_steps(l)
+                        .min(u64::try_from(fuel).ok()?.saturating_add(1).saturating_mul(STEPS_PER_FUEL))
+                        .min(IN_PLACE_STEPS);
                     let mut st = ms.take().unwrap_or_else(|| Box::new(MatchState::new(0, Watch::default())));
                     st.reuse_keeping_watch(cap);
-                    let (found, steps, _) = search_in(heap.str_bytes(s), heap.str_bytes(p), init - 1, true, -1, !find, &mut st);
+                    let (found, steps, _) =
+                        search_in(heap.str_bytes(s), heap.str_bytes(p), init - 1, true, -1, !find, &mut st);
                     *ms = Some(st);
                     // (Past the cap: an error here that the full path may not raise.)
                     if steps > cap {
                         return None;
                     }
                     let cost = steps / STEPS_PER_FUEL + 1;
-                    let Some((st, e, caps)) = found.transpose().ok()? else { return in_budget([Value::Nil; 2], 1, cost, fuel) };
-                    let (mut out, mut n) = if find { ([Value::Int(st as i64 + 1), Value::Int(e as i64)], 2) } else { ([Value::Nil; 2], 0) };
+                    let Some((st, e, caps)) = found.transpose().ok()? else {
+                        return in_budget([Value::Nil; 2], 1, cost, fuel);
+                    };
+                    let (mut out, mut n) = if find {
+                        ([Value::Int(st as i64 + 1), Value::Int(e as i64)], 2)
+                    } else {
+                        ([Value::Nil; 2], 0)
+                    };
                     // (String captures found interned only: making them, the full path
                     // charges each as it goes, a point at which it may stop.)
                     for c in caps.iter() {
@@ -987,10 +1031,20 @@ fn in_budget(out: [Value; 2], n: usize, cost: u64, fuel: i64) -> Option<([Value;
 /// The one result `bytes` as `new_str` makes it (short, interned), after `pre` fuel charged
 /// first, which the fuel in hand must cover (else None, nothing made). None too past the
 /// string limit (an error) or with its memory refused (the full path collects first).
-fn made(heap: &mut crate::heap::Heap, bytes: &[u8], pre: u64, fuel: i64, string_len: usize) -> Option<([Value; 2], usize, i64)> {
+fn made(
+    heap: &mut crate::heap::Heap,
+    bytes: &[u8],
+    pre: u64,
+    fuel: i64,
+    string_len: usize,
+) -> Option<([Value; 2], usize, i64)> {
     if bytes.len() > string_len || bytes.len() > crate::heap::SHORT_LEN || i64::try_from(pre).ok()? >= fuel {
         return None;
     }
     let r = heap.intern(bytes).ok()?;
-    Some(([Value::Str(r), Value::Nil], 1, i64::try_from(pre.saturating_add(crate::table::take_probes())).unwrap_or(i64::MAX)))
+    Some((
+        [Value::Str(r), Value::Nil],
+        1,
+        i64::try_from(pre.saturating_add(crate::table::take_probes())).unwrap_or(i64::MAX),
+    ))
 }

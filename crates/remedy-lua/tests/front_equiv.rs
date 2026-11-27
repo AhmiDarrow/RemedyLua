@@ -53,7 +53,11 @@ impl Tally {
             return;
         }
         let new = parse_new(src, name);
-        assert!(old == new, "parse differs for {name}:\n{}\nold: {old:?}\nnew: {new:?}", String::from_utf8_lossy(src));
+        assert!(
+            old == new,
+            "parse differs for {name}:\n{}\nold: {old:?}\nnew: {new:?}",
+            String::from_utf8_lossy(src)
+        );
         if old.is_err() {
             self.parse_errors += 1;
             return;
@@ -66,7 +70,11 @@ impl Tally {
             return;
         }
         let new = compile_new(src, name);
-        assert!(old == new, "compile differs for {name}:\n{}\nold: {old:#?}\nnew: {new:#?}", String::from_utf8_lossy(src));
+        assert!(
+            old == new,
+            "compile differs for {name}:\n{}\nold: {old:#?}\nnew: {new:#?}",
+            String::from_utf8_lossy(src)
+        );
         if old.is_ok() {
             self.compiled += 1;
             // The one change from the old compiler: chains of unary operators and fields

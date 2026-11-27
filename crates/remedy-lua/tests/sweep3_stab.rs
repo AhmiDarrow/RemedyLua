@@ -13,7 +13,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
-use remedy_lua::{Error, LimitKind, Libs, Limits, Lua, Value};
+use remedy_lua::{Error, Libs, LimitKind, Limits, Lua, Value};
 
 use super::common;
 
@@ -75,7 +75,10 @@ fn counts(lua: &Lua) -> Vec<(&'static str, usize)> {
     sizes(lua)
         .into_iter()
         .filter(|(k, _)| {
-            !matches!(*k, "stack" | "interner_slots" | "interner_moving" | "slab_slots" | "free_slots" | "slack_bytes")
+            !matches!(
+                *k,
+                "stack" | "interner_slots" | "interner_moving" | "slab_slots" | "free_slots" | "slack_bytes"
+            )
         })
         .map(|(k, v)| if k == "gc_scratch_bytes" { (k, usize::from(v > 7 * 64 * 1024)) } else { (k, v) })
         .collect()
@@ -164,10 +167,13 @@ fn vms_created_and_dropped_free_everything() {
         lua.set_global("tu", tud).unwrap();
         lua.set_app_data(Payload(Arc::clone(&token)));
         let t = Arc::clone(&token);
-        lua.set_time_limit(Some((Arc::new(move || {
-            let _held = &t;
-            Duration::ZERO
-        }), Duration::from_secs(60))));
+        lua.set_time_limit(Some((
+            Arc::new(move || {
+                let _held = &t;
+                Duration::ZERO
+            }),
+            Duration::from_secs(60),
+        )));
         let t = Arc::clone(&token);
         lua.set_print(move |_| {
             let _held = &t;
@@ -220,7 +226,8 @@ fn scripts_loaded_and_unloaded_return_to_baseline() {
             let f = l.load(&src, &format!("=chunk{i}")).unwrap();
             l.call(f.value(), &[]).unwrap();
         }
-        let r = both_exec(&mut p, &format!("return compile([[ return {i} * 2, 'u{i}' .. ('{i}'):rep(30) ]])"));
+        let r =
+            both_exec(&mut p, &format!("return compile([[ return {i} * 2, 'u{i}' .. ('{i}'):rep(30) ]])"));
         assert!(r.starts_with(&(i * 2).to_string()));
         if i % 100 == 99 {
             let m: Vec<_> = p.iter_mut().map(|l| (gc_mem(l), counts(l))).collect();
@@ -301,7 +308,9 @@ fn long_lived_script_plateaus_and_paths_agree() {
             assert_eq!(m[0], m[1], "step {i}: fast and full hold different things");
             curve.push(m[0].0);
             // What the account does not see: slab, interner and stack sizes.
-            slots.push(["slab_slots", "interner_slots", "stack"].iter().map(|k| size(&p[0], k)).sum::<usize>());
+            slots.push(
+                ["slab_slots", "interner_slots", "stack"].iter().map(|k| size(&p[0], k)).sum::<usize>(),
+            );
             sample("churn", &b, i, m[0].0);
             // After warm-up the live set is fixed (a 64-slot ring): so are the counts.
             if i >= 99 {
@@ -412,8 +421,16 @@ struct Attack {
 
 const ATTACKS: &[Attack] = &[
     Attack { src: "while true do end", limits: |l| l.fuel(200_000), kind: Some(LimitKind::Fuel) },
-    Attack { src: "local x = 0 for i = 1, math.huge do x = x + i end", limits: |l| l.fuel(150_000), kind: Some(LimitKind::Fuel) },
-    Attack { src: "pcall(function() while true do end end) while true do end", limits: |l| l.fuel(100_000), kind: Some(LimitKind::Fuel) },
+    Attack {
+        src: "local x = 0 for i = 1, math.huge do x = x + i end",
+        limits: |l| l.fuel(150_000),
+        kind: Some(LimitKind::Fuel),
+    },
+    Attack {
+        src: "pcall(function() while true do end end) while true do end",
+        limits: |l| l.fuel(100_000),
+        kind: Some(LimitKind::Fuel),
+    },
     Attack {
         src: "local co = coroutine.wrap(function() while true do coroutine.yield() end end) while true do co() end",
         limits: |l| l.fuel(100_000),
@@ -441,8 +458,16 @@ const ATTACKS: &[Attack] = &[
         limits: |l| l.memory(4 << 20),
         kind: None,
     },
-    Attack { src: "local function f(n) return 1 + f(n) end return pcall(f, 1), f(2)", limits: |l| l.memory(4 << 20), kind: None },
-    Attack { src: "local t = {} while true do t[#t + 1] = {} end", limits: |l| l.memory(2 << 20), kind: Some(LimitKind::Memory) },
+    Attack {
+        src: "local function f(n) return 1 + f(n) end return pcall(f, 1), f(2)",
+        limits: |l| l.memory(4 << 20),
+        kind: None,
+    },
+    Attack {
+        src: "local t = {} while true do t[#t + 1] = {} end",
+        limits: |l| l.memory(2 << 20),
+        kind: Some(LimitKind::Memory),
+    },
     Attack {
         src: "local s = 'x' while true do s = s .. s .. 'y' end",
         limits: |l| l.memory(2 << 20),
@@ -470,7 +495,11 @@ const ATTACKS: &[Attack] = &[
         limits: |l| l,
         kind: None,
     },
-    Attack { src: "while true do print(string.rep('p', 100)) end", limits: |l| l.output(10_000).fuel(200_000), kind: Some(LimitKind::Fuel) },
+    Attack {
+        src: "while true do print(string.rep('p', 100)) end",
+        limits: |l| l.output(10_000).fuel(200_000),
+        kind: Some(LimitKind::Fuel),
+    },
     Attack {
         src: "local c <close> = setmetatable({}, {__close = function() while true do end end}) error('x')",
         limits: |l| l.fuel(100_000),
@@ -594,29 +623,32 @@ fn interrupts_and_time_limits_fired_repeatedly() {
         }
         // 3. From another thread, by the wall clock, while a loop runs: how late is the stop?
         for l in &mut p {
-        let stop = l.interrupt_handle();
-        let t0 = Instant::now();
-        let th = std::thread::spawn(move || {
-            std::thread::sleep(Duration::from_millis(3));
-            stop.interrupt();
-            Instant::now()
-        });
-        let r = l.exec("local s = 'a' while true do s = (s .. 'b'):sub(-10) end", "=wall");
-        let ended = Instant::now();
-        let fired = th.join().unwrap();
-        assert_eq!(r, Err(Error::Limit(LimitKind::Interrupted)));
-        assert!(ended > t0);
-        worst = worst.max(ended.saturating_duration_since(fired));
-        l.interrupt_handle().reset();
-        // A real-clock time limit too.
-        l.set_time_limit(Some((Arc::new({
-            let s = Instant::now();
-            move || s.elapsed()
-        }), Duration::from_millis(3))));
-        assert_eq!(l.exec("while true do end", "=t"), Err(Error::Limit(LimitKind::Time)));
-        l.set_time_limit(None);
-        // How much garbage the wall-clock runs left depends on timing: start clean.
-        gc_mem(l);
+            let stop = l.interrupt_handle();
+            let t0 = Instant::now();
+            let th = std::thread::spawn(move || {
+                std::thread::sleep(Duration::from_millis(3));
+                stop.interrupt();
+                Instant::now()
+            });
+            let r = l.exec("local s = 'a' while true do s = (s .. 'b'):sub(-10) end", "=wall");
+            let ended = Instant::now();
+            let fired = th.join().unwrap();
+            assert_eq!(r, Err(Error::Limit(LimitKind::Interrupted)));
+            assert!(ended > t0);
+            worst = worst.max(ended.saturating_duration_since(fired));
+            l.interrupt_handle().reset();
+            // A real-clock time limit too.
+            l.set_time_limit(Some((
+                Arc::new({
+                    let s = Instant::now();
+                    move || s.elapsed()
+                }),
+                Duration::from_millis(3),
+            )));
+            assert_eq!(l.exec("while true do end", "=t"), Err(Error::Limit(LimitKind::Time)));
+            l.set_time_limit(None);
+            // How much garbage the wall-clock runs left depends on timing: start clean.
+            gc_mem(l);
         }
         // Afterwards: the same probe, the same fuel, the same memory, both paths.
         let r = both_exec(&mut p, PROBE);
@@ -681,9 +713,17 @@ fn tracked_userdata_app_data_and_roots_do_not_pile_up() {
     // The live bytes return exactly. The `keep` table and its metatable just replaced
     // leave their two slots free below the new ones (SEC-M5: free slots are counted in
     // `memory_used`); nothing else may be left free.
-    assert_eq!(end.0 - size(&lua, "slack_bytes"), base.0 - base_slack, "live bytes did not return to their baseline");
+    assert_eq!(
+        end.0 - size(&lua, "slack_bytes"),
+        base.0 - base_slack,
+        "live bytes did not return to their baseline"
+    );
     assert_eq!(end.1, base.1, "bookkeeping did not return to its baseline");
-    assert!(size(&lua, "free_slots") <= base_free + 2, "free slots pile up: {} from {base_free}", size(&lua, "free_slots"));
+    assert!(
+        size(&lua, "free_slots") <= base_free + 2,
+        "free slots pile up: {} from {base_free}",
+        size(&lua, "free_slots")
+    );
     assert_eq!(Arc::strong_count(&token), 1);
     sample("host_bookkeeping", &b, i, lua.memory_used());
 }
@@ -696,7 +736,8 @@ fn corpus() -> Vec<(String, String)> {
     let dirs: &[&str] = if long { &["conformance", "sweep1/spec", "sweep1/fuzz"] } else { &["conformance"] };
     let mut cases = Vec::new();
     for d in dirs {
-        let mut files: Vec<_> = std::fs::read_dir(root.join(d)).unwrap().filter_map(|e| e.ok().map(|e| e.path())).collect();
+        let mut files: Vec<_> =
+            std::fs::read_dir(root.join(d)).unwrap().filter_map(|e| e.ok().map(|e| e.path())).collect();
         files.sort();
         for f in files.iter().filter(|p| p.extension().is_some_and(|x| x == "lua")) {
             let src = std::fs::read_to_string(f).unwrap().replace("\r\n", "\n");

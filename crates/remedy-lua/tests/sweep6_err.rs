@@ -66,7 +66,8 @@ fn s6_2_nested_protected_call_levels_are_paid() {
     // `debug.traceback` lists every level of the run (as C Lua does): paid for each, where
     // its charge counted the run's frame once.
     let traceback_fuel = |calls: usize, fast: bool| {
-        let mut lua = remedy_lua::Lua::new(remedy_lua::Limits::default().fuel(1 << 40), remedy_lua::Libs::ALL);
+        let mut lua =
+            remedy_lua::Lua::new(remedy_lua::Limits::default().fuel(1 << 40), remedy_lua::Libs::ALL);
         lua.open_libs(remedy_lua::Libs::DEBUG_INFO);
         lua.set_fast_loop(fast);
         let src = format!(
@@ -119,9 +120,15 @@ fn s6gc_h1_tracebacks_are_made_for_the_host_only() {
                  coroutine.resume(co) return co end";
     for fast in [true, false] {
         let r = ratio(deep, "D(30)", 1_000_000, fast);
-        assert!(r < 5.0, "fast {fast}: errors caught by a native 30 frames deep at {r:.1}x plain code per unit");
+        assert!(
+            r < 5.0,
+            "fast {fast}: errors caught by a native 30 frames deep at {r:.1}x plain code per unit"
+        );
         let r = ratio(close, "coroutine.close(MK())", 1_000_000, fast);
-        assert!(r < 5.0, "fast {fast}: closing a coroutine with 20 erroring __close at {r:.1}x plain code per unit");
+        assert!(
+            r < 5.0,
+            "fast {fast}: closing a coroutine with 20 erroring __close at {r:.1}x plain code per unit"
+        );
     }
     // The host sees the same traceback as before (the frames where the error was raised,
     // at most 22).

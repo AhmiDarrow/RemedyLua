@@ -17,7 +17,8 @@ fn spec3_cases_match_c_lua() {
     let dir = std::env::var("SWEEP3_SPEC_DIR")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/lua/sweep3/spec"));
-    let mut files: Vec<_> = std::fs::read_dir(&dir).unwrap().filter_map(|e| e.ok().map(|e| e.path())).collect();
+    let mut files: Vec<_> =
+        std::fs::read_dir(&dir).unwrap().filter_map(|e| e.ok().map(|e| e.path())).collect();
     files.sort();
     let (mut count, mut failures) = (0, Vec::new());
     for f in files.iter().filter(|p| p.extension().is_some_and(|x| x == "lua")) {
@@ -108,7 +109,10 @@ fn spec3_hex_float_rounding_uses_dropped_digits() {
         ("0x1p-1075", "0"),
     ];
     for (s, want) in cases {
-        for src in [format!("return string.format('%.17g', tonumber('{s}'))"), format!("return string.format('%.17g', {s})")] {
+        for src in [
+            format!("return string.format('%.17g', tonumber('{s}'))"),
+            format!("return string.format('%.17g', {s})"),
+        ] {
             let mut lua = remedy_lua::Lua::new(remedy_lua::Limits::default(), remedy_lua::Libs::ALL);
             let r = lua.exec(src.as_str(), "=t").unwrap();
             assert_eq!(lua.to_string_lossy(r[0]).unwrap(), want, "{src}");
@@ -131,7 +135,8 @@ fn spec3_strict_5_4_has_no_compat() {
         local u = setmetatable({}, {__le = function() return 1 end})
         return tostring(ok) .. "|" .. e .. "|" .. table.concat(names, ",") .. "|" .. tostring(u <= u)"#;
     for fast in [true, false] {
-        let mut lua = remedy_lua::Lua::new(remedy_lua::Limits::default().strict_5_4(true), remedy_lua::Libs::ALL);
+        let mut lua =
+            remedy_lua::Lua::new(remedy_lua::Limits::default().strict_5_4(true), remedy_lua::Libs::ALL);
         lua.set_fast_loop(fast);
         let r = lua.exec(src, "=t").unwrap();
         assert_eq!(
@@ -141,7 +146,9 @@ fn spec3_strict_5_4_has_no_compat() {
     }
     // And the default has them.
     let mut lua = remedy_lua::Lua::new(remedy_lua::Limits::default(), remedy_lua::Libs::ALL);
-    let r = lua.exec("return math.pow(2, 3), setmetatable({}, {__lt = function() return false end}) <= {}", "=t").unwrap();
+    let r = lua
+        .exec("return math.pow(2, 3), setmetatable({}, {__lt = function() return false end}) <= {}", "=t")
+        .unwrap();
     assert_eq!(remedy_lua::Value::Num(8.0), r[0]);
     assert_eq!(remedy_lua::Value::Bool(true), r[1]);
 }

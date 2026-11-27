@@ -1,7 +1,7 @@
 //! Speed: the paths the speed work changed, checked against C Lua with the
 //! fast loop on and off (same results, fuel and memory: `common::remedy`).
 
-use remedy_lua::{Error, LimitKind, Libs, Limits, Lua, Value};
+use remedy_lua::{Error, Libs, LimitKind, Limits, Lua, Value};
 
 use crate::common::{TEST_SEED, oracle, remedy, small_stack};
 
@@ -33,7 +33,11 @@ fn limits_changed_inside_a_host_function_apply() {
             return ok, tostring(err)
         ";
         let r = lua.exec(src, "=t").unwrap();
-        assert_eq!(r.first().copied().and_then(|v| v.as_bool()), Some(false), "fast loop {fast}: the lowered limit did not apply");
+        assert_eq!(
+            r.first().copied().and_then(|v| v.as_bool()),
+            Some(false),
+            "fast loop {fast}: the lowered limit did not apply"
+        );
         let msg = r.get(1).and_then(|v| lua.to_string_lossy(*v)).unwrap_or_default();
         assert!(msg.contains("stack overflow"), "fast loop {fast}: {msg}");
     }
@@ -165,7 +169,10 @@ fn perf_sec_1_global_writes_charge_their_rehash() {
             let (keep, by_settabup) = used("fresh = 1");
             // The same new key through SETTABLE: its key in a register (two steps more).
             let (_, by_settable) = used("local k = 'fresh'; _ENV[k] = 1");
-            assert!(by_settable >= keep + size / 64, "size {size}, fast loop {fast}: no rehash ({by_settable} against {keep})");
+            assert!(
+                by_settable >= keep + size / 64,
+                "size {size}, fast loop {fast}: no rehash ({by_settable} against {keep})"
+            );
             assert_eq!(
                 by_settabup + 2,
                 by_settable,
@@ -266,7 +273,8 @@ fn matcher_state_reused_between_calls() {
 fn cpu_per_fuel(setup: &str, body: &str, fuel: u64, fast: bool) -> f64 {
     let mut best = f64::MAX;
     for _ in 0..3 {
-        let mut lua = Lua::new(Limits::default().fuel(1 << 40).memory(256 << 20).hash_seed(TEST_SEED), Libs::ALL);
+        let mut lua =
+            Lua::new(Limits::default().fuel(1 << 40).memory(256 << 20).hash_seed(TEST_SEED), Libs::ALL);
         lua.set_fast_loop(fast);
         lua.exec(setup, "=setup").unwrap();
         lua.set_limits(lua.limits().fuel(fuel));
@@ -302,7 +310,8 @@ fn ratio_to_plain(setup: &str, body: &str, fast: bool, bound: f64) -> f64 {
 /// state keeps what it worked out about its pattern: about 0.1x. The fuel is unchanged.
 #[test]
 fn lr_11_long_sets_cost_what_they_are_charged() {
-    let setup = "S = string.rep('1', 65536) P = '[' .. string.rep('b', 65536) .. ']' F = '%f' .. P Q = '1' .. P";
+    let setup =
+        "S = string.rep('1', 65536) P = '[' .. string.rep('b', 65536) .. ']' F = '%f' .. P Q = '1' .. P";
     for fast in [true, false] {
         // (A long search stops at the matcher's step limit, "pattern too complex": caught.)
         let bodies = [
@@ -358,7 +367,12 @@ fn long_sets_match_as_c_lua() {
 fn pack_formats_are_charged_by_what_they_read() {
     let setup = "f = string.rep('x', 16384) d = string.rep('a', 16384) g = string.rep('i', 16384)";
     for fast in [true, false] {
-        for body in ["pcall(string.packsize, f)", "pcall(string.pack, f)", "pcall(string.unpack, f, d)", "pcall(string.packsize, g)"] {
+        for body in [
+            "pcall(string.packsize, f)",
+            "pcall(string.pack, f)",
+            "pcall(string.unpack, f, d)",
+            "pcall(string.packsize, g)",
+        ] {
             let r = ratio_to_plain(setup, body, fast, 3.0);
             assert!(r < 3.0, "fast {fast}: {body} at {r:.1}x plain code per unit of fuel");
         }
@@ -383,8 +397,14 @@ fn a_rehash_the_fuel_cannot_pay_for_stops_before_it() {
                 assert_eq!(r.err(), Some(Error::Limit(LimitKind::Fuel)), "fast loop {fast}, seed {seed}");
                 assert_eq!(lua.fuel_left(), 0);
                 lua.set_limits(lua.limits().fuel(1 << 30));
-                let r = lua.exec("local n = 0 for _ in pairs(t) do n = n + 1 end return t[0] == nil, n", "=t").unwrap();
-                assert_eq!(r.first().and_then(|v| v.as_bool()), Some(true), "fast loop {fast}, seed {seed}: the table was touched");
+                let r = lua
+                    .exec("local n = 0 for _ in pairs(t) do n = n + 1 end return t[0] == nil, n", "=t")
+                    .unwrap();
+                assert_eq!(
+                    r.first().and_then(|v| v.as_bool()),
+                    Some(true),
+                    "fast loop {fast}, seed {seed}: the table was touched"
+                );
                 assert_eq!(r.get(1).and_then(|v| v.as_int()), Some(1 << 16));
                 // With the fuel for it, the rehash is done.
                 let r = lua.exec("local t = t t[0] = true return t[0]", "=t").unwrap();
@@ -410,7 +430,11 @@ fn a_rehash_is_checked_against_its_whole_charge() {
                     let mut lua = Lua::new(Limits::default().fuel(1 << 30).hash_seed(seed), Libs::ALL);
                     lua.set_fast_loop(fast);
                     // One key short of a power of two: the next new key rehashes.
-                    lua.exec("t = {} for i = 1, (1 << 17) - 1 do t[i * 3] = i end t.zz = 1 t.zz = nil", "=setup").unwrap();
+                    lua.exec(
+                        "t = {} for i = 1, (1 << 17) - 1 do t[i * 3] = i end t.zz = 1 t.zz = nil",
+                        "=setup",
+                    )
+                    .unwrap();
                     lua
                 };
                 // (Each host call starts with the whole budget: its fuel is the budget less
@@ -426,12 +450,19 @@ fn a_rehash_is_checked_against_its_whole_charge() {
                 let first = lua.limits().fuel - lua.fuel_left();
                 lua.set_limits(lua.limits().fuel(1 << 30));
                 let r = lua.exec("return t[-1] == nil", "=t").unwrap();
-                assert_eq!(r.first().and_then(|v| v.as_bool()), Some(true), "fast loop {fast}, seed {seed}: the table was touched");
+                assert_eq!(
+                    r.first().and_then(|v| v.as_bool()),
+                    Some(true),
+                    "fast loop {fast}, seed {seed}: the table was touched"
+                );
                 // The fuel it does take, the same both ways and for every seed: with the
                 // stopped call's, the whole charge (and the write's steps again).
                 lua.exec("local t = t t[-1] = 1", "=t").unwrap();
                 let used = lua.limits().fuel - lua.fuel_left();
-                assert!((whole..=whole + 100).contains(&(first + used)), "fast loop {fast}, seed {seed}: {first} + {used} for {whole}");
+                assert!(
+                    (whole..=whole + 100).contains(&(first + used)),
+                    "fast loop {fast}, seed {seed}: {first} + {used} for {whole}"
+                );
                 fuel.push((whole, first, used));
             }
         }
