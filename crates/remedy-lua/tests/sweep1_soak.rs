@@ -62,7 +62,10 @@ struct Curve {
     name: &'static str,
     start: Instant,
     long: bool,
-    last_proc: Instant,
+    /// When process memory was last read; `None` before the first reading. (It was set an
+    /// hour before `start`, which panics where the monotonic clock is younger than an hour:
+    /// a fresh CI runner, any machine just booted. Every soak test failed there.)
+    last_proc: Option<Instant>,
     last_print: f64,
     /// (iteration, memory_used after a full collection, process bytes), at most
     /// `CURVE_CAP`: past it, neighbours are merged keeping their maxima (the plateau check
@@ -90,7 +93,7 @@ impl Curve {
             name,
             start,
             long: b.is_long(),
-            last_proc: start - Duration::from_secs(3600),
+            last_proc: None,
             last_print: -1.0,
             samples: Vec::new(),
             stride: 1,
@@ -102,8 +105,9 @@ impl Curve {
     /// most once a second, and with every process reading (printed output is kept in memory
     /// when captured).
     fn sample(&mut self, iter: u64, mem: usize) {
-        let proc = if self.long && self.last_proc.elapsed() >= Duration::from_secs(20) {
-            self.last_proc = Instant::now();
+        let due = self.last_proc.is_none_or(|t| t.elapsed() >= Duration::from_secs(20));
+        let proc = if self.long && due {
+            self.last_proc = Some(Instant::now());
             proc_mem()
         } else {
             None
