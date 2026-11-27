@@ -11,6 +11,7 @@
 #   front             lexer, parser, compiler, ast, check, diag: D O T L W
 #   core              heap, gctrace, table, vm, fast, value, number, bytecode, lib.rs,
 #                     stdlib/mod.rs, shardmap, or anything else: D Dn T Tn O L S W
+#   ci [step]...      what CI runs: the steps that do not measure time (default D Dn O L W)
 #
 # Steps:
 #   D   every test but the [timing] ones, in parallel
@@ -134,7 +135,14 @@ case $TIER in
   stdlib) build all lib; D; T; L ;;
   front) build all oracle lib wasm; D; O; T; L; W ;;
   core) build all oracle lib release wasm; D; Dn; T; Tn; O; L; S; W ;;
-  *) sed -n '2,32p' "$0"; exit 2 ;;
+  ci)
+    [ $# -gt 0 ] || set -- D Dn O L W
+    for s in "$@"; do case $s in D | Dn | O | L | W) ;; *) echo "gate ci: $s is not a CI step (D Dn O L W)" >&2; exit 2 ;; esac; done
+    builds=(all)
+    for s in "$@"; do case $s in O) builds+=(oracle) ;; L) builds+=(lib) ;; W) builds+=(wasm) ;; esac; done
+    build "${builds[@]}"
+    for s in "$@"; do "$s"; done ;;
+  *) sed -n '2,33p' "$0"; exit 2 ;;
 esac
 
 if [ ${#FAILED[@]} -eq 0 ]; then echo "gate: PASS"; else echo "gate: FAIL in ${FAILED[*]}"; exit 1; fi

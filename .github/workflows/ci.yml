@@ -1,0 +1,73 @@
+name: CI
+# The gate's deterministic steps (tools/gate.sh ci) on every PR and push to main.
+# T, Tn and S measure time or need a quiet machine: they stay local (docs/testing.md).
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+env:
+  RUSTUP_TOOLCHAIN: 1.96.0
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+jobs:
+  gate:
+    name: gate ci (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            steps: D Dn O L W
+          - os: windows-2022
+            steps: D
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Pinned compiler and the Lua 5.4.7 oracle sources
+        run: |
+          set -euo pipefail
+          rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
+          curl -fsSLo lua.tar.gz https://www.lua.org/ftp/lua-5.4.7.tar.gz
+          echo '9fbf5e28ef86c69858f6d3d34eccc32e911c1a28b4120ff3e84aaa70cfbf1e30  lua.tar.gz' | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/lua" && tar xf lua.tar.gz -C "$RUNNER_TEMP/lua" && rm lua.tar.gz
+          echo "LUA_SRC=$RUNNER_TEMP/lua/lua-5.4.7/src" >> "$GITHUB_ENV"
+      - uses: actions/setup-node@v4
+        if: contains(matrix.steps, 'W')
+        with:
+          node-version: 22
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            .
+            tools/wasm-smoke
+      - name: tools/gate.sh ci ${{ matrix.steps }}
+        env:
+          GATE_LOGS: target/gate/ci
+        run: tools/gate.sh ci ${{ matrix.steps }}
+      - name: Gate logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gate-logs-${{ matrix.os }}
+          path: target/gate/ci
+  docs:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo doc
+        env:
+          RUSTDOCFLAGS: -D warnings
+        run: cargo doc -p remedy-lua --no-deps --locked
