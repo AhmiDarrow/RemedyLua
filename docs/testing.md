@@ -67,6 +67,14 @@ Policy:
 - A deterministic failure (D, Dn, O, L, S, W or the changed tests) fails the gate.
 - A failure in T or Tn is rerun alone three times and passes only if all three pass.
 
+### CI
+
+`.github/workflows/ci.yml` runs on every pull request and push to `main`, with Rust 1.96.0
+and the checksummed Lua 5.4.7 sources: `tools/gate.sh ci` (D Dn O L W) on Linux,
+`tools/gate.sh ci D` on Windows, and `cargo doc` with warnings denied. T, Tn and S measure
+time or need a quiet machine, so shared runners do not run them: run the gate for your tier
+locally as well.
+
 ## Test lists
 
 `crates/remedy-lua/tests/timing.list` classifies the tests that read a clock:

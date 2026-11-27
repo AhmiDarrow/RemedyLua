@@ -23,6 +23,8 @@ the cargo registry when it is unset), then run the gate for your change's tier o
 `tools/gate.sh` lists the tiers (`docs`, `tests`, `helper`, `stdlib`, `front`, `core`) and
 which files take which. Timing tests run apart from the rest and are listed in
 `crates/remedy-lua/tests/timing.list`; a test that measures time must be listed there.
+CI runs the steps that do not measure time (`tools/gate.sh ci`) on every pull request; it
+does not replace running your tier's gate.
 
 ## Where the open work is
 
