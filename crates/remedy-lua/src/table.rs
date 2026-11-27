@@ -816,7 +816,7 @@ struct NodesBuild {
 /// `rebuild_cost`'s terms as far as they got (SEC8-F4).
 fn build_units(len: usize, old_len: usize, more: usize, ints_cost: usize, made: usize, at: usize) -> usize {
     let (a, pc) = (at.min(old_len), place_cost(len));
-    made * (pc / PLACE_COST) + a + pc * (a * 3 / 4) + if more == 0 { 0 } else { ints_cost * (at - a) / more }
+    made * (pc / PLACE_COST) + a + pc * (a * 3 / 4) + (ints_cost * (at - a)).checked_div(more).unwrap_or(0)
 }
 
 /// `v` made into `len` empty nodes (as `Pool::nodes`): a big part a piece at a time between
@@ -2328,6 +2328,8 @@ impl Table {
     /// nodes are counted from now on, and the integer keys move to `nodes`.
     /// `fuel`: what the call has left, the move refused (`SetError::Fuel`) before it
     /// touches the table when it costs more; `usize::MAX` once a rehash has paid for it.
+    // (Named for the mode it switches to; tests and fault notes cite the name.)
+    #[allow(clippy::wrong_self_convention)]
     fn to_counting(&mut self, fuel: usize, mem: &mut Mem) -> Result<(), SetError> {
         let Some(p) = self.ints.as_ref() else {
             self.restructuring(mem);
@@ -3434,13 +3436,13 @@ impl Table {
         // rest of them, the table's keys lost (SEC7-T1). Refused or stopped here, the table
         // is as it was. (The same rebuild an insert's growth makes, charged as it is.)
         let inserts = if exact { 0 } else { ints_out - nodes_ints_out };
-        if inserts > 0 && (self.used as usize + inserts) * 4 > self.nodes.len() * 3 {
-            if let Err(e) =
+        if inserts > 0
+            && (self.used as usize + inserts) * 4 > self.nodes.len() * 3
+            && let Err(e) =
                 self.rebuild_nodes::<false, false>(hash_slots(live_before + inserts), 0, part, mem)
-            {
-                stash(part).resize = Some(rb);
-                return Err(e);
-            }
+        {
+            stash(part).resize = Some(rb);
+            return Err(e);
         }
         // (The rebuild above passed its own slots to `reshaped`.)
         let slots0 = self.capacity_slots();

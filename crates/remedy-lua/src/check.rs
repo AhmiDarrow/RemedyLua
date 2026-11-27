@@ -2283,22 +2283,22 @@ impl<'a> Checker<'a> {
         self.loops.pop();
         if self.pass == 2
             && let Some(rs) = ctx.and_then(|c| c.ret)
+            && rs.iter().any(|&r| !self.sub(NIL, r))
+            && !self.exits(&b.body)
         {
-            if rs.iter().any(|&r| !self.sub(NIL, r)) && !self.exits(&b.body) {
-                let shown = match rs.len() {
-                    1 => rs.first().map(|&r| self.show(r)).unwrap_or_default(),
-                    _ => {
-                        let v: Vec<String> = rs.iter().map(|&r| self.show(r)).collect();
-                        format!("({})", v.join(", "))
-                    }
-                };
-                let end = b.body.end;
-                self.diag(
-                    end,
-                    Pos { line: end.line, col: end.col.saturating_add(3) },
-                    format!("function may end without returning {shown}"),
-                );
-            }
+            let shown = match rs.len() {
+                1 => rs.first().map(|&r| self.show(r)).unwrap_or_default(),
+                _ => {
+                    let v: Vec<String> = rs.iter().map(|&r| self.show(r)).collect();
+                    format!("({})", v.join(", "))
+                }
+            };
+            let end = b.body.end;
+            self.diag(
+                end,
+                Pos { line: end.line, col: end.col.saturating_add(3) },
+                format!("function may end without returning {shown}"),
+            );
         }
         self.vals.push(V::one(sig, ann));
     }

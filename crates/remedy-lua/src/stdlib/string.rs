@@ -58,9 +58,7 @@ pub(super) fn open(lua: &mut Lua) {
 pub(crate) fn posrelat_i(pos: i64, len: usize) -> usize {
     if pos > 0 {
         usize::try_from(pos).unwrap_or(usize::MAX)
-    } else if pos == 0 {
-        1
-    } else if pos.unsigned_abs() > len as u64 {
+    } else if pos == 0 || pos.unsigned_abs() > len as u64 {
         1
     } else {
         len - pos.unsigned_abs() as usize + 1
@@ -767,7 +765,7 @@ fn copy_out(
         return Err(LuaError::Limit(LimitKind::Memory));
     }
     out.reserve(lua, n)?;
-    lua.extend_watched(&mut **out, s, from, from + n)
+    lua.extend_watched(out, s, from, from + n)
 }
 
 /// The string metatable's arithmetic (`__add` …): numbers from strings, else the other

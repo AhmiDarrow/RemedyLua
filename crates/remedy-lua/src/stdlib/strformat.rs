@@ -190,7 +190,7 @@ fn format_into(lua: &mut Lua, a: Args, f: &[u8], out: &mut super::OutBuf) -> Res
                         let n = lua.bytes(r).len();
                         lua.check_len(out.len().saturating_add(n))?;
                         out.reserve(lua, n)?;
-                        lua.extend_watched(&mut **out, r, 0, usize::MAX)?;
+                        lua.extend_watched(out, r, 0, usize::MAX)?;
                     }
                     lua.check_len(out.len())?;
                     continue;
@@ -321,7 +321,7 @@ fn format_into(lua: &mut Lua, a: Args, f: &[u8], out: &mut super::OutBuf) -> Res
                     None => (false, body.as_str()),
                 };
                 let finite = x.is_finite();
-                if conv.to_ascii_lowercase() == b'a' && spec.zero && finite {
+                if conv.eq_ignore_ascii_case(&b'a') && spec.zero && finite {
                     // Zeros go after the "0x".
                     let (pre, digits) = body.split_at(2.min(body.len()));
                     let sign = format!("{}{pre}", sign_of(neg, &spec));

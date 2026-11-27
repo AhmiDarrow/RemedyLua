@@ -583,6 +583,8 @@ impl Drop for Lua {
 impl Lua {
     /// A host function's error, as the script sees it: the very error object when it is
     /// one that just came out of the state (`lua.call` from the host function).
+    // (A conversion that needs the state; tests and fault notes cite the name.)
+    #[allow(clippy::wrong_self_convention)]
     fn from_host_error(&mut self, e: Error) -> LuaError {
         match e {
             Error::Limit(k) => LuaError::Limit(k),
@@ -1235,6 +1237,7 @@ impl Lua {
     /// - `remaining_fuel_at_least`: a floor on the fuel the cycle under way still needs
     ///   past that. Not an estimate of the cost: marking finds the objects it must mark as
     ///   it goes, so while it runs (`more_may_be_found`) the rest is not known ahead.
+    ///
     /// A full collection (`collectgarbage()`, `collect_garbage`, or the one an allocation
     /// makes at the memory limit) finishes the cycle under way and then runs a whole new
     /// one, which neither figure includes. Reading it enters nothing and charges nothing.
@@ -1850,16 +1853,14 @@ impl Lua {
             l.native_depth += 1;
             let r = l.from_data_inner(d, 0);
             l.native_depth -= 1;
-            let r = r.map(|v| {
-                l.scratch.truncate(base);
-                v
-            });
+            let r = r.inspect(|_| l.scratch.truncate(base));
             l.scratch.truncate(base);
             r
         })
         .map(|v| self.keep(v))
     }
 
+    #[allow(clippy::wrong_self_convention)] // (`from_data`'s worker: it builds in the state.)
     fn from_data_inner(&mut self, d: &Data, depth: usize) -> Result<Value, LuaError> {
         if depth > MAX_FROM_DATA_DEPTH {
             return Err(LuaError::msg("data nested too deeply"));

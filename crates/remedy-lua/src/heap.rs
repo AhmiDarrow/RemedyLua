@@ -1459,8 +1459,12 @@ pub(crate) struct Interner {
     /// Where the bytes of the last string not found (by whole hash and length) first
     /// differ from the member they could have equaled, and that member's byte there: for
     /// `insert` of that string just after, which so compares nothing again.
-    last_diff: std::cell::Cell<Option<(u64, usize, u32, usize, u8)>>,
+    last_diff: std::cell::Cell<Option<DiffHint>>,
 }
+
+/// `Interner::last_diff`'s record: the string's whole hash and length, the member it was
+/// compared with, the first byte where they differ, and that member's byte there.
+type DiffHint = (u64, usize, u32, usize, u8);
 
 /// S5GC-3: interner walks were free, and a script that knows the hash seed
 /// (`Limits::hash_seed`, or recovered from `math.random`: S5GC-4) makes strings with any

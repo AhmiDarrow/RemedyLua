@@ -657,6 +657,9 @@ const FULL_GC_CHUNK: usize = 1 << 14;
 /// instructions; calibrated: `examples/fuelcal.rs`).
 pub(crate) const FLOAT_TEXT_FUEL: u64 = 8;
 
+/// Where the host sends `print`'s output instead of stdout (`Lua::set_print`).
+pub(crate) type PrintSink = Box<dyn FnMut(&str) + Send>;
+
 /// What runs scripts: a RemedyLua state with its globals, heap and limits. One thread
 /// uses it at a time; it may move between threads (`Send`).
 pub struct Lua {
@@ -830,7 +833,7 @@ pub struct Lua {
     pub(crate) deadline: Option<std::time::Duration>,
     /// The host's own data, by type.
     pub(crate) app_data: std::collections::HashMap<std::any::TypeId, Box<dyn std::any::Any + Send>>,
-    pub(crate) print_sink: Option<Box<dyn FnMut(&str) + Send>>,
+    pub(crate) print_sink: Option<PrintSink>,
     /// Host calls in progress (fuel resets only at the outermost).
     pub(crate) entry: u32,
     /// A panic (a host function's, or a bug) unwound through a call: the machine may be
@@ -2689,9 +2692,7 @@ impl Lua {
             };
             return match k {
                 K::Lua(proto) => self.push_frame(f, proto, func, nargs, nres, kind, from_lua),
-                K::Native(nf, name) => {
-                    self.call_native(func, nargs, nres, kind, from_lua, name, |l, a| nf(l, a))
-                }
+                K::Native(nf, name) => self.call_native(func, nargs, nres, kind, from_lua, name, nf),
                 K::Host(hf, name) => {
                     self.call_native(func, nargs, nres, kind, from_lua, name, |l, a| hf(l, a))
                 }
@@ -4415,12 +4416,11 @@ impl Lua {
         // reaches the limit (charged as `call_handler` charges the walk).
         let pcall_of_resume = if from_lua { 0 } else { c_calls(kind) };
         let here = pcall_of_resume + self.c_bound_here(func);
-        if self.c_depth + self.protected_natives + (HANDLER_BASE_LEVELS - 1) + here >= C_HANDLER_LEVELS
-            || self.resume_depth + 1 > self.limits.native_depth
+        if (self.c_depth + self.protected_natives + (HANDLER_BASE_LEVELS - 1) + here >= C_HANDLER_LEVELS
+            || self.resume_depth + 1 > self.limits.native_depth)
+            && let Some(done) = self.resume_refused(func, nres, co, wrap, from_lua, kind, pcall_of_resume)?
         {
-            if let Some(done) = self.resume_refused(func, nres, co, wrap, from_lua, kind, pcall_of_resume)? {
-                return Ok(done);
-            }
+            return Ok(done);
         }
         // Its first resume maps its register window (LR-8); charged once the resume is
         // known to run, so a refused resume leaves the coroutine as it was.
@@ -4750,6 +4750,9 @@ impl Lua {
                 // (Both uses reload the frame, and the fuel with it, right after.)
                 ($e:expr) => {{
                     save!();
+                    // Not `?`: its `From` round-trip grows `run`'s frame in debug builds,
+                    // and every nested host level pays it (S6-STK-1).
+                    #[allow(clippy::question_mark)]
                     if let Err(e) = $e {
                         return Err(e);
                     }
@@ -4988,11 +4991,11 @@ impl Lua {
                     Instr::GetTabUp { a, u, k } => {
                         let t = self.upval_get(closure, u);
                         let key = kv!(k);
-                        if let Value::Table(tr) = t {
-                            if let Some(v) = self.get_field_cached(tr, key, pidx, pc - 1) {
-                                setr!(a, v);
-                                continue;
-                            }
+                        if let Value::Table(tr) = t
+                            && let Some(v) = self.get_field_cached(tr, key, pidx, pc - 1)
+                        {
+                            setr!(a, v);
+                            continue;
                         }
                         match ta!(
                             call!(self.index(t, key, Cont::Store(base + usize::from(a)))),
@@ -5525,8 +5528,8 @@ impl Lua {
                             && let Some(f) = self.cur.frames.last()
                             && (f.from_lua || self.cur.frames.len() > 1)
                             && matches!(f.kind, FrameKind::Normal)
-                            && !self.cur.open_upvals.last().is_some_and(|(i, _)| *i >= base)
-                            && !self.cur.tbc.last().is_some_and(|i| *i >= base)
+                            && self.cur.open_upvals.last().is_none_or(|(i, _)| *i < base)
+                            && self.cur.tbc.last().is_none_or(|i| *i < base)
                         {
                             let (func, wanted) = (f.func, f.nresults);
                             let want = if wanted < 0 { n } else { wanted as usize };

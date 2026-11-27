@@ -296,7 +296,7 @@ fn pack_into(
                 // The room paid for before it is written (SEC7-N2: copied first, a field of
                 // 12 MiB was outside the account until the next payment).
                 out.reserve(lua, size)?;
-                lua.extend_watched(&mut **out, s, 0, len)?;
+                lua.extend_watched(out, s, 0, len)?;
                 out.extend(std::iter::repeat_n(0u8, pad));
             }
             Kind::Str => {
@@ -310,7 +310,7 @@ fn pack_into(
                 lua.check_len(out.len().saturating_add(size).saturating_add(len))?;
                 out.reserve(lua, size + len)?;
                 put_int(out, len as u64, h.little, size, false);
-                lua.extend_watched(&mut **out, s, 0, len)?;
+                lua.extend_watched(out, s, 0, len)?;
             }
             Kind::Zstr => {
                 let s = lua.check_str(a, arg)?;
@@ -323,7 +323,7 @@ fn pack_into(
                 // (Checked and paid for before it is written: SEC7-N2.)
                 lua.check_len(out.len().saturating_add(len + 1))?;
                 out.reserve(lua, len + 1)?;
-                lua.extend_watched(&mut **out, s, 0, len)?;
+                lua.extend_watched(out, s, 0, len)?;
                 out.push(0);
             }
             Kind::Padding => out.push(0),

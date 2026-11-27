@@ -315,13 +315,14 @@ pub(crate) fn type_index(v: Value) -> usize {
 /// Opens `libs` into the globals.
 pub(crate) fn open(lua: &mut Lua, libs: crate::Libs) {
     use crate::Libs;
+    type Opener = fn(&mut Lua);
     let saved = lua.heap.mem.headroom;
     lua.heap.mem.headroom = 1 << 20;
     lua.heap.blocked += 1;
     if libs.contains(Libs::BASE) {
         base::open(lua, libs);
     }
-    let opens: [(Libs, fn(&mut Lua)); 10] = [
+    let opens: [(Libs, Opener); 10] = [
         (Libs::STRING, string::open),
         (Libs::TABLE, table::open),
         (Libs::MATH, math::open),
