@@ -64,6 +64,18 @@ jobs:
         with:
           name: gate-logs-${{ matrix.os }}
           path: target/gate/ci
+  lint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal --component rustfmt,clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo fmt
+        run: cargo fmt --all --check
+      # Shipped code only for now; test targets still carry style lints.
+      - name: cargo clippy
+        run: cargo clippy --workspace --lib --bins --locked -- -D warnings
   docs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
