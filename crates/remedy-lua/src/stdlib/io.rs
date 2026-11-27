@@ -251,7 +251,11 @@ fn check_file(lua: &Lua, a: Args) -> Result<Value, LuaError> {
 
 /// An open file (C's `tofile`).
 fn open_file(lua: &Lua, v: Value) -> Result<Value, LuaError> {
-    if lfile(lua, v).is_some_and(|f| f.closed) { Err(LuaError::msg("attempt to use a closed file")) } else { Ok(v) }
+    if lfile(lua, v).is_some_and(|f| f.closed) {
+        Err(LuaError::msg("attempt to use a closed file"))
+    } else {
+        Ok(v)
+    }
 }
 
 fn to_file(lua: &Lua, a: Args) -> Result<Value, LuaError> {
@@ -271,13 +275,19 @@ fn default_file(lua: &mut Lua, key: &str, strict: bool) -> Result<Value, LuaErro
 }
 
 /// Runs `op` on file `v`'s state, taken out of it (or of `io_std`) and put back after.
-fn with_state<T>(lua: &mut Lua, v: Value, op: impl FnOnce(&mut Lua, &mut FileState) -> Result<T, LuaError>) -> Result<T, LuaError> {
+fn with_state<T>(
+    lua: &mut Lua,
+    v: Value,
+    op: impl FnOnce(&mut Lua, &mut FileState) -> Result<T, LuaError>,
+) -> Result<T, LuaError> {
     let std = lfile(lua, v).and_then(|f| f.std);
     let taken = match std {
         Some(i) => lua.io_std.get_mut(i).and_then(Option::take),
         None => lfile_mut(lua, v).and_then(|f| f.state.take()),
     };
-    let mut st = taken.unwrap_or_else(|| FileState::new(if std.is_some_and(|i| i > 0) { Backing::Output } else { Backing::Empty }));
+    let mut st = taken.unwrap_or_else(|| {
+        FileState::new(if std.is_some_and(|i| i > 0) { Backing::Output } else { Backing::Empty })
+    });
     let r = op(lua, &mut st);
     match std {
         Some(i) => {
@@ -311,7 +321,10 @@ fn host_open(lua: &mut Lua, name: &[u8], mode: &[u8]) -> Result<Result<Value, Io
         _ => Err(not_found()),
     };
     Ok(match opened {
-        Ok(s) => Ok(new_file(lua, LFile { std: None, closed: false, state: Some(FileState::new(Backing::Stream(s))) })?),
+        Ok(s) => Ok(new_file(
+            lua,
+            LFile { std: None, closed: false, state: Some(FileState::new(Backing::Stream(s))) },
+        )?),
         Err(e) => Err(e),
     })
 }
@@ -325,7 +338,9 @@ fn c_str(lua: &mut Lua, a: Args, i: usize) -> Result<Vec<u8>, LuaError> {
 /// C's `opencheck`.
 fn open_check(lua: &mut Lua, a: Args, mode: &[u8]) -> Result<Value, LuaError> {
     let name = c_str(lua, a, 0)?;
-    host_open(lua, &name, mode)?.map_err(|e| LuaError::msg(format!("cannot open file '{}' ({})", String::from_utf8_lossy(&name), e.message)))
+    host_open(lua, &name, mode)?.map_err(|e| {
+        LuaError::msg(format!("cannot open file '{}' ({})", String::from_utf8_lossy(&name), e.message))
+    })
 }
 
 fn io_open(lua: &mut Lua, a: Args) -> R {
@@ -440,7 +455,11 @@ fn read_number(lua: &mut Lua, st: &mut FileState) -> Result<Option<Value>, LuaEr
     // C's `test2` and `readdigits`; past `L_MAXLENNUM`, `nextc` fails and the result is
     // invalid.
     let mut bad = false;
-    let mut accept = |lua: &mut Lua, st: &mut FileState, c: &mut Option<u8>, ok: &dyn Fn(u8) -> bool| -> Result<bool, LuaError> {
+    let mut accept = |lua: &mut Lua,
+                      st: &mut FileState,
+                      c: &mut Option<u8>,
+                      ok: &dyn Fn(u8) -> bool|
+     -> Result<bool, LuaError> {
         match *c {
             Some(x) if ok(x) && !bad => {
                 bad = buf.len() >= MAXLENNUM;
@@ -471,7 +490,9 @@ fn read_number(lua: &mut Lua, st: &mut FileState) -> Result<Option<Value>, LuaEr
             count += 1;
         }
     }
-    if count > 0 && accept(lua, st, &mut c, &|x| if hex { x == b'p' || x == b'P' } else { x == b'e' || x == b'E' })? {
+    if count > 0
+        && accept(lua, st, &mut c, &|x| if hex { x == b'p' || x == b'P' } else { x == b'e' || x == b'E' })?
+    {
         accept(lua, st, &mut c, &|x| x == b'-' || x == b'+')?;
         while accept(lua, st, &mut c, &|x: u8| x.is_ascii_digit())? {}
     }
@@ -498,13 +519,20 @@ fn g_read(lua: &mut Lua, v: Value, formats: &[Value], argn0: usize) -> R {
                     let b = lua.bytes(s);
                     b.strip_prefix(b"*").unwrap_or(b).first().copied().unwrap_or(0)
                 }
-                other => return Err(LuaError::Arg(argn, format!("string expected, got {}", lua.arg_type_name(other)))),
+                other => {
+                    return Err(LuaError::Arg(
+                        argn,
+                        format!("string expected, got {}", lua.arg_type_name(other)),
+                    ));
+                }
             };
             // A string to make, a number read, or nothing (the read failed).
             let read: Option<Result<Vec<u8>, Value>> = match kind {
                 b'#' => match lua.tointeger(f) {
                     Some(0) => st.fill(lua)?.then(|| Ok(Vec::new())), // C's `test_eof`
-                    Some(n) => Some(read_bytes(lua, st, n as u64, false)?.0).filter(|b| !b.is_empty()).map(Ok),
+                    Some(n) => {
+                        Some(read_bytes(lua, st, n as u64, false)?.0).filter(|b| !b.is_empty()).map(Ok)
+                    }
                     None => return Err(LuaError::Arg(argn, "number has no integer representation".into())),
                 },
                 b'n' => read_number(lua, st)?.map(Err),
@@ -634,6 +662,8 @@ fn f_seek(lua: &mut Lua, a: Args) -> R {
 
 fn flush(lua: &mut Lua, v: Value) -> R {
     lua.charge(4)?;
-    let r = with_state(lua, v, |_, st| Ok(if let Backing::Stream(s) = &mut st.backing { s.flush() } else { Ok(()) }))?;
+    let r = with_state(lua, v, |_, st| {
+        Ok(if let Backing::Stream(s) = &mut st.backing { s.flush() } else { Ok(()) })
+    })?;
     file_result(lua, r, None)
 }

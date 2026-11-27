@@ -47,7 +47,8 @@ fn apply_prec(digits: &mut String, prec: Option<usize>, zero: bool) {
 }
 
 fn parse_spec(body: &[u8]) -> Spec {
-    let mut spec = Spec { left: false, plus: false, space: false, alt: false, zero: false, width: 0, prec: None };
+    let mut spec =
+        Spec { left: false, plus: false, space: false, alt: false, zero: false, width: 0, prec: None };
     let mut j = 0;
     while let Some(&c) = body.get(j) {
         match c {
@@ -252,7 +253,12 @@ fn format_into(lua: &mut Lua, a: Args, f: &[u8], out: &mut super::OutBuf) -> Res
             b's' => {}
             // The conversion byte as it is (S5COR-3), not as the Latin-1 character.
             _ if !conv.is_ascii() => {
-                return Err(lua.msg_bytes(&[b"invalid conversion '", form().as_bytes(), &[conv], b"' to 'format'"]));
+                return Err(lua.msg_bytes(&[
+                    b"invalid conversion '",
+                    form().as_bytes(),
+                    &[conv],
+                    b"' to 'format'",
+                ]));
             }
             _ => return Err(LuaError::msg(format!("invalid conversion '{}' to 'format'", form()))),
         }
@@ -265,8 +271,11 @@ fn format_into(lua: &mut Lua, a: Args, f: &[u8], out: &mut super::OutBuf) -> Res
             b'd' | b'i' | b'u' => {
                 let n = lua.check_int(a, arg)?;
                 // `%u` is the integer's bits as unsigned.
-                let (neg, mut digits) =
-                    if conv == b'u' { (false, (n as u64).to_string()) } else { (n < 0, n.unsigned_abs().to_string()) };
+                let (neg, mut digits) = if conv == b'u' {
+                    (false, (n as u64).to_string())
+                } else {
+                    (n < 0, n.unsigned_abs().to_string())
+                };
                 apply_prec(&mut digits, spec.prec, n == 0);
                 pad(out, sign_of(neg, &spec), &digits, &spec, spec.prec.is_none());
             }

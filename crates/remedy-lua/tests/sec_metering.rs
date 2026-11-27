@@ -46,7 +46,8 @@ fn in_child_after(pre: Option<(&str, u64)>, src: &str, mem: usize) -> (usize, St
         .output()
         .unwrap();
     let text = String::from_utf8_lossy(&out.stdout).into_owned();
-    let field = |k: &str| text.lines().find_map(|l| l.split_once(k).map(|(_, v)| v)).unwrap_or_default().to_owned();
+    let field =
+        |k: &str| text.lines().find_map(|l| l.split_once(k).map(|(_, v)| v)).unwrap_or_default().to_owned();
     let peak: usize = field("SECM_PEAK=")
         .parse()
         .unwrap_or_else(|_| panic!("child failed: {text}\n{}", String::from_utf8_lossy(&out.stderr)));
@@ -65,7 +66,8 @@ fn sec_m_child() {
         && !pre.is_empty()
     {
         let full = lua.limits();
-        let fuel = std::env::var("SECM_CHILD_PRE_FUEL").ok().and_then(|f| f.parse().ok()).unwrap_or(full.fuel);
+        let fuel =
+            std::env::var("SECM_CHILD_PRE_FUEL").ok().and_then(|f| f.parse().ok()).unwrap_or(full.fuel);
         lua.set_limits(full.fuel(fuel));
         println!("\nSECM_PRE={:?}", lua.exec(&pre, "=pre").map(|v| v.len()));
         lua.set_limits(full);
@@ -99,7 +101,9 @@ fn state(mem: usize) -> Lua {
 fn sec_m1_buffers_held_across_callbacks_are_counted() {
     let _heavy = super::common::memory_heavy();
     let nest = |inner: &str| {
-        format!("S = ('x'):rep(1 << 20) local D = 0 {inner} local ok, e = pcall(f, 190) return D .. ' ' .. tostring(e):sub(1, 40)")
+        format!(
+            "S = ('x'):rep(1 << 20) local D = 0 {inner} local ok, e = pcall(f, 190) return D .. ' ' .. tostring(e):sub(1, 40)"
+        )
     };
     let cases = [
         (
@@ -315,7 +319,10 @@ fn sec_m6_open_upvalues_moved_are_charged() {
         };
         for fast in [true, false] {
             let ratio = cpu(true, fast) / cpu(false, fast);
-            assert!(ratio < 2.0, "fast {fast}: closing over locals from the last down costs {ratio:.1}x per unit what from the first up does");
+            assert!(
+                ratio < 2.0,
+                "fast {fast}: closing over locals from the last down costs {ratio:.1}x per unit what from the first up does"
+            );
         }
         // The same fuel with the fast loop on and off and under any seed.
         let src = format!("for r = 1, 3 do {} end", closures_over_locals(700, true));
@@ -419,7 +426,10 @@ fn sec_m7_register_lists_are_charged() {
 fn sec_m8_print_and_warn_lines_are_counted() {
     let _heavy = super::common::memory_heavy();
     for f in ["print", "warn"] {
-        let mut lua = Lua::new(Limits::default().memory(64 << 20).output(usize::MAX).fuel(1 << 34), super::common::ALL_OPT_IN);
+        let mut lua = Lua::new(
+            Limits::default().memory(64 << 20).output(usize::MAX).fuel(1 << 34),
+            super::common::ALL_OPT_IN,
+        );
         lua.set_print(|_| {});
         let r = lua.exec(
             format!("warn('@on') local s = ('x'):rep(4 << 20) local t = {{}} for i = 1, 100 do t[i] = s end {f}(table.unpack(t))"),
@@ -453,9 +463,12 @@ fn sec_m_host_child() {
         let v = match kind.as_str() {
             "userdata" | "userdata+root" => lua.create_userdata(i as u64, None).unwrap(),
             "tracked userdata" => lua.create_userdata_tracked(i as u64, None, i as u64).unwrap(),
-            "host function" | "host function+root" => lua.create_function("f", move |_, _| Ok(vec![remedy_lua::Value::Int(i as i64)])).unwrap(),
+            "host function" | "host function+root" => {
+                lua.create_function("f", move |_, _| Ok(vec![remedy_lua::Value::Int(i as i64)])).unwrap()
+            }
             "register" => {
-                lua.register(&format!("g{i}"), move |_, _| Ok(vec![remedy_lua::Value::Int(i as i64)])).unwrap();
+                lua.register(&format!("g{i}"), move |_, _| Ok(vec![remedy_lua::Value::Int(i as i64)]))
+                    .unwrap();
                 remedy_lua::Value::Nil
             }
             other => panic!("{other}"),
@@ -488,10 +501,18 @@ fn sec_m_host_child() {
 fn sec_lr17_host_objects_are_charged_what_they_take() {
     let _heavy = super::common::memory_heavy();
     let mut bad = Vec::new();
-    for kind in ["userdata", "tracked userdata", "userdata+root", "host function", "host function+root", "register"] {
+    for kind in
+        ["userdata", "tracked userdata", "userdata+root", "host function", "host function+root", "register"]
+    {
         let exe = std::env::current_exe().unwrap();
         let out = std::process::Command::new(exe)
-            .args(["sec_metering::sec_m_host_child", "--exact", "--ignored", "--nocapture", "--test-threads=1"])
+            .args([
+                "sec_metering::sec_m_host_child",
+                "--exact",
+                "--ignored",
+                "--nocapture",
+                "--test-threads=1",
+            ])
             .env("SECM_HOST_KIND", kind)
             .output()
             .unwrap();
@@ -500,11 +521,16 @@ fn sec_lr17_host_objects_are_charged_what_they_take() {
             text.lines()
                 .find_map(|l| l.split_once(k).map(|(_, v)| v))
                 .and_then(|v| v.trim().parse().ok())
-                .unwrap_or_else(|| panic!("child {kind} failed: {text}\n{}", String::from_utf8_lossy(&out.stderr)))
+                .unwrap_or_else(|| {
+                    panic!("child {kind} failed: {text}\n{}", String::from_utf8_lossy(&out.stderr))
+                })
         };
         let (resident, counted) = (field("SECM_PEAK="), field("SECM_RESULT="));
         if resident > 1.3 * counted {
-            bad.push(format!("{kind}: {resident} B resident, {counted} B counted per object ({:.2}x)", resident / counted.max(1.0)));
+            bad.push(format!(
+                "{kind}: {resident} B resident, {counted} B counted per object ({:.2}x)",
+                resident / counted.max(1.0)
+            ));
         }
     }
     assert!(bad.is_empty(), "{bad:#?}");
@@ -535,7 +561,12 @@ fn sec_m9_closures_are_charged_what_they_take() {
             .parse()
             .unwrap_or_else(|_| panic!("{what}: {counted}"));
         let ratio = peak as f64 / counted;
-        assert!(ratio < 1.3, "{what}: {} MiB resident for {} MiB counted ({ratio:.2}x)", peak >> 20, counted as usize >> 20);
+        assert!(
+            ratio < 1.3,
+            "{what}: {} MiB resident for {} MiB counted ({ratio:.2}x)",
+            peak >> 20,
+            counted as usize >> 20
+        );
     }
 }
 
@@ -563,7 +594,10 @@ fn sec_m10_spare_coroutine_stacks_stay_counted() {
     lua.collect_garbage().unwrap();
     let after = lua.memory_used();
     // With the spare stacks dropped by the full collection, at least their slots go.
-    assert!(held >= after + 8 * 256 * 16, "{before} before, {held} with spare stacks, {after} after a collection");
+    assert!(
+        held >= after + 8 * 256 * 16,
+        "{before} before, {held} with spare stacks, {after} after a collection"
+    );
 }
 
 /// SEC-M12 (medium): `string.pack`, `packsize` and `unpack` copied their format (to its
@@ -611,11 +645,15 @@ fn fx2_5_a_long_literal_is_compiled_between_looks() {
     // (Copying the chunk and counting its tokens look every 256 KiB: 146 reads before.)
     for (body, loads) in [("local f = load(SRC)", 1), ("local f = load(SRC) local g = load(SRC)", 2)] {
         let reads = clock_reads(setup, body);
-        assert!(reads >= base + 300 * loads, "{body}: the clock was read {reads} times ({base} for a short load)");
+        assert!(
+            reads >= base + 300 * loads,
+            "{body}: the clock was read {reads} times ({base} for a short load)"
+        );
     }
     // The constant is the interned string, equal to (and the same key as) S.
     let mut lua = state(256 << 20);
-    let r = lua.exec(format!("{setup} local t = {{[S] = 1}} local s = load(SRC)() return s == S and t[s]"), "=t");
+    let r =
+        lua.exec(format!("{setup} local t = {{[S] = 1}} local s = load(SRC)() return s == S and t[s]"), "=t");
     assert!(matches!(r.as_deref(), Ok([remedy_lua::Value::Int(1)])), "{r:?}");
 }
 
@@ -643,9 +681,16 @@ fn sec_lr26_a_long_key_given_to_next_costs_the_same_in_both_loops() {
     // 600 and 10,000 bytes; the key in no table (an error, caught) and in one (found).
     for n in [300, 5000] {
         let setup = format!("local mt = {{[string.rep('ab', {n})] = 1}} local k = string.rep('ab', {n})");
-        for body in ["pcall(function() for v in next, {}, k do end end) return mt.z", "for v in next, mt, k do end return mt.z"] {
+        for body in [
+            "pcall(function() for v in next, {}, k do end end) return mt.z",
+            "for v in next, mt, k do end return mt.z",
+        ] {
             // (`remedy` checks result, fuel and memory are the same in both loops.)
-            assert_eq!(super::common::remedy(&format!("{setup} {body}"), 1 << 20), Ok("nil".into()), "{n}: {body}");
+            assert_eq!(
+                super::common::remedy(&format!("{setup} {body}"), 1 << 20),
+                Ok("nil".into()),
+                "{n}: {body}"
+            );
         }
     }
 }

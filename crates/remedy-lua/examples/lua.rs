@@ -23,17 +23,23 @@ fn main() {
         match a.as_str() {
             "-e" => src = args.next(),
             "--fuel" => limits = limits.fuel(args.next().and_then(|s| s.parse().ok()).unwrap_or(10_000_000)),
-            "--memory" => limits = limits.memory(args.next().and_then(|s| s.parse().ok()).unwrap_or(64 << 20)),
+            "--memory" => {
+                limits = limits.memory(args.next().and_then(|s| s.parse().ok()).unwrap_or(64 << 20))
+            }
             "--rlua" => name = "=t.rlua".into(),
             "--ours" => only_ours = true,
             "--stress" => stress = true,
             "--no-fast" => no_fast = true,
             "--all-libs" => libs = Libs::ALL | Libs::DEBUG_INFO | Libs::REQUIRE | Libs::ENV | Libs::IO,
-            path => src = Some(std::fs::read_to_string(path).unwrap_or_else(|e| format!("error('{path}: {e}')"))),
+            path => {
+                src = Some(std::fs::read_to_string(path).unwrap_or_else(|e| format!("error('{path}: {e}')")))
+            }
         }
     }
     let Some(src) = src else {
-        println!("usage: lua [-e code | file] [--fuel N] [--memory BYTES] [--rlua] [--ours] [--stress] [--no-fast] [--all-libs]");
+        println!(
+            "usage: lua [-e code | file] [--fuel N] [--memory BYTES] [--rlua] [--ours] [--stress] [--no-fast] [--all-libs]"
+        );
         return;
     };
     let start = std::time::Instant::now();

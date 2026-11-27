@@ -48,7 +48,10 @@ fn walk(dir: &Path, out: &mut Vec<(String, String)>) {
         if src.contains("\n-- case:") {
             for (i, chunk) in format!("\n{src}").split("\n-- case:").skip(1).enumerate() {
                 let body = chunk.split_once('\n').map_or("", |x| x.1);
-                out.push((format!("{}#{i}.{ext}", name.trim_end_matches(&format!(".{ext}"))), body.to_owned()));
+                out.push((
+                    format!("{}#{i}.{ext}", name.trim_end_matches(&format!(".{ext}"))),
+                    body.to_owned(),
+                ));
             }
         }
         out.push((name, src));

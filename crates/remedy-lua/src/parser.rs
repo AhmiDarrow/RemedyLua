@@ -50,8 +50,15 @@ pub(crate) fn tree_bytes() -> usize {
 /// milliseconds between the parse's last look at the host's interrupt and the compiler's
 /// first (S6-FRONT-4).
 /// Also the text read (`src` may be read as it is parsed).
-pub(crate) fn parse_counted<'a>(src: Text<'a>, chunk: &'a str, dialect: Dialect, memory: usize, defer: bool) -> (PResult<(Block, usize)>, Text<'a>) {
-    let (r, _, tree, toks, lex) = parse_tokens(Vec::new(), Lexer::of(src, chunk, dialect), true, dialect, memory, false);
+pub(crate) fn parse_counted<'a>(
+    src: Text<'a>,
+    chunk: &'a str,
+    dialect: Dialect,
+    memory: usize,
+    defer: bool,
+) -> (PResult<(Block, usize)>, Text<'a>) {
+    let (r, _, tree, toks, lex) =
+        parse_tokens(Vec::new(), Lexer::of(src, chunk, dialect), true, dialect, memory, false);
     // (Inside a call too: millions of tokens dropped at once were a 45 ms stretch there.)
     let _ = defer;
     crate::diag::free_watched(toks);
@@ -81,7 +88,14 @@ pub(crate) fn prefix(src: &[u8], chunk: &str, dialect: Dialect, memory: usize) -
     // The tokens are kept for the second parse while the first parses a copy: that copy's
     // buffer is not memory the first parse may use (S6-FRONT-3).
     let copy = toks.len().saturating_mul(std::mem::size_of::<Token>());
-    let (r, at, _, _, _) = parse_tokens(toks.clone(), Lexer::new(src, chunk, dialect), false, dialect, memory.saturating_sub(copy), false);
+    let (r, at, _, _, _) = parse_tokens(
+        toks.clone(),
+        Lexer::new(src, chunk, dialect),
+        false,
+        dialect,
+        memory.saturating_sub(copy),
+        false,
+    );
     if r.is_ok() {
         return None;
     }
@@ -95,7 +109,10 @@ pub(crate) fn prefix(src: &[u8], chunk: &str, dialect: Dialect, memory: usize) -
     let mut cut: Vec<Token> = toks.into_iter().take(at).collect();
     let end = cut.last().map_or(0, |t| t.span.1);
     cut.push(Token { tok: Tok::Eof, pos, span: (end, end), end: pos });
-    parse_tokens(cut, Lexer::new(src, chunk, dialect), false, dialect, memory, true).0.ok().map(|b| (b, pos, follow))
+    parse_tokens(cut, Lexer::new(src, chunk, dialect), false, dialect, memory, true)
+        .0
+        .ok()
+        .map(|b| (b, pos, follow))
 }
 
 /// Parses `toks`, then (with `more`) the rest of what `lex` reads; also the index of the
@@ -148,7 +165,9 @@ fn parse_tokens<'a>(
     }
     // What the tree holds besides the vectors and boxes counted as it was built: its share
     // of each token (`TOKEN_COST` and `token_bytes`, less the token itself, freed now).
-    let tree = p.tree.saturating_add(p.tok_held.saturating_sub(p.toks.len().saturating_mul(std::mem::size_of::<Token>())));
+    let tree = p
+        .tree
+        .saturating_add(p.tok_held.saturating_sub(p.toks.len().saturating_mul(std::mem::size_of::<Token>())));
     TREE_BYTES.with(|t| t.set(p.tree.saturating_add(p.strings)));
     (Ok(b), p.i, tree, std::mem::take(&mut p.toks), p.lex)
 }
@@ -497,7 +516,8 @@ impl<'a> Parser<'a> {
     /// buffer and the new at once) is checked against the memory left.
     fn stack_room(&mut self) -> PResult<()> {
         let tight = |cap: usize, len: usize| cap - len < 8;
-        if tight(self.frames.capacity(), self.frames.len()) || tight(self.stats.capacity(), self.stats.len()) {
+        if tight(self.frames.capacity(), self.frames.len()) || tight(self.stats.capacity(), self.stats.len())
+        {
             let more = self.frames.capacity().max(8) * std::mem::size_of::<Frame>()
                 + self.stats.capacity().max(8) * std::mem::size_of::<Vec<Stat>>();
             if self.held().saturating_add(more) > self.room {
@@ -533,14 +553,22 @@ impl<'a> Parser<'a> {
         use std::mem::take;
         for f in &mut self.frames {
             match f {
-                Frame::ConcatPart { parts: v, .. } | Frame::ExprList(v) | Frame::AssignTarget { targets: v, .. } | Frame::AssignExprs { targets: v, .. } => d.add_exprs(take(v)),
+                Frame::ConcatPart { parts: v, .. }
+                | Frame::ExprList(v)
+                | Frame::AssignTarget { targets: v, .. }
+                | Frame::AssignExprs { targets: v, .. } => d.add_exprs(take(v)),
                 Frame::GenBody { names, exprs: v, .. } => {
                     d.add_names(take(names));
                     d.add_exprs(take(v));
                 }
                 Frame::TableField { fields, .. } => d.add_fields(take(fields)),
-                Frame::IfCond { conds: c, .. } | Frame::IfBody { conds: c, .. } | Frame::IfElse { conds: c, .. } => d.add_conds(take(c)),
-                Frame::GenNameTy { names, .. } | Frame::GenExprs { names, .. } | Frame::LocalTy { names, .. } | Frame::LocalExprs { names, .. } => {
+                Frame::IfCond { conds: c, .. }
+                | Frame::IfBody { conds: c, .. }
+                | Frame::IfElse { conds: c, .. } => d.add_conds(take(c)),
+                Frame::GenNameTy { names, .. }
+                | Frame::GenExprs { names, .. }
+                | Frame::LocalTy { names, .. }
+                | Frame::LocalExprs { names, .. } => {
                     d.add_names(take(names));
                 }
                 _ => {}
@@ -614,8 +642,25 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn take_func(&mut self, head: FnHead, ret: Option<Vec<Type>>, body: Block, end_line: u32, close_line: u32) -> FuncBody {
-        FuncBody { params: head.params, vararg: head.vararg, vararg_ty: head.vararg_ty, ret, body, pos: head.pos, end_line, close_line, is_method: head.is_method }
+    fn take_func(
+        &mut self,
+        head: FnHead,
+        ret: Option<Vec<Type>>,
+        body: Block,
+        end_line: u32,
+        close_line: u32,
+    ) -> FuncBody {
+        FuncBody {
+            params: head.params,
+            vararg: head.vararg,
+            vararg_ty: head.vararg_ty,
+            ret,
+            body,
+            pos: head.pos,
+            end_line,
+            close_line,
+            is_method: head.is_method,
+        }
     }
 
     fn take_type(&mut self) -> Type {
@@ -691,7 +736,9 @@ impl<'a> Parser<'a> {
             // return type list may be read again (`pins`): the chunk's tokens take a few
             // slots, not memory growing with the chunk.
             let keep = self.pins.first().copied().unwrap_or(usize::MAX).min(self.i.saturating_sub(1));
-            if self.toks.len() == self.toks.capacity() && keep.saturating_sub(self.base) >= self.toks.len() / 2 {
+            if self.toks.len() == self.toks.capacity()
+                && keep.saturating_sub(self.base) >= self.toks.len() / 2
+            {
                 let n = keep - self.base;
                 self.toks.drain(..n);
                 self.base = keep;
@@ -783,7 +830,11 @@ impl<'a> Parser<'a> {
             // About the token; Lua's message gives the line where it ends.
             let end = self.tok_end();
             // A NUL byte is token 0 in C Lua, which its message leaves out.
-            let text = if matches!(self.tok(), Tok::Other(0)) { msg.to_owned() } else { format!("{msg} near {}", self.near()) };
+            let text = if matches!(self.tok(), Tok::Other(0)) {
+                msg.to_owned()
+            } else {
+                format!("{msg} near {}", self.near())
+            };
             Diagnostic::error(self.chunk, self.pos(), text).to(end).lua_line(end.line)
         }
     }
@@ -802,7 +853,11 @@ impl<'a> Parser<'a> {
     }
 
     fn expect(&mut self, t: &Tok, what: &str) -> PResult<()> {
-        if self.accept(t) || self.at_cut() { Ok(()) } else { Err(self.error_near(&format!("'{what}' expected"))) }
+        if self.accept(t) || self.at_cut() {
+            Ok(())
+        } else {
+            Err(self.error_near(&format!("'{what}' expected")))
+        }
     }
 
     /// Expects the closing token of a construct opened at `open`.
@@ -915,7 +970,11 @@ impl<'a> Parser<'a> {
                 let k = self.take_expr();
                 self.expect(&Tok::RBracket, "]")?;
                 self.tree += 2 * EXPR_BOX;
-                self.suffixes(Expr { kind: ExprKind::Index(Box::new(e), Box::new(k)), pos, end: self.last_end() })
+                self.suffixes(Expr {
+                    kind: ExprKind::Index(Box::new(e), Box::new(k)),
+                    pos,
+                    end: self.last_end(),
+                })
             }
             Frame::SuffixCall { e, pos } => {
                 let args = self.take_exprs();
@@ -927,7 +986,9 @@ impl<'a> Parser<'a> {
                 self.suffixes(Expr { kind: ExprKind::Method(e, name, npos, args), pos, end: self.last_end() })
             }
             Frame::WrapFunc(pos) => match self.take() {
-                Val::Func(f) => self.done(Val::Expr(Expr { kind: ExprKind::Func(f), pos, end: self.last_end() })),
+                Val::Func(f) => {
+                    self.done(Val::Expr(Expr { kind: ExprKind::Func(f), pos, end: self.last_end() }))
+                }
                 _ => self.done(Val::Expr(Expr { kind: ExprKind::Nil, pos, end: self.last_end() })),
             },
             Frame::ArgsClose(pos) => {
@@ -958,7 +1019,10 @@ impl<'a> Parser<'a> {
                         let k = self.take_expr();
                         self.expect(&Tok::RBracket, "]")?;
                         self.expect(&Tok::Assign, "=")?;
-                        return self.call(Frame::TableField { pos, fields, kind: FieldKind::KeyVal(k) }, Frame::StartExpr(0));
+                        return self.call(
+                            Frame::TableField { pos, fields, kind: FieldKind::KeyVal(k) },
+                            Frame::StartExpr(0),
+                        );
                     }
                     FieldKind::KeyVal(k) => {
                         let v = self.take_expr();
@@ -1210,7 +1274,11 @@ impl<'a> Parser<'a> {
             Frame::TyFuncParam(mut params) => {
                 let x = self.take_type();
                 self.push_counted(&mut params, x)?;
-                if self.accept(&Tok::Comma) { self.ty_func_params(params) } else { self.ty_func_close(params, false) }
+                if self.accept(&Tok::Comma) {
+                    self.ty_func_params(params)
+                } else {
+                    self.ty_func_close(params, false)
+                }
             }
             Frame::TyFuncRet { params, vararg } => {
                 let ret = self.take_types();
@@ -1299,9 +1367,8 @@ impl<'a> Parser<'a> {
                 );
                 (!continues_expr).then_some("continue")
             }
-            "type" => {
-                (matches!(self.tok_at(1), Tok::Name(_)) && matches!(self.tok_at(2), Tok::Assign)).then_some("type")
-            }
+            "type" => (matches!(self.tok_at(1), Tok::Name(_)) && matches!(self.tok_at(2), Tok::Assign))
+                .then_some("type"),
             _ => None,
         }
     }
@@ -1440,7 +1507,11 @@ impl<'a> Parser<'a> {
             if self.at_cut() {
                 return Ok(());
             }
-            return Err(self.error_near(if names.len() > 1 { "'in' expected" } else { "'=' or 'in' expected" }));
+            return Err(self.error_near(if names.len() > 1 {
+                "'in' expected"
+            } else {
+                "'=' or 'in' expected"
+            }));
         }
         self.advance();
         let line = self.tok_end().line;
@@ -1518,7 +1589,11 @@ impl<'a> Parser<'a> {
         }
         if let Tok::OpAssign(op) = *self.tok() {
             if !assignable(&e) {
-                return Err(Diagnostic::error(self.chunk, e.pos, "syntax error (cannot assign to this expression)"));
+                return Err(Diagnostic::error(
+                    self.chunk,
+                    e.pos,
+                    "syntax error (cannot assign to this expression)",
+                ));
             }
             self.advance();
             return self.call(Frame::OpAssign { pos, target: e, op }, Frame::StartExpr(0));
@@ -1577,7 +1652,10 @@ impl<'a> Parser<'a> {
                 self.advance();
                 if op == BinOp::Concat {
                     self.tree += EXPR_BOX;
-                    return self.call(Frame::ConcatPart { limit, pos: opos, parts: vec![left] }, Frame::StartExpr(9));
+                    return self.call(
+                        Frame::ConcatPart { limit, pos: opos, parts: vec![left] },
+                        Frame::StartExpr(9),
+                    );
                 }
                 return self.call(Frame::BinRight { limit, op, opos, left }, Frame::StartExpr(r));
             }
@@ -1604,7 +1682,10 @@ impl<'a> Parser<'a> {
             Tok::Num(f) => ExprKind::Num(*f),
             Tok::Interp(parts) => {
                 let parts = parts.clone();
-                self.strings += parts.iter().map(|p| if let crate::lexer::InterpPart::Lit(b) = p { b.capacity() } else { 0 }).sum::<usize>();
+                self.strings += parts
+                    .iter()
+                    .map(|p| if let crate::lexer::InterpPart::Lit(b) = p { b.capacity() } else { 0 })
+                    .sum::<usize>();
                 self.advance();
                 return self.interp_next(pos, parts.into_iter(), Vec::new());
             }
@@ -1630,7 +1711,12 @@ impl<'a> Parser<'a> {
 
     /// The parts of an interpolated string from the next on: each expression part is
     /// parsed from its own tokens, which take the place of the chunk's meanwhile.
-    fn interp_next(&mut self, pos: Pos, mut parts: std::vec::IntoIter<InterpPart>, mut out: Vec<InterpExpr>) -> PResult<()> {
+    fn interp_next(
+        &mut self,
+        pos: Pos,
+        mut parts: std::vec::IntoIter<InterpPart>,
+        mut out: Vec<InterpExpr>,
+    ) -> PResult<()> {
         for p in parts.by_ref() {
             match p {
                 InterpPart::Lit(b) => self.push_counted(&mut out, InterpExpr::Lit(b))?,
@@ -1647,7 +1733,10 @@ impl<'a> Parser<'a> {
                         i: std::mem::replace(&mut self.i, 0),
                         base: std::mem::replace(&mut self.base, 0),
                     };
-                    return self.call(Frame::Interp { pos, parts, out, saved: Box::new(saved) }, Frame::StartExpr(0));
+                    return self.call(
+                        Frame::Interp { pos, parts, out, saved: Box::new(saved) },
+                        Frame::StartExpr(0),
+                    );
                 }
             }
         }
@@ -1761,7 +1850,7 @@ impl<'a> Parser<'a> {
         let named = matches!(self.tok(), Tok::Name(_)) && matches!(self.tok_at(1), Tok::Assign);
         let kind = if let (true, Tok::Name(n)) = (named, self.tok()) {
             let n = n.clone();
-                self.strings += n.capacity();
+            self.strings += n.capacity();
             self.advance();
             self.advance();
             FieldKind::Named(n, fpos)
@@ -1801,7 +1890,7 @@ impl<'a> Parser<'a> {
             let name = match self.tok() {
                 Tok::Name(n) => {
                     let n = n.clone();
-                self.strings += n.capacity();
+                    self.strings += n.capacity();
                     self.advance();
                     n
                 }
@@ -1964,7 +2053,9 @@ fn fold_unary(op: UnOp, e: Expr, pos: Pos) -> Expr {
 /// Folds arithmetic on numeric constants as Lua's `constfolding` does (`ast::fold_bin`).
 fn fold_binary(op: BinOp, l: Expr, r: Expr, pos: Pos) -> Expr {
     let end = r.end;
-    let num = |e: &ExprKind| matches!(e, ExprKind::Int(_) | ExprKind::Num(_)).then(|| crate::ast::literal_value(e)).flatten();
+    let num = |e: &ExprKind| {
+        matches!(e, ExprKind::Int(_) | ExprKind::Num(_)).then(|| crate::ast::literal_value(e)).flatten()
+    };
     if let (Some(a), Some(b)) = (num(&l.kind), num(&r.kind))
         && let Some(kind) = crate::ast::fold_bin(op, a, b).and_then(crate::ast::literal_kind)
     {

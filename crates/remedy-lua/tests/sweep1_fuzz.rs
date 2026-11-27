@@ -38,7 +38,9 @@ fn env_u64(k: &str, d: u64) -> u64 {
 }
 
 fn out_dir() -> PathBuf {
-    let d = std::env::var("SWEEP1_OUT").map(PathBuf::from).unwrap_or_else(|_| PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("sweep1-fuzz"));
+    let d = std::env::var("SWEEP1_OUT")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("sweep1-fuzz"));
     std::fs::create_dir_all(&d).unwrap();
     d
 }
@@ -111,13 +113,22 @@ impl Recorder {
         *n += 1;
         if *n <= 3 {
             let path = self.dir.join(format!("known-{}-{kind}-{n}.lua", self.area));
-            let note: String = format!("remedy: {}\nc lua:  {}", ours.text, theirs.text).lines().map(|l| format!("-- {l}\n")).collect();
+            let note: String = format!("remedy: {}\nc lua:  {}", ours.text, theirs.text)
+                .lines()
+                .map(|l| format!("-- {l}\n"))
+                .collect();
             let _ = std::fs::write(path, format!("-- known non-bug: {kind}\n{note}{src}"));
         }
     }
 
     pub(crate) fn report(&self, started: Instant) {
-        println!("== {}: {} programs in {:.0}s, {} inconclusive (C Lua step limit)", self.area, self.runs, started.elapsed().as_secs_f64(), self.inconclusive);
+        println!(
+            "== {}: {} programs in {:.0}s, {} inconclusive (C Lua step limit)",
+            self.area,
+            self.runs,
+            started.elapsed().as_secs_f64(),
+            self.inconclusive
+        );
         println!("outcome classes (remedy/c): {:?}", self.classes);
         for (c, n) in &self.cats {
             println!("category {c}: {n}");
@@ -130,7 +141,10 @@ impl Recorder {
         }
         let _ = std::fs::write(
             self.dir.join(format!("summary-{}.txt", self.area)),
-            format!("{:?}\n{:#?}\n{:#?}\nknown non-bugs: {:#?}\n", self.classes, self.cats, self.sigs, self.expected),
+            format!(
+                "{:?}\n{:#?}\n{:#?}\nknown non-bugs: {:#?}\n",
+                self.classes, self.cats, self.sigs, self.expected
+            ),
         );
     }
 }
@@ -172,7 +186,6 @@ fn minimize(src: &str, keep: &mut dyn FnMut(&str) -> bool) -> String {
     mutate::join(&toks)
 }
 
-
 /// The checks that only need RemedyLua: fuel and memory limits stop cleanly, `check` and
 /// `format` don't panic and formatting keeps behavior.
 fn remedy_only_checks(src: &str, name: &str, full: &Outcome, rng: &mut Rng, rec: &mut Recorder) {
@@ -190,7 +203,12 @@ fn remedy_only_checks(src: &str, name: &str, full: &Outcome, rng: &mut Rng, rec:
                     format!("critical:fuel-escape:{:?}", o.class)
                 };
                 if rec.wants(&sig) {
-                    rec.save(&sig, "lua", &[("", src)], &format!("fuel {f} of {used} used\nresult: {}", o.text));
+                    rec.save(
+                        &sig,
+                        "lua",
+                        &[("", src)],
+                        &format!("fuel {f} of {used} used\nresult: {}", o.text),
+                    );
                 }
             }
         }
@@ -200,14 +218,23 @@ fn remedy_only_checks(src: &str, name: &str, full: &Outcome, rng: &mut Rng, rec:
         let m = 1usize << (12 + rng.below(12));
         let m = m + rng.below(m);
         let (o, _) = harness::remedy_raw(src.as_bytes(), name, harness::remedy_limits().memory(m));
-        if o.class != Class::Memory && o.text != full.text && full.class != Class::Fuel && !overflow_from_memory(&full.text, &o.text) {
+        if o.class != Class::Memory
+            && o.text != full.text
+            && full.class != Class::Fuel
+            && !overflow_from_memory(&full.text, &o.text)
+        {
             let sig = if o.text.starts_with("<panic> fast/slow differ") {
                 "critical:fast-slow-differ-at-memory-cut".to_owned()
             } else {
                 format!("critical:memory-escape:{:?}", o.class)
             };
             if rec.wants(&sig) {
-                rec.save(&sig, "lua", &[("", src)], &format!("memory {m}\nfull: {}\nsmall: {}", full.text, o.text));
+                rec.save(
+                    &sig,
+                    "lua",
+                    &[("", src)],
+                    &format!("memory {m}\nfull: {}\nsmall: {}", full.text, o.text),
+                );
             }
         }
     }
@@ -238,7 +265,12 @@ fn remedy_only_checks(src: &str, name: &str, full: &Outcome, rng: &mut Rng, rec:
             if o.text != full.text && full.class != Class::Fuel && o.class != Class::Fuel {
                 let sig = "major:format-changes-behavior".to_owned();
                 if rec.wants(&sig) {
-                    rec.save(&sig, "lua", &[("", src), ("-formatted", &f)], &format!("before: {}\nafter: {}", full.text, o.text));
+                    rec.save(
+                        &sig,
+                        "lua",
+                        &[("", src), ("-formatted", &f)],
+                        &format!("before: {}\nafter: {}", full.text, o.text),
+                    );
                 }
             }
         }
@@ -405,14 +437,23 @@ fn handle_rlua(r: &str, l: &str, rec: &mut Recorder, rng: &mut Rng) {
     if theirs.class == Class::Syntax && ours_l.class == Class::Syntax && ours.class != Class::Syntax {
         let sig = format!("generator:invalid-twin:{}", ours_l.text.lines().last().unwrap_or(""));
         if rec.wants(&sig) {
-            rec.save(&sig, "rlua", &[("", r), ("-plain", l)], &format!("remedy .rlua: {}\nremedy .lua:  {}\nc lua .lua:   {}", ours.text, ours_l.text, theirs.text));
+            rec.save(
+                &sig,
+                "rlua",
+                &[("", r), ("-plain", l)],
+                &format!(
+                    "remedy .rlua: {}\nremedy .lua:  {}\nc lua .lua:   {}",
+                    ours.text, ours_l.text, theirs.text
+                ),
+            );
         }
         return;
     }
     // (Classified on the plain source, which C Lua runs: the order runs use RemedyLua's
     // `.rlua` run of it.)
     let sig = sig.map(|s| {
-        let (tag, base) = s.rsplit_once(" [").map_or((String::new(), s.clone()), |(b, t)| (format!(" [{t}"), b.to_owned()));
+        let (tag, base) =
+            s.rsplit_once(" [").map_or((String::new(), s.clone()), |(b, t)| (format!(" [{t}"), b.to_owned()));
         let c = harness::classify(r.as_bytes(), "=t.rlua", l.as_bytes(), &ours, &theirs, base);
         if c.starts_with("expected:") { c } else { format!("{c}{tag}") }
     });
@@ -443,13 +484,19 @@ fn handle_rlua(r: &str, l: &str, rec: &mut Recorder, rng: &mut Rng) {
                     let (s, _, cand_l, _) = diff(&rr.join("\n"), &lll.join("\n"));
                     // (A candidate whose twin stops compiling, e.g. without its `::contN::`
                     // line, is not the same program in two dialects any more.)
-                    (cand_l.class == Class::Syntax) == (ours_l.class == Class::Syntax) && same_kind(&sig, s.as_ref())
+                    (cand_l.class == Class::Syntax) == (ours_l.class == Class::Syntax)
+                        && same_kind(&sig, s.as_ref())
                 });
                 let rr: Vec<&str> = keep_idx.iter().map(|&i| rl[i]).collect();
                 let lll: Vec<&str> = keep_idx.iter().map(|&i| ll[i]).collect();
                 let (rr, lll) = (rr.join("\n"), lll.join("\n"));
                 let (_, o, ol, t) = diff(&rr, &lll);
-                rec.save(&sig, "rlua", &[("", &rr), ("-plain", &lll)], &format!("remedy .rlua: {}\nremedy .lua:  {}\nc lua .lua:   {}", o.text, ol.text, t.text));
+                rec.save(
+                    &sig,
+                    "rlua",
+                    &[("", &rr), ("-plain", &lll)],
+                    &format!("remedy .rlua: {}\nremedy .lua:  {}\nc lua .lua:   {}", o.text, ol.text, t.text),
+                );
             } else {
                 rec.save(&sig, "rlua", &[("", r), ("-plain", l)], "line counts differ (generator bug?)");
             }
@@ -494,9 +541,20 @@ fn generator_self_check() {
         let mut rng = Rng::new(424_242 + i);
         let mut g = grammar::Gen::new(&mut rng, i % 2 == 1);
         let p = g.program(12);
-        assert_eq!(p.r.matches('\n').count(), p.l.matches('\n').count(), "line structure differs:\n{}\n----\n{}", p.r, p.l);
+        assert_eq!(
+            p.r.matches('\n').count(),
+            p.l.matches('\n').count(),
+            "line structure differs:\n{}\n----\n{}",
+            p.r,
+            p.l
+        );
         let ours = harness::remedy(p.r.as_bytes(), if i % 2 == 1 { "=t.rlua" } else { "=t" });
-        assert!(!matches!(ours.class, Class::Panic | Class::Timeout | Class::Host), "{:?} on:\n{}", ours, p.r);
+        assert!(
+            !matches!(ours.class, Class::Panic | Class::Timeout | Class::Host),
+            "{:?} on:\n{}",
+            ours,
+            p.r
+        );
         let theirs = harness::oracle(p.l.as_bytes());
         assert_ne!(theirs.class, Class::Syntax, "generator emitted invalid Lua:\n{}\n{}", p.l, theirs.text);
     }
@@ -540,7 +598,13 @@ fn rlua_continue_label_after_multiline_return() {
         let mut g = grammar::Gen::new(&mut rng, true);
         let p = g.program(10 + (i % 30) as i32);
         let theirs = harness::oracle(p.l.as_bytes());
-        assert_ne!(theirs.class, Class::Syntax, "fuzz_rlua seed {seed} program {i}: plain twin is invalid Lua:\n{}\n{}", p.l, theirs.text);
+        assert_ne!(
+            theirs.class,
+            Class::Syntax,
+            "fuzz_rlua seed {seed} program {i}: plain twin is invalid Lua:\n{}\n{}",
+            p.l,
+            theirs.text
+        );
     }
 }
 
@@ -567,13 +631,23 @@ fn rl(text: &str, label: &str) -> grammar::Out {
 }
 
 fn cat2(xs: &[&grammar::Out]) -> grammar::Out {
-    grammar::Out { r: xs.iter().map(|x| x.r.as_str()).collect(), l: xs.iter().map(|x| x.l.as_str()).collect() }
+    grammar::Out {
+        r: xs.iter().map(|x| x.r.as_str()).collect(),
+        l: xs.iter().map(|x| x.l.as_str()).collect(),
+    }
 }
 
 /// A loop of `kind` around `body` (already translated), its label placed by the
 /// generator's rule (`grammar::continue_body`). Each kind's body sees a local `i` (1..4).
 /// `generic` picks the generic `for` for `For`.
-fn continue_loop(kind: grammar::LoopKind, generic: bool, label: &str, body: grammar::Out, both: bool, ends_return: bool) -> grammar::Out {
+fn continue_loop(
+    kind: grammar::LoopKind,
+    generic: bool,
+    label: &str,
+    body: grammar::Out,
+    both: bool,
+    ends_return: bool,
+) -> grammar::Out {
     use grammar::LoopKind::*;
     let b = grammar::continue_body(kind, body, label, both, ends_return);
     let n = format!("n_{label}");
@@ -602,7 +676,11 @@ fn continue_loop(kind: grammar::LoopKind, generic: bool, label: &str, body: gram
 fn rlua_continue_twins_compile_and_agree() {
     let _heavy = super::common::memory_heavy();
     use grammar::LoopKind::{self, *};
-    let close = |id: &str| format!("local {id} <close> = setmetatable({{}}, {{__close = function(o, e) __emit('close', '{id}') end}})\n");
+    let close = |id: &str| {
+        format!(
+            "local {id} <close> = setmetatable({{}}, {{__close = function(o, e) __emit('close', '{id}') end}})\n"
+        )
+    };
     // (body, ends in `return`)
     let bodies: Vec<(String, bool)> = vec![
         ("if i % 2 == 0 then continue end\n__emit('a', i)\n".into(), false),
@@ -628,13 +706,21 @@ fn rlua_continue_twins_compile_and_agree() {
     let mut check = |p: &grammar::Out| {
         let wrapped = |s: &str| format!("local function run()\n{s}return 'done'\nend\n__emit(run())\n");
         let (r, l) = (wrapped(&p.r), wrapped(&p.l));
-        assert_eq!(r.matches('\n').count(), l.matches('\n').count(), "line structure differs:\n{r}\n----\n{l}");
+        assert_eq!(
+            r.matches('\n').count(),
+            l.matches('\n').count(),
+            "line structure differs:\n{r}\n----\n{l}"
+        );
         let theirs = harness::oracle(l.as_bytes());
         assert_ne!(theirs.class, Class::Syntax, "C Lua rejects the twin:\n{l}\n{}\n.rlua:\n{r}", theirs.text);
         let ours = harness::remedy(r.as_bytes(), "=t.rlua");
         let twin = harness::remedy(l.as_bytes(), "=t");
         assert_eq!(ours.class, Class::Ok, "{r}\n{}", ours.text);
-        assert_eq!((ours.class, &ours.text), (twin.class, &twin.text), ".rlua and its twin differ:\n{r}\n----\n{l}");
+        assert_eq!(
+            (ours.class, &ours.text),
+            (twin.class, &twin.text),
+            ".rlua and its twin differ:\n{r}\n----\n{l}"
+        );
         if !harness::close_goto_shape(l.as_bytes()) {
             assert_eq!((ours.class, &ours.text), (theirs.class, &theirs.text), "C Lua differs:\n{l}");
         }
@@ -650,7 +736,14 @@ fn rlua_continue_twins_compile_and_agree() {
             // its body, after the outer loop's `continue` and before its locals.
             for (k, &(outer, og)) in kinds.iter().enumerate() {
                 let ol = format!("outer{n}_{m}_{k}");
-                let body = cat2(&[&rl("if i == 2 then continue end\ndo\n", &ol), &one, &rl("end\nlocal after = i\nif after == 3 then continue end\n__emit('outer', after)\n", &ol)]);
+                let body = cat2(&[
+                    &rl("if i == 2 then continue end\ndo\n", &ol),
+                    &one,
+                    &rl(
+                        "end\nlocal after = i\nif after == 3 then continue end\n__emit('outer', after)\n",
+                        &ol,
+                    ),
+                ]);
                 check(&continue_loop(outer, og, &ol, body, false, false));
             }
         }
@@ -666,10 +759,23 @@ fn rlua_continue_twins_compile_and_agree() {
         check(&continue_loop(RepeatScoped, false, &label, rl(body, &label), false, false));
     }
     // ... and one that declares a body local after it: rejected alike.
-    let bad = continue_loop(RepeatScoped, false, "scopedbad", rl("if i == 1 then continue end\nlocal late = i\n", "scopedbad"), false, false);
+    let bad = continue_loop(
+        RepeatScoped,
+        false,
+        "scopedbad",
+        rl("if i == 1 then continue end\nlocal late = i\n", "scopedbad"),
+        false,
+        false,
+    );
     let (ours, theirs) = (harness::remedy(bad.r.as_bytes(), "=t.rlua"), harness::oracle(bad.l.as_bytes()));
     assert_eq!((ours.class, theirs.class), (Class::Syntax, Class::Syntax), "{}\n{}", ours.text, theirs.text);
-    assert!(ours.text.contains("jumps into the scope of local 'late'") && theirs.text.contains("jumps into the scope of local 'late'"), "{}\n{}", ours.text, theirs.text);
+    assert!(
+        ours.text.contains("jumps into the scope of local 'late'")
+            && theirs.text.contains("jumps into the scope of local 'late'"),
+        "{}\n{}",
+        ours.text,
+        theirs.text
+    );
     assert!(checked > 300, "{checked}");
 
     // And the generator's own twins: each `.rlua` program with a `continue` among the
@@ -688,7 +794,13 @@ fn rlua_continue_twins_compile_and_agree() {
                 continue;
             }
             let theirs = harness::oracle(never(&p.l).as_bytes());
-            assert_ne!(theirs.class, Class::Syntax, "fuzz_rlua seed {seed} program {i}: twin rejected: {}\n{}", theirs.text, p.l);
+            assert_ne!(
+                theirs.class,
+                Class::Syntax,
+                "fuzz_rlua seed {seed} program {i}: twin rejected: {}\n{}",
+                theirs.text,
+                p.l
+            );
         }
     }
 }
@@ -699,7 +811,9 @@ fn run_case(path: &std::path::Path) -> (Outcome, Outcome) {
     let src = std::fs::read_to_string(path).unwrap().replace("\r\n", "\n");
     if path.extension().is_some_and(|e| e == "rlua") {
         let stem = path.file_stem().unwrap().to_string_lossy();
-        let plain = std::fs::read_to_string(path.with_file_name(format!("{stem}-plain.lua"))).unwrap().replace("\r\n", "\n");
+        let plain = std::fs::read_to_string(path.with_file_name(format!("{stem}-plain.lua")))
+            .unwrap()
+            .replace("\r\n", "\n");
         (harness::remedy(src.as_bytes(), "=t.rlua"), harness::oracle(plain.as_bytes()))
     } else {
         (harness::remedy(src.as_bytes(), "=t"), harness::oracle(src.as_bytes()))
@@ -726,7 +840,10 @@ fn probe_direct() {
         let r = harness::with_timeout(2 << 20, move || {
             let mut lua = remedy_lua::Lua::new(remedy_lua::Limits::default(), remedy_lua::Libs::ALL);
             let direct = lua.load(&src, "=t").map(|_| ()).map_err(|e| e.to_string());
-            let via = lua.exec(format!("local f, e = load({src:?}) return e"), "=w").map(|v| v.first().and_then(|x| lua.to_string_lossy(*x))).map_err(|e| e.to_string());
+            let via = lua
+                .exec(format!("local f, e = load({src:?}) return e"), "=w")
+                .map(|v| v.first().and_then(|x| lua.to_string_lossy(*x)))
+                .map_err(|e| e.to_string());
             (direct, via)
         });
         println!("{p}: {r:?}");
@@ -808,9 +925,13 @@ fn fuzz_11_nesting_budget() {
 #[test]
 fn fuzz_12_format_short_string_continuation() {
     let src = "if true then\nlocal s = \"a\\\nb\"\nreturn s, #s\nend\n";
-    let before = remedy_lua::Lua::new(remedy_lua::Limits::default(), remedy_lua::Libs::ALL).exec(src, "=t").map(|v| format!("{v:?}"));
+    let before = remedy_lua::Lua::new(remedy_lua::Limits::default(), remedy_lua::Libs::ALL)
+        .exec(src, "=t")
+        .map(|v| format!("{v:?}"));
     let f = remedy_lua::format(src, "t.lua").unwrap();
-    let after = remedy_lua::Lua::new(remedy_lua::Limits::default(), remedy_lua::Libs::ALL).exec(&f, "=t").map(|v| format!("{v:?}"));
+    let after = remedy_lua::Lua::new(remedy_lua::Limits::default(), remedy_lua::Libs::ALL)
+        .exec(&f, "=t")
+        .map(|v| format!("{v:?}"));
     assert_eq!(before.is_ok(), after.is_ok());
     let f2 = remedy_lua::format("do\nlocal s = \"a\\z\n      b\"\nend\n", "t.lua").unwrap();
     assert!(f.contains("\"a\\\nb\""), "formatting changed a backslash-newline continuation:\n{f}");
@@ -827,7 +948,8 @@ fn harness_known_non_bugs_and_planted_differences() {
         (ours, theirs)
     };
     let verdict = |src: &str, ours: &Outcome, theirs: &Outcome| {
-        compare(ours, theirs).map(|s| harness::classify(src.as_bytes(), "=t", src.as_bytes(), ours, theirs, s))
+        compare(ours, theirs)
+            .map(|s| harness::classify(src.as_bytes(), "=t", src.as_bytes(), ours, theirs, s))
     };
     // An object named by `__name` prints its address, which is normalized; short hex is not.
     assert_eq!(harness::normalize("x locked: 0x5510000000c0 y"), "x locked: ADDR y");
@@ -867,7 +989,11 @@ fn harness_known_non_bugs_and_planted_differences() {
     // finding.
     let (o, t) = run(fmod);
     assert_eq!(verdict(fmod, &o, &t), None, "{fmod}\nremedy: {}\nc lua:  {}", o.text, t.text);
-    let planted = plant(&o, "#2 to 'math.fmod' (number expected, got string)", "#1 to 'math.fmod' (number expected, got table)");
+    let planted = plant(
+        &o,
+        "#2 to 'math.fmod' (number expected, got string)",
+        "#1 to 'math.fmod' (number expected, got table)",
+    );
     assert!(verdict(fmod, &planted, &t).is_some_and(|s| !s.starts_with("expected:")), "plant hidden: {fmod}");
     let cases: [(&str, &str, &str, &str); 3] = [
         (order, "order", "\"k5\" 5", "\"k5\" 6"),
@@ -877,7 +1003,13 @@ fn harness_known_non_bugs_and_planted_differences() {
     for (src, kind, from, to) in cases {
         let (o, t) = run(src);
         let v = verdict(src, &o, &t);
-        assert_eq!(v.as_deref(), Some(format!("expected:{kind}").as_str()), "{src}\nremedy: {}\nc lua:  {}", o.text, t.text);
+        assert_eq!(
+            v.as_deref(),
+            Some(format!("expected:{kind}").as_str()),
+            "{src}\nremedy: {}\nc lua:  {}",
+            o.text,
+            t.text
+        );
         let planted = plant(&o, from, to);
         let v = verdict(src, &planted, &t);
         assert!(v.as_ref().is_some_and(|s| !s.starts_with("expected:")), "plant hidden as {v:?}: {src}");
@@ -887,11 +1019,19 @@ fn harness_known_non_bugs_and_planted_differences() {
     let src = "local t = {a = 1, b = 2} __emit((next(t))) __emit('stable')";
     let (o, t) = run(src);
     let v = verdict(src, &o, &t);
-    assert!(v.is_none() || v.as_deref() == Some("expected:c-nondeterministic") || v.as_deref().is_some_and(|s| s.starts_with("major")), "{v:?}");
+    assert!(
+        v.is_none()
+            || v.as_deref() == Some("expected:c-nondeterministic")
+            || v.as_deref().is_some_and(|s| s.starts_with("major")),
+        "{v:?}"
+    );
     for (from, to) in [("stable", "unstable"), ("\"a\"", "\"c\""), ("\"b\"", "\"c\"")] {
         if o.text.contains(from) {
             let planted = plant(&o, from, to);
-            assert!(verdict(src, &planted, &t).is_some_and(|s| !s.starts_with("expected:")), "plant {to} hidden");
+            assert!(
+                verdict(src, &planted, &t).is_some_and(|s| !s.starts_with("expected:")),
+                "plant {to} hidden"
+            );
         }
     }
     // C Lua stopped by its limit as the program's verdict: classified; a difference before
@@ -908,7 +1048,11 @@ fn harness_known_non_bugs_and_planted_differences() {
     // RemedyLua naming #1 for a number is real.
     let src = "__emit(pcall(math.fmod, 1, 'x'))";
     let (o, t) = run(src);
-    let planted = plant(&o, "#2 to 'math.fmod' (number expected, got string)", "#1 to 'math.fmod' (number expected, got number)");
+    let planted = plant(
+        &o,
+        "#2 to 'math.fmod' (number expected, got string)",
+        "#1 to 'math.fmod' (number expected, got number)",
+    );
     assert!(verdict(src, &planted, &t).is_some_and(|s| !s.starts_with("expected:")));
     // Both hit a limit at the same point first (a refused resume, as C Lua refuses it:
     // LR-3), then C Lua only (a `load` of nesting past C Lua's syntax levels): classified.
@@ -917,7 +1061,13 @@ fn harness_known_non_bugs_and_planted_differences() {
                __emit(pcall(f)) __emit('between') \
                local g, e = load('return ' .. string.rep('(', 300) .. '1' .. string.rep(')', 300)) __emit(g and g() or e)";
     let (o, t) = run(src);
-    assert!(o.text.matches(harness::C_LIMIT_MARK).count() >= 1 && t.text.matches(harness::C_LIMIT_MARK).count() >= 2, "{}\n{}", o.text, t.text);
+    assert!(
+        o.text.matches(harness::C_LIMIT_MARK).count() >= 1
+            && t.text.matches(harness::C_LIMIT_MARK).count() >= 2,
+        "{}\n{}",
+        o.text,
+        t.text
+    );
     assert_eq!(verdict(src, &o, &t).as_deref(), Some("expected:c-limit"), "{}\n{}", o.text, t.text);
     let planted = plant(&o, "between", "betwixt");
     assert!(verdict(src, &planted, &t).is_some_and(|s| !s.starts_with("expected:")));
@@ -969,8 +1119,11 @@ fn harness_known_non_bugs_and_planted_differences() {
 /// where every run agrees stays a finding.
 #[test]
 fn c_nondeterminism_explains_only_what_varies() {
-    let runs = |rs: &[&str]| rs.iter().map(|r| r.lines().map(str::to_owned).collect::<Vec<_>>()).collect::<Vec<_>>();
-    let ex = |ours: &str, rs: &[&str], free: bool| harness::c_runs_explain(&ours.lines().collect::<Vec<_>>(), &runs(rs), free);
+    let runs =
+        |rs: &[&str]| rs.iter().map(|r| r.lines().map(str::to_owned).collect::<Vec<_>>()).collect::<Vec<_>>();
+    let ex = |ours: &str, rs: &[&str], free: bool| {
+        harness::c_runs_explain(&ours.lines().collect::<Vec<_>>(), &runs(rs), free)
+    };
     // LR-10: `next` over two tables on one line; RemedyLua's pair is in no single run.
     let c = ["a\nnil \"c\" 3 \"x\" 1\nz", "a\nnil \"d\" 4 \"y\" 2\nz", "a\nnil \"c\" 3 \"y\" 2\nz"];
     assert!(ex("a\nnil \"d\" 4 \"x\" 1\nz", &c, false));
@@ -992,7 +1145,10 @@ fn c_nondeterminism_explains_only_what_varies() {
     assert!(!ex(&planted, &[&g15, &g13], false), "a line no run printed");
     assert!(!ex(&g12.replace("tail", "tale"), &[&g15, &g13], false));
     // LR-15: the name C Lua's error finds for a function.
-    let e = ["false bad argument #1 to 'obj' (table expected, got number)", "false bad argument #1 to 'setmetatable' (table expected, got number)"];
+    let e = [
+        "false bad argument #1 to 'obj' (table expected, got number)",
+        "false bad argument #1 to 'setmetatable' (table expected, got number)",
+    ];
     assert!(ex(e[1], &e, true));
     assert!(!ex("false bad argument #2 to 'setmetatable' (table expected, got number)", &e, true));
 }
@@ -1003,9 +1159,11 @@ fn c_nondeterminism_explains_only_what_varies() {
 /// lines, stay findings.
 #[test]
 fn c_nondeterminism_classify_is_deterministic() {
-    let fake = |o: &Outcome, from: &str, to: &str| Outcome { class: o.class, text: o.text.replacen(from, to, 1) };
+    let fake =
+        |o: &Outcome, from: &str, to: &str| Outcome { class: o.class, text: o.text.replacen(from, to, 1) };
     let verdict = |src: &str, ours: &Outcome, theirs: &Outcome| {
-        compare(ours, theirs).map(|s| harness::classify(src.as_bytes(), "=t", src.as_bytes(), ours, theirs, s))
+        compare(ours, theirs)
+            .map(|s| harness::classify(src.as_bytes(), "=t", src.as_bytes(), ours, theirs, s))
     };
     // LR-15: C Lua's runs may all say 'obj' (they did on a gate run) or all 'setmetatable'.
     let src = "obj = setmetatable __emit(pcall(setmetatable, 1)) __emit('stable')";
@@ -1026,8 +1184,14 @@ fn c_nondeterminism_classify_is_deterministic() {
     let theirs2 = harness::oracle(src2.as_bytes());
     let ours2 = fake(&harness::remedy(src2.as_bytes(), "=t"), "'setmetatable'", "'obj'");
     let v = verdict(src2, &ours2, &theirs2);
-    assert!(v.as_ref().is_some_and(|s| !s.starts_with("expected:")), "names of different functions hidden as {v:?}");
-    assert_eq!(harness::quoted_name_swap("to 'obj' (x)", "to 'string.rep' (x)"), Some(("obj".into(), "string.rep".into())));
+    assert!(
+        v.as_ref().is_some_and(|s| !s.starts_with("expected:")),
+        "names of different functions hidden as {v:?}"
+    );
+    assert_eq!(
+        harness::quoted_name_swap("to 'obj' (x)", "to 'string.rep' (x)"),
+        Some(("obj".into(), "string.rep".into()))
+    );
     assert_eq!(harness::quoted_name_swap("#1 to 'obj' (x)", "#2 to 'obj' (x)"), None);
     assert_eq!(harness::quoted_name_swap("to 'obj' (x)", "to 'setmetatable' (y)"), None);
     // `next`'s first key (LR-10), live: whatever C Lua's runs print, a plant on a stable line
@@ -1047,7 +1211,9 @@ fn next_first_key_counts_remedy_seed_runs_but_not_plants() {
     let src = "local t = {a = 1, b = 2, c = 3, d = 4} __emit(#'abcd', next(t)) __emit('stable')";
     let ours = harness::remedy(src.as_bytes(), "=t");
     let theirs = harness::oracle(src.as_bytes());
-    let verdict = |o: &Outcome| compare(o, &theirs).map(|s| harness::classify(src.as_bytes(), "=t", src.as_bytes(), o, &theirs, s));
+    let verdict = |o: &Outcome| {
+        compare(o, &theirs).map(|s| harness::classify(src.as_bytes(), "=t", src.as_bytes(), o, &theirs, s))
+    };
     for (from, to) in [("stable", "unstable"), ("4", "5")] {
         let planted = Outcome { class: ours.class, text: ours.text.replacen(from, to, 1) };
         let v = verdict(&planted);
@@ -1062,11 +1228,15 @@ fn next_first_key_counts_remedy_seed_runs_but_not_plants() {
 /// same seed; RemedyLua's runs of both count as runs. A plant on a stable line stays.
 #[test]
 fn rlua_twin_order_counts_its_runs_but_not_plants() {
-    let (r, l) = ("local t: {[string]: number} = {a = 1, b = 2, c = 3} __emit(next(t)) __emit('stable')", "local t = {a = 1, b = 2, c = 3} __emit(next(t)) __emit('stable')");
+    let (r, l) = (
+        "local t: {[string]: number} = {a = 1, b = 2, c = 3} __emit(next(t)) __emit('stable')",
+        "local t = {a = 1, b = 2, c = 3} __emit(next(t)) __emit('stable')",
+    );
     let ours = harness::remedy(r.as_bytes(), "=t.rlua");
     let theirs = harness::oracle(l.as_bytes());
     let planted = Outcome { class: ours.class, text: ours.text.replacen("stable", "unstable", 1) };
-    let v = compare(&planted, &theirs).map(|s| harness::classify(r.as_bytes(), "=t.rlua", l.as_bytes(), &planted, &theirs, s));
+    let v = compare(&planted, &theirs)
+        .map(|s| harness::classify(r.as_bytes(), "=t.rlua", l.as_bytes(), &planted, &theirs, s));
     assert!(v.as_ref().is_some_and(|s| !s.starts_with("expected:")), "plant hidden as {v:?}");
 }
 
@@ -1080,8 +1250,15 @@ fn clock_output_is_no_fast_slow_difference() {
     assert_ne!(o.class, Class::Panic, "{}", o.text);
     let src = "return(os),(os.clock()), os.time({year = 2020, month = 1, day = 1}) - os.time({year = 2020, month = 1, day = 12})";
     let (ours, theirs) = (harness::remedy(src.as_bytes(), "=t"), harness::oracle(src.as_bytes()));
-    let v = |o: &Outcome| compare(o, &theirs).map(|s| harness::classify(src.as_bytes(), "=t", src.as_bytes(), o, &theirs, s));
-    assert!(matches!(v(&ours).as_deref(), None | Some("expected:c-nondeterministic")), "{}\n{}", ours.text, theirs.text);
+    let v = |o: &Outcome| {
+        compare(o, &theirs).map(|s| harness::classify(src.as_bytes(), "=t", src.as_bytes(), o, &theirs, s))
+    };
+    assert!(
+        matches!(v(&ours).as_deref(), None | Some("expected:c-nondeterministic")),
+        "{}\n{}",
+        ours.text,
+        theirs.text
+    );
     let planted = Outcome { class: ours.class, text: ours.text.replacen("-950400", "-950401", 1) };
     assert!(v(&planted).is_some_and(|s| !s.starts_with("expected:")), "plant hidden");
 }
@@ -1093,13 +1270,22 @@ fn c_lua_close_goto_bug_segment_error() {
     let src = "for i = 0, 1 do\n  do\n    local c <close> = setmetatable({}, {__close = function() end})\n    \
                if true then goto cont end\n  end\n  local v = {}\n  ::cont::\nend";
     let ours = Outcome { class: Class::Ok, text: "seg 1 ok\nseg 2 ok\n\u{1}=> OK ".into() };
-    let theirs = Outcome { class: Class::Ok, text: "seg 1 ok\nseg 2 error \"t:9: attempt to call a nil value\"\n\u{1}=> OK ".into() };
-    let v = |o: &Outcome, t: &Outcome| compare(o, t).map(|s| harness::classify(src.as_bytes(), "=t", src.as_bytes(), o, t, s));
+    let theirs = Outcome {
+        class: Class::Ok,
+        text: "seg 1 ok\nseg 2 error \"t:9: attempt to call a nil value\"\n\u{1}=> OK ".into(),
+    };
+    let v = |o: &Outcome, t: &Outcome| {
+        compare(o, t).map(|s| harness::classify(src.as_bytes(), "=t", src.as_bytes(), o, t, s))
+    };
     assert_eq!(v(&ours, &theirs).as_deref(), Some("expected:c-lua-close-goto-bug"));
     let planted = Outcome { class: Class::Ok, text: "seg 1 okay\nseg 2 ok\n\u{1}=> OK ".into() };
-    assert!(v(&planted, &theirs).is_some_and(|s| !s.starts_with("expected:")), "a difference before the error hidden");
+    assert!(
+        v(&planted, &theirs).is_some_and(|s| !s.starts_with("expected:")),
+        "a difference before the error hidden"
+    );
     let other = "local v = {} __emit(v)";
-    let w = compare(&ours, &theirs).map(|s| harness::classify(other.as_bytes(), "=t", other.as_bytes(), &ours, &theirs, s));
+    let w = compare(&ours, &theirs)
+        .map(|s| harness::classify(other.as_bytes(), "=t", other.as_bytes(), &ours, &theirs, s));
     assert!(w.is_some_and(|s| !s.starts_with("expected:")), "outside the shape hidden");
 }
 
@@ -1143,13 +1329,20 @@ fn c_lua_close_goto_bug_is_classified_narrowly() {
         )
     };
     let verdict = |src: &str, ours: &Outcome, theirs: &Outcome| {
-        compare(ours, theirs).map(|s| harness::classify(src.as_bytes(), "=t", src.as_bytes(), ours, theirs, s))
+        compare(ours, theirs)
+            .map(|s| harness::classify(src.as_bytes(), "=t", src.as_bytes(), ours, theirs, s))
     };
     for decl in ["local v = {}", "local v <const> = {1}", "local v <const> = function() end"] {
         let src = prog(decl);
         assert!(harness::close_goto_shape(src.as_bytes()), "{decl}");
         let (ours, theirs) = (harness::remedy(src.as_bytes(), "=t"), harness::oracle(src.as_bytes()));
-        assert_eq!(verdict(&src, &ours, &theirs).as_deref(), Some("expected:c-lua-close-goto-bug"), "{decl}\n{}\n{}", ours.text, theirs.text);
+        assert_eq!(
+            verdict(&src, &ours, &theirs).as_deref(),
+            Some("expected:c-lua-close-goto-bug"),
+            "{decl}\n{}\n{}",
+            ours.text,
+            theirs.text
+        );
         // A real difference nearby stays a finding.
         let planted = Outcome { class: ours.class, text: ours.text.replacen("\"done\"", "\"dune\"", 1) };
         let v = verdict(&src, &planted, &theirs);
@@ -1159,7 +1352,13 @@ fn c_lua_close_goto_bug_is_classified_narrowly() {
     // after one pass, silently.
     let src = FUZZ_10013;
     let (ours, theirs) = (harness::remedy(src.as_bytes(), "=t"), harness::oracle(src.as_bytes()));
-    assert_eq!(verdict(src, &ours, &theirs).as_deref(), Some("expected:c-lua-close-goto-bug"), "{}\n{}", ours.text, theirs.text);
+    assert_eq!(
+        verdict(src, &ours, &theirs).as_deref(),
+        Some("expected:c-lua-close-goto-bug"),
+        "{}\n{}",
+        ours.text,
+        theirs.text
+    );
     let planted = Outcome { class: ours.class, text: ours.text.replacen("seg 1 ok", "seg 1 okay", 1) };
     assert!(verdict(src, &planted, &theirs).is_some_and(|s| !s.starts_with("expected:")));
     // Shapes C Lua gets right are not the shape.
@@ -1181,7 +1380,10 @@ fn c_lua_compare_key_bug_is_classified() {
         let src = format!("local t, n = {{}}, 0 local function f() t[{key}] = 1 end f() __emit(t[true])");
         let (ours, theirs) = (harness::remedy(src.as_bytes(), "=t"), harness::oracle(src.as_bytes()));
         assert!(theirs.text.contains("attempt to index a"), "{key}: {}", theirs.text);
-        let v = |o: &Outcome| compare(o, &theirs).map(|s| harness::classify(src.as_bytes(), "=t", src.as_bytes(), o, &theirs, s));
+        let v = |o: &Outcome| {
+            compare(o, &theirs)
+                .map(|s| harness::classify(src.as_bytes(), "=t", src.as_bytes(), o, &theirs, s))
+        };
         assert_eq!(v(&ours).as_deref(), Some("expected:c-lua-compare-key-bug"), "{key}: {}", ours.text);
         let planted = Outcome { class: ours.class, text: ours.text.replacen('1', "2", 1) };
         assert!(v(&planted).is_some_and(|s| !s.starts_with("expected:")), "{key}: plant hidden");
@@ -1197,7 +1399,9 @@ fn c_lua_compare_key_bug_is_classified() {
 fn oracle_address_split_and_wall_cut() {
     let src = r#"__emit((tostring(setmetatable({}, {})):gsub("", ": ADDR"))) __emit(1)"#;
     let (ours, theirs) = (harness::remedy(src.as_bytes(), "=t"), harness::oracle(src.as_bytes()));
-    let v = |o: &Outcome| compare(o, &theirs).map(|s| harness::classify(src.as_bytes(), "=t", src.as_bytes(), o, &theirs, s));
+    let v = |o: &Outcome| {
+        compare(o, &theirs).map(|s| harness::classify(src.as_bytes(), "=t", src.as_bytes(), o, &theirs, s))
+    };
     assert_eq!(v(&ours).as_deref(), Some("expected:c-address"), "{}\n{}", ours.text, theirs.text);
     let planted = Outcome { class: ours.class, text: ours.text.replacen("\n1", "\n2", 1) };
     assert!(v(&planted).is_some_and(|s| !s.starts_with("expected:")), "plant hidden");
@@ -1250,7 +1454,10 @@ end
     let (ours, theirs) = (harness::remedy(src.as_bytes(), "=t"), harness::oracle(src.as_bytes()));
     assert!(theirs.text.starts_with("<host> <crash>"), "{}", theirs.text);
     let sig = compare(&ours, &theirs).expect("a crash is a difference");
-    assert_eq!(harness::classify(src.as_bytes(), "=t", src.as_bytes(), &ours, &theirs, sig.clone()), "expected:c-lua-close-goto-bug");
+    assert_eq!(
+        harness::classify(src.as_bytes(), "=t", src.as_bytes(), &ours, &theirs, sig.clone()),
+        "expected:c-lua-close-goto-bug"
+    );
     assert_eq!(harness::classify(b"return 1", "=t", b"return 1", &ours, &theirs, sig), "oracle-crash");
 }
 
@@ -1297,9 +1504,15 @@ fn oracle_step_limit_counts_every_coroutine() {
 fn oracle_memory_is_capped() {
     let cap = 64 << 20;
     let grow = "local s = 'x' while true do s = s .. s end";
-    assert_eq!(remedy_lua_oracle::run_capped(grow, u64::MAX, cap), Err(remedy_lua_oracle::MEMORY_LIMIT.to_string()));
+    assert_eq!(
+        remedy_lua_oracle::run_capped(grow, u64::MAX, cap),
+        Err(remedy_lua_oracle::MEMORY_LIMIT.to_string())
+    );
     let caught = "local s = 'x' pcall(function() while true do s = s .. s end end) s = nil return 'caught'";
-    assert_eq!(remedy_lua_oracle::run_capped(caught, u64::MAX, cap), Err(remedy_lua_oracle::MEMORY_LIMIT.to_string()));
+    assert_eq!(
+        remedy_lua_oracle::run_capped(caught, u64::MAX, cap),
+        Err(remedy_lua_oracle::MEMORY_LIMIT.to_string())
+    );
     // Below the cap nothing changes.
     let small = "local s = 'x' for _ = 1, 20 do s = s .. s end return #s";
     assert_eq!(remedy_lua_oracle::run_capped(small, u64::MAX, cap), Ok("1048576".to_string()));
@@ -1317,27 +1530,46 @@ fn memory_cut_keeps_ordinary_allocations_the_memory_limit() {
     let (full, _) = harness::remedy_raw(src.as_bytes(), "=t", harness::remedy_limits());
     for m in [391_302usize, 300_000, 500_000] {
         let (o, _) = harness::remedy_raw(src.as_bytes(), "=t", harness::remedy_limits().memory(m));
-        assert!(o.class == Class::Memory || o.text == full.text || overflow_from_memory(&full.text, &o.text), "memory {m}: {}", o.text);
+        assert!(
+            o.class == Class::Memory || o.text == full.text || overflow_from_memory(&full.text, &o.text),
+            "memory {m}: {}",
+            o.text
+        );
     }
 }
 
 #[test]
 fn memory_cut_accepts_only_a_stack_overflow() {
     let full = "seg 1 ok\nprint 1\n\u{1}=> OK 2";
-    assert!(overflow_from_memory(full, "\u{2}c-limit\nseg 1 error \"t:3: stack overflow\"\nprint 1\n\u{1}=> OK 2"));
+    assert!(overflow_from_memory(
+        full,
+        "\u{2}c-limit\nseg 1 error \"t:3: stack overflow\"\nprint 1\n\u{1}=> OK 2"
+    ));
     assert!(overflow_from_memory(full, "seg 1 error \"t:3: stack overflow\"\nprint 1\n\u{1}=> OK 2"));
-    assert!(overflow_from_memory(full, "\u{2}c-limit\n\u{2}c-limit\nseg 1 error \"t:3: stack overflow\"\n\u{1}=> OK 2"));
+    assert!(overflow_from_memory(
+        full,
+        "\u{2}c-limit\n\u{2}c-limit\nseg 1 error \"t:3: stack overflow\"\n\u{1}=> OK 2"
+    ));
     assert!(!overflow_from_memory(full, "\u{2}c-limit\nseg 1 error \"t:3: attempt to call\"\n\u{1}=> OK 2"));
     assert!(!overflow_from_memory(full, "seg 1 ok\nprint 2\n\u{1}=> OK 2"));
-    assert!(!overflow_from_memory(full, "seg 1 error \"t:3: attempt to index a nil value\"\nprint 1\n\u{1}=> OK 2"));
+    assert!(!overflow_from_memory(
+        full,
+        "seg 1 error \"t:3: attempt to index a nil value\"\nprint 1\n\u{1}=> OK 2"
+    ));
     // A `pcall` caught the overflow and outer frames printed on before it reached the
     // segment (fuzz_generated SWEEP1_SEED=10003, memory 338711).
     let rec = "print 1\nprint 1\nprint 1\nseg 4 ok\n\u{1}=> OK 2";
-    assert!(overflow_from_memory(rec, "print 1\n\u{2}c-limit\nprint 1\n\u{2}c-limit\nseg 4 error \"t:32: stack overflow\"\n\u{1}=> OK 2"));
+    assert!(overflow_from_memory(
+        rec,
+        "print 1\n\u{2}c-limit\nprint 1\n\u{2}c-limit\nseg 4 error \"t:32: stack overflow\"\n\u{1}=> OK 2"
+    ));
     // ... but not with no overflow anywhere, nor when the full run overflows too.
     assert!(!overflow_from_memory(rec, "print 1\n\u{2}c-limit\nprint 1\nseg 4 ok\n\u{1}=> OK 2"));
     let both = "print 1\nprint 1\nprint 1\nseg 4 error \"t:32: stack overflow\"\n\u{1}=> OK 2";
-    assert!(!overflow_from_memory(both, "print 1\n\u{2}c-limit\nprint 1\nseg 4 error \"t:32: stack overflow\"\n\u{1}=> OK 2"));
+    assert!(!overflow_from_memory(
+        both,
+        "print 1\n\u{2}c-limit\nprint 1\nseg 4 error \"t:32: stack overflow\"\n\u{1}=> OK 2"
+    ));
     let deep = "seg 1 error \"t:3: stack overflow\"\n\u{1}=> OK 2";
     assert!(!overflow_from_memory(deep, "seg 1 error \"t:3: stack overflow\"\n\u{1}=> OK 3"));
 }

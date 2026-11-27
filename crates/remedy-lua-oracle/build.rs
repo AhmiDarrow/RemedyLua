@@ -13,12 +13,13 @@
 
 use std::path::PathBuf;
 
-const NUM2STR: &str = "#define lua_number2str(s,sz,n)  \\\n\tl_sprintf((s), sz, LUA_NUMBER_FMT, (LUAI_UACNUMBER)(n))";
-const NUM2STR_FIX: &str =
-    "int oracle_num2str(char *s, size_t sz, double n);\n#define lua_number2str(s,sz,n) oracle_num2str((s), (sz), (double)(n))";
+const NUM2STR: &str =
+    "#define lua_number2str(s,sz,n)  \\\n\tl_sprintf((s), sz, LUA_NUMBER_FMT, (LUAI_UACNUMBER)(n))";
+const NUM2STR_FIX: &str = "int oracle_num2str(char *s, size_t sz, double n);\n#define lua_number2str(s,sz,n) oracle_num2str((s), (sz), (double)(n))";
 const SEED_FIX: &str = "\nunsigned int oracle_seed(void);\n#define luai_makeseed(L) oracle_seed()\n";
 const NEWTHREAD_HOOK: &str = "  L1->hook = L->hook;\n  resethookcount(L1);";
-const NEWTHREAD_HOOK_FIX: &str = "  L1->hook = L->hook;\n  L1->hookcount = 1;  /* oracle: the step limit counts every coroutine */";
+const NEWTHREAD_HOOK_FIX: &str =
+    "  L1->hook = L->hook;\n  L1->hookcount = 1;  /* oracle: the step limit counts every coroutine */";
 /// Windows only (`oracle_libc.c` says why).
 const PTR2STR: &str = "#define lua_pointer2str(buff,sz,p)\tl_sprintf(buff,sz,\"%p\",p)";
 const PTR2STR_FIX: &str = "int oracle_ptr2str(char *s, size_t sz, const void *p);\n#define lua_pointer2str(buff,sz,p)\toracle_ptr2str(buff,sz,p)";
@@ -30,7 +31,7 @@ const FMOD: &str = "    lua_pushnumber(L, l_mathop(fmod)(luaL_checknumber(L, 1),
 const FMOD_FIX: &str = "  {\n    lua_Number b = luaL_checknumber(L, 2);\n    lua_pushnumber(L, l_mathop(fmod)(luaL_checknumber(L, 1), b));\n  }";
 /// C99's conversions, as loslib.c gives every system but Windows.
 const STRFTIME_FIX: &str = "#define LUA_STRFTIMEOPTIONS \"aAbBcCdDeFgGhHIjmMnprRStTuUVwWxXyYzZ%\" \"||\" \"EcECExEXEyEY\" \"OdOeOHOIOmOMOSOuOUOVOwOWOy\"\n";
-const FIX_C: &str ="#include <stdio.h>\n#include <math.h>\n\
+const FIX_C: &str = "#include <stdio.h>\n#include <math.h>\n\
 int oracle_num2str(char *s, size_t sz, double n) {\n\
   if (n != n) return snprintf(s, sz, \"%s\", signbit(n) ? \"-nan\" : \"nan\");\n\
   return snprintf(s, sz, \"%.14g\", n);\n\
@@ -75,12 +76,19 @@ fn main() {
         }
         if name == "lstate.c" {
             let fixed = text.replace("\r\n", "\n");
-            assert!(fixed.contains(NEWTHREAD_HOOK), "lstate.c does not have the expected lua_newthread hook setup");
+            assert!(
+                fixed.contains(NEWTHREAD_HOOK),
+                "lstate.c does not have the expected lua_newthread hook setup"
+            );
             text = fixed.replace(NEWTHREAD_HOOK, NEWTHREAD_HOOK_FIX);
         }
         if windows && name == "lstrlib.c" {
             // `l` and `L` pack 8 bytes, as on the reference system (`long` is 4 here).
-            assert_eq!(text.matches("sizeof(long)").count(), 2, "lstrlib.c does not have the expected `long` options");
+            assert_eq!(
+                text.matches("sizeof(long)").count(),
+                2,
+                "lstrlib.c does not have the expected `long` options"
+            );
             text = text.replace("sizeof(long)", "sizeof(long long)");
             text.insert_str(0, FMT_FIX);
         }
@@ -117,6 +125,12 @@ fn main() {
     println!("cargo:rerun-if-changed=oracle_libc.c");
     // As the stock 5.4 makefile builds it (RemedyLua matches it by default; its strict mode
     // is tested against fixed expectations).
-    cc::Build::new().define("LUA_COMPAT_5_3", None).include(&out).files(&files).warnings(false).opt_level(2).compile("lua54oracle");
+    cc::Build::new()
+        .define("LUA_COMPAT_5_3", None)
+        .include(&out)
+        .files(&files)
+        .warnings(false)
+        .opt_level(2)
+        .compile("lua54oracle");
     println!("cargo:rerun-if-changed={}", src.display());
 }

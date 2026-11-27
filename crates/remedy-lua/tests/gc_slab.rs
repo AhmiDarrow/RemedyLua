@@ -36,7 +36,10 @@ const KINDS: [&str; 5] = ["tables", "closures", "coroutines", "upvalues", "strin
 const LIMIT_MIB: usize = 32;
 
 fn kib(line: &str, key: &str) -> usize {
-    line.lines().find(|l| l.starts_with(key)).and_then(|l| l.split_whitespace().nth(1)?.parse().ok()).unwrap_or(0)
+    line.lines()
+        .find(|l| l.starts_with(key))
+        .and_then(|l| l.split_whitespace().nth(1)?.parse().ok())
+        .unwrap_or(0)
 }
 
 /// Runs in a child process (alone, so its peak resident memory is the script's): prints
@@ -58,7 +61,8 @@ fn child() {
             ((now >> 10) as usize, (peak >> 10) as usize)
         }
     };
-    let mut lua = Lua::new(Limits::default().memory(LIMIT_MIB << 20).fuel(1 << 34).hash_seed(seed), Libs::ALL);
+    let mut lua =
+        Lua::new(Limits::default().memory(LIMIT_MIB << 20).fuel(1 << 34).hash_seed(seed), Libs::ALL);
     lua.set_fast_loop(fast);
     let h0 = resident().1;
     lua.exec(&fill_script(&kinds, LIMIT_MIB), "=fill").unwrap();
@@ -82,7 +86,11 @@ fn run_child(kinds: &[&str], fast: bool, seed: u64) -> (usize, usize, usize, u64
         .unwrap();
     let text = String::from_utf8_lossy(&out.stdout);
     assert!(out.status.success(), "{spec}: {text}{}", String::from_utf8_lossy(&out.stderr));
-    let line = text.find("SLAB ").map(|at| &text[at..]).and_then(|t| t.lines().next()).unwrap_or_else(|| panic!("{spec}: {text}"));
+    let line = text
+        .find("SLAB ")
+        .map(|at| &text[at..])
+        .and_then(|t| t.lines().next())
+        .unwrap_or_else(|| panic!("{spec}: {text}"));
     let field = |k: &str| -> u64 {
         line.split_whitespace().find_map(|w| w.strip_prefix(k)?.strip_prefix('=')?.parse().ok()).unwrap()
     };
@@ -102,7 +110,10 @@ fn one_survivor_per_slab_keeps_resident_memory_counted() {
     for kinds in &cases {
         let (peak, end_rss, counted, fuel) = run_child(kinds, true, 7);
         let name = kinds.join(",");
-        assert!(peak * 10 <= limit_kib * 13, "{name}: peak resident {peak} KiB past 1.3x the {limit_kib} KiB limit");
+        assert!(
+            peak * 10 <= limit_kib * 13,
+            "{name}: peak resident {peak} KiB past 1.3x the {limit_kib} KiB limit"
+        );
         assert!(counted <= limit_kib, "{name}: counted {counted} KiB past the limit");
         // Counted tracks resident: the slots the fill left free (all of each slab but its
         // last object) are counted. Tables, closures and coroutines leave their whole

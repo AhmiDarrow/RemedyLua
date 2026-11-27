@@ -45,11 +45,27 @@ pub struct Diagnostic {
 
 impl Diagnostic {
     pub(crate) fn error(chunk: &str, pos: Pos, msg: impl Into<String>) -> Self {
-        Diagnostic { severity: Severity::Error, chunk: chunk.to_owned(), pos, end: pos, line: pos.line, message: msg.into(), raw: None }
+        Diagnostic {
+            severity: Severity::Error,
+            chunk: chunk.to_owned(),
+            pos,
+            end: pos,
+            line: pos.line,
+            message: msg.into(),
+            raw: None,
+        }
     }
 
     pub(crate) fn warning(chunk: &str, pos: Pos, msg: impl Into<String>) -> Self {
-        Diagnostic { severity: Severity::Warning, chunk: chunk.to_owned(), pos, end: pos, line: pos.line, message: msg.into(), raw: None }
+        Diagnostic {
+            severity: Severity::Warning,
+            chunk: chunk.to_owned(),
+            pos,
+            end: pos,
+            line: pos.line,
+            message: msg.into(),
+            raw: None,
+        }
     }
 
     /// An error whose message is `raw` (read as text with invalid UTF-8 replaced).

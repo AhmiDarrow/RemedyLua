@@ -140,7 +140,13 @@ impl<'a> Fmt<'a> {
 fn put_int(out: &mut Vec<u8>, v: u64, little: bool, size: usize, neg: bool) {
     let mut bytes = vec![0u8; size];
     for (i, b) in bytes.iter_mut().enumerate() {
-        *b = if i < 8 { (v >> (8 * i)) as u8 } else if neg { 0xff } else { 0 };
+        *b = if i < 8 {
+            (v >> (8 * i)) as u8
+        } else if neg {
+            0xff
+        } else {
+            0
+        };
     }
     if !little {
         bytes.reverse();
@@ -220,7 +226,13 @@ pub(super) fn pack(lua: &mut Lua, a: Args) -> R {
     lua.ret_owned(out)
 }
 
-fn pack_into(lua: &mut Lua, a: Args, f: &[u8], out: &mut super::OutBuf, read: &mut usize) -> Result<(), LuaError> {
+fn pack_into(
+    lua: &mut Lua,
+    a: Args,
+    f: &[u8],
+    out: &mut super::OutBuf,
+    read: &mut usize,
+) -> Result<(), LuaError> {
     let mut h = Fmt { f, i: 0, little: true, max_align: 1, bad: None };
     let mut arg = 0usize;
     let mut look = FORMAT_LOOK_EVERY;
@@ -228,7 +240,9 @@ fn pack_into(lua: &mut Lua, a: Args, f: &[u8], out: &mut super::OutBuf, read: &m
         format_look(lua, h.i, &mut look)?;
         out.pay(lua)?;
         let (kind, size, ntoalign) = h.details(out.len()).map_err(|e| h.raw_error(lua, e))?;
-        if ntoalign + size.min(1 << 20) > lua.limits.string_len.saturating_sub(out.len()) && kind != Kind::Char {
+        if ntoalign + size.min(1 << 20) > lua.limits.string_len.saturating_sub(out.len())
+            && kind != Kind::Char
+        {
             return Err(LuaError::msg("resulting string too large"));
         }
         out.extend(std::iter::repeat_n(0u8, ntoalign));
@@ -433,7 +447,9 @@ fn unpack_into(
         }
         let field = num.get(..size.min(MAX_INT_SIZE)).unwrap_or_default();
         match kind {
-            Kind::Int | Kind::Uint => out.push(Value::Int(unpack_int(field, h.little, kind == Kind::Int)? as i64)),
+            Kind::Int | Kind::Uint => {
+                out.push(Value::Int(unpack_int(field, h.little, kind == Kind::Int)? as i64))
+            }
             Kind::Float => {
                 let mut b = [0u8; 4];
                 b.copy_from_slice(field.get(..4).unwrap_or(&[0; 4]));

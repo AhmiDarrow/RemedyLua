@@ -8,7 +8,10 @@ use remedy_lua::{Libs, Limits, Lua};
 fn deadline_reads(setup: &str, body: &str, seed: u64, fast: bool) -> (usize, u64, String) {
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
-    let mut lua = Lua::new(Limits::default().memory(1 << 30).string_len(64 << 20).fuel(1 << 40).hash_seed(seed), Libs::ALL);
+    let mut lua = Lua::new(
+        Limits::default().memory(1 << 30).string_len(64 << 20).fuel(1 << 40).hash_seed(seed),
+        Libs::ALL,
+    );
     lua.set_fast_loop(fast);
     lua.exec(setup, "=setup").unwrap();
     let f = lua.load(body, "=body").unwrap();
@@ -39,7 +42,11 @@ fn s6r_4_spare_coroutine_stacks_stay_counted() {
     let drop = before.saturating_sub(lua.memory_used());
     assert!(drop <= 8 * 1024, "finishing 8 coroutines took {drop} bytes off the account, their stacks kept");
     // Reused by the next ones, and given back by a full collection.
-    lua.exec("for i = 1, 8 do C[i] = coroutine.wrap(function() return 1 end) C[i]() end C = nil collectgarbage()", "=g").unwrap();
+    lua.exec(
+        "for i = 1, 8 do C[i] = coroutine.wrap(function() return 1 end) C[i]() end C = nil collectgarbage()",
+        "=g",
+    )
+    .unwrap();
 }
 
 /// S6R-3 (low, S6T-KEY): the lookups natives make through `index_nested` and
@@ -131,7 +138,8 @@ fn crit_chain(base: u64, n: usize) -> String {
         tails.push_str("\",");
     }
     tails.push('}');
-    tails + " function KEY(i) local at = i // 8 \
+    tails
+        + " function KEY(i) local at = i // 8 \
               return string.rep('\\0', at) .. string.char(1 << (i % 8)) .. string.rep('\\0', 511 - at) .. TAILS[i + 1] end \
               T = {} for i = 0, #TAILS - 1 do T[KEY(i)] = i end"
 }
@@ -156,7 +164,12 @@ fn deep_lookups_fuel(n: usize, fast: bool) -> u64 {
     let mut lua = Lua::new(Limits::default().memory(256 << 20).fuel(1 << 40).hash_seed(base), Libs::ALL);
     lua.set_fast_loop(fast);
     lua.exec(&crit_chain(base, n), "=chain").unwrap();
-    let r = lua.exec(&format!("local c = 0 for j = 1, 100 do if T[KEY({})] then c = c + 1 end end return c", n - 1), "=look").unwrap();
+    let r = lua
+        .exec(
+            &format!("local c = 0 for j = 1, 100 do if T[KEY({})] then c = c + 1 end end return c", n - 1),
+            "=look",
+        )
+        .unwrap();
     assert_eq!(format!("{r:?}"), "[Int(100)]");
     (1u64 << 40) - lua.fuel_left()
 }
@@ -172,7 +185,10 @@ fn s6r_5_crit_walks_are_paid() {
     super::common::small_stack(|| {
         let (deep, shallow) = (deep_lookups_fuel(4000, true), deep_lookups_fuel(2, true));
         println!("100 lookups: {deep} fuel at depth 4,000, {shallow} at depth 1");
-        assert!(deep >= shallow + 100 * 3900, "100 lookups at depth 4,000: {deep} fuel, {shallow} at depth 1");
+        assert!(
+            deep >= shallow + 100 * 3900,
+            "100 lookups at depth 4,000: {deep} fuel, {shallow} at depth 1"
+        );
         assert_eq!(deep_lookups_fuel(4000, false), deep, "fast loop off");
     });
 }
@@ -203,7 +219,10 @@ fn s6r_6_a_failing_handler_pays_for_its_level_walks() {
     };
     let caught = fuel_of("function(e) return e end");
     let failing = fuel_of("function(e) error(e, 0) end");
-    assert!(failing > caught + 1_000_000, "a failing handler: {failing} fuel, {caught} with one that returns");
+    assert!(
+        failing > caught + 1_000_000,
+        "a failing handler: {failing} fuel, {caught} with one that returns"
+    );
 }
 
 /// S6R-7 (critical, S6T-LOAD): a string's hash is kept with 0 meaning
@@ -239,7 +258,9 @@ fn s6r_7_a_key_whose_hash_is_zero() {
         let mut lua = Lua::new(Limits::default().memory(256 << 20).fuel(1 << 40).hash_seed(base), Libs::ALL);
         let _ = tx.send(format!("{:?}", lua.exec(&src, "=zero")));
     });
-    let r = rx.recv_timeout(std::time::Duration::from_secs(30)).expect("t[S] = 1 for a key of hash 0 never returned");
+    let r = rx
+        .recv_timeout(std::time::Duration::from_secs(30))
+        .expect("t[S] = 1 for a key of hash 0 never returned");
     assert_eq!(r, format!("Ok([Int({})])", len + 1));
 }
 
@@ -270,7 +291,8 @@ fn fx2_6_crit_nodes_are_charged() {
     let used = |seed: u64| {
         let src = crit_chain(base, N);
         super::common::small_stack(move || {
-            let mut lua = Lua::new(Limits::default().memory(256 << 20).fuel(1 << 40).hash_seed(seed), Libs::ALL);
+            let mut lua =
+                Lua::new(Limits::default().memory(256 << 20).fuel(1 << 40).hash_seed(seed), Libs::ALL);
             let mut round = || {
                 lua.exec(&src, "=chain").unwrap();
                 lua.exec("collectgarbage()", "=gc").unwrap();
@@ -281,7 +303,8 @@ fn fx2_6_crit_nodes_are_charged() {
             (round(), round())
         })
     };
-    let (((tree, after), (_, again)), ((plain, plain_after), (_, plain_again))) = (used(base), used(base + 1));
+    let (((tree, after), (_, again)), ((plain, plain_after), (_, plain_again))) =
+        (used(base), used(base + 1));
     assert!(tree >= plain + N * 40, "colliding {tree} bytes, not colliding {plain}");
     // (What stays live after a round is the same either way: what the trees add to it
     // does not grow from round to round.)

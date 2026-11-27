@@ -8,14 +8,42 @@
 use super::common;
 
 const VALUES: &[&str] = &[
-    "5", "-3", "0", "2.5", "-0.0", "1/0", "0/0", "math.maxinteger", "math.mininteger", "2^63", "'10'", "'0x10'",
-    "'abc'", "nil", "true", "M",
+    "5",
+    "-3",
+    "0",
+    "2.5",
+    "-0.0",
+    "1/0",
+    "0/0",
+    "math.maxinteger",
+    "math.mininteger",
+    "2^63",
+    "'10'",
+    "'0x10'",
+    "'abc'",
+    "nil",
+    "true",
+    "M",
 ];
 const CONSTS: &[&str] = &[
-    "1", "0", "-1", "7", "32767", "-32767", "32768", "-32768", "2.5", "-0.0", "'3'", "'a'", "1e308",
-    "9007199254740993", "0x7fffffffffffffff",
+    "1",
+    "0",
+    "-1",
+    "7",
+    "32767",
+    "-32767",
+    "32768",
+    "-32768",
+    "2.5",
+    "-0.0",
+    "'3'",
+    "'a'",
+    "1e308",
+    "9007199254740993",
+    "0x7fffffffffffffff",
 ];
-const OPS: &[&str] = &["+", "-", "*", "/", "%", "//", "^", "&", "|", "~", "<<", ">>", "==", "~=", "<", "<=", ">", ">="];
+const OPS: &[&str] =
+    &["+", "-", "*", "/", "%", "//", "^", "&", "|", "~", "<<", ">>", "==", "~=", "<", "<=", ">", ">="];
 
 /// A value whose every metamethod reports the event and the operand order it saw.
 const META: &str = r#"
@@ -30,7 +58,9 @@ end)())
 "#;
 
 fn program(v: &str) -> String {
-    let mut p = format!("{META}local x = {v}\nlocal r = {{}}\nlocal function s(ok, e) r[#r + 1] = tostring(ok) .. ':' .. tostring(e) end\n");
+    let mut p = format!(
+        "{META}local x = {v}\nlocal r = {{}}\nlocal function s(ok, e) r[#r + 1] = tostring(ok) .. ':' .. tostring(e) end\n"
+    );
     for op in OPS {
         for k in CONSTS {
             p += &format!("s(pcall(function() return x {op} {k} end))\n");

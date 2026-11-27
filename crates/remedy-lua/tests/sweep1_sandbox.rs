@@ -17,12 +17,15 @@ use std::panic::AssertUnwindSafe;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use remedy_lua::{Error, LimitKind, Libs, Limits, Lua, Value};
+use remedy_lua::{Error, Libs, LimitKind, Limits, Lua, Value};
 
 // ---------------------------------------------------------------- helpers
 
 /// Runs `f` on a worker thread; `Err` when it panicked or did not finish in `secs`.
-fn bounded<T: Send + 'static>(secs: u64, f: impl FnOnce() -> T + Send + 'static) -> Result<(T, Duration), String> {
+fn bounded<T: Send + 'static>(
+    secs: u64,
+    f: impl FnOnce() -> T + Send + 'static,
+) -> Result<(T, Duration), String> {
     // (Never detached: `common::with_deadline`.)
     let r = super::common::with_deadline(16 << 20, Duration::from_secs(secs), move || {
         let start = Instant::now();
@@ -37,7 +40,10 @@ fn bounded<T: Send + 'static>(secs: u64, f: impl FnOnce() -> T + Send + 'static)
 }
 
 fn panic_text(p: &Box<dyn std::any::Any + Send>) -> String {
-    p.downcast_ref::<String>().cloned().or_else(|| p.downcast_ref::<&str>().map(|s| (*s).to_owned())).unwrap_or_default()
+    p.downcast_ref::<String>()
+        .cloned()
+        .or_else(|| p.downcast_ref::<&str>().map(|s| (*s).to_owned()))
+        .unwrap_or_default()
 }
 
 /// Runs `src` in a fresh state; the outcome as text.
@@ -137,7 +143,11 @@ fn child_case(case: &str) -> String {
             Libs::SAFE,
             "table.sort(setmetatable({}, {__len = function() return 20000000 end}))",
         ),
-        "pack_c_abort" => outcome(Limits::default().memory(1 << 20), Libs::SAFE, "return string.pack('c100000000000000', '')"),
+        "pack_c_abort" => outcome(
+            Limits::default().memory(1 << 20),
+            Libs::SAFE,
+            "return string.pack('c100000000000000', '')",
+        ),
         "utf8_codepoint" => outcome(
             Limits::default().memory(12 << 20),
             Libs::SAFE,
@@ -372,7 +382,9 @@ fn s8_ephemeron_chain_quadratic() {
 // Fix: check `size` against `string_len - out.len()` before padding (C Lua errors too).
 #[test]
 fn s9_pack_huge_c_panics() {
-    let r = bounded(20, || outcome(Limits::default(), Libs::SAFE, "return string.pack('c18000000000000000000', '')"));
+    let r = bounded(20, || {
+        outcome(Limits::default(), Libs::SAFE, "return string.pack('c18000000000000000000', '')")
+    });
     assert!(r.is_ok(), "{}", r.err().unwrap_or_default());
 }
 
@@ -393,7 +405,9 @@ fn s10_pack_large_c_aborts() {
 // invalid option '0', as in C: the total past 2^31 comes from three 'c999999999'.)
 #[test]
 fn s11_packsize_overflow() {
-    let r = bounded(20, || outcome(Limits::default(), Libs::SAFE, "return string.packsize('c999999999c999999999c999999999')"));
+    let r = bounded(20, || {
+        outcome(Limits::default(), Libs::SAFE, "return string.packsize('c999999999c999999999c999999999')")
+    });
     let r = r.map(|x| x.0).unwrap_or_else(|e| e);
     assert!(r.contains("too large"), "{r}");
 }
@@ -484,7 +498,10 @@ fn s16_memory_limit_not_sticky() {
         Ok(vec![])
     })
     .unwrap();
-    let r = describe(&mut lua, "careless(function() local t = {} while true do t[#t + 1] = {} end end) return 'survived'");
+    let r = describe(
+        &mut lua,
+        "careless(function() local t = {} while true do t[#t + 1] = {} end end) return 'survived'",
+    );
     assert_eq!(r, "limit Memory");
 }
 
@@ -527,16 +544,22 @@ fn s17_stale_handle_reads_new_occupant() {
     lua.exec("SECRET = {} for i = 1, 1000 do SECRET[i] = {password = 'hunter2'} end", "=t").unwrap();
     let k = lua.create_string("password").unwrap();
     let seen = lua.table_get(old, k);
-    assert!(seen.is_nil(), "stale handle read {:?} from the table that reused its slot", lua.to_string_lossy(seen));
+    assert!(
+        seen.is_nil(),
+        "stale handle read {:?} from the table that reused its slot",
+        lua.to_string_lossy(seen)
+    );
     // Userdata: a stale handle downcasts the data of the userdata that took the slot.
     let ud_old = lua.create_userdata(1u32, None).unwrap();
     lua.exec("return 1", "=t").unwrap();
     lua.collect_garbage().unwrap();
     lua.collect_garbage().unwrap();
-    let roots: Vec<_> = (0..100).map(|_| {
-        let u = lua.create_userdata(7u32, None).unwrap();
-        lua.root(u)
-    }).collect();
+    let roots: Vec<_> = (0..100)
+        .map(|_| {
+            let u = lua.create_userdata(7u32, None).unwrap();
+            lua.root(u)
+        })
+        .collect();
     assert_eq!(lua.userdata::<u32>(ud_old), None, "stale userdata handle read the new userdata's data");
     drop(roots);
 }
@@ -603,7 +626,8 @@ fn s19_os_time_overflow() {
 // see S14.) Fix: compute the display name once at load and keep only that.
 #[test]
 fn s20_chunk_name_rescanned_per_error() {
-    let src = "local code = 'local f = function() error(\"x\") end for i = 1, 40000 do pcall(f) end return 1 --'
+    let src =
+        "local code = 'local f = function() error(\"x\") end for i = 1, 40000 do pcall(f) end return 1 --'
                           .. string.rep('x', 8 << 20)
                return load(code)()";
     let r = must_end(src, Limits::default().fuel(2_000_000), Libs::ALL, 10);
@@ -617,7 +641,9 @@ fn s20_chunk_name_rescanned_per_error() {
 // 'select' (index out of range)". Fix: compare with `i < -n` (n >= 0) instead.
 #[test]
 fn s21_select_mininteger() {
-    let r = bounded(20, || outcome(Limits::default(), Libs::SAFE, "return pcall(select, math.mininteger, 1, 2, 3)"));
+    let r = bounded(20, || {
+        outcome(Limits::default(), Libs::SAFE, "return pcall(select, math.mininteger, 1, 2, 3)")
+    });
     let r = r.map(|x| x.0).unwrap_or_else(|e| e);
     assert!(r.contains("index out of range"), "{r}");
 }
@@ -654,7 +680,10 @@ fn s23_output_limit_ignored_with_sink() {
     let got = Arc::new(Mutex::new(0usize));
     let g = Arc::clone(&got);
     lua.set_print(move |s| *g.lock().unwrap() += s.len());
-    let r = describe(&mut lua, "local line = string.rep('x', 1000) for i = 1, 100000 do print(line) end return 'done'");
+    let r = describe(
+        &mut lua,
+        "local line = string.rep('x', 1000) for i = 1, 100000 do print(line) end return 'done'",
+    );
     let total = *got.lock().unwrap();
     assert!(total <= 1 << 20, "{r}: the sink received {} MB under a 1 MiB output limit", total >> 20);
 }
@@ -671,7 +700,9 @@ fn s23_output_limit_ignored_with_sink() {
 fn s24_error_len_not_applied_to_raised_strings() {
     let mut lua = Lua::new(Limits::default(), Libs::SAFE);
     match lua.exec("error(string.rep('x', 8 << 20))", "=t") {
-        Err(Error::Runtime { message, .. }) => assert!(message.len() <= 4096, "message is {} bytes", message.len()),
+        Err(Error::Runtime { message, .. }) => {
+            assert!(message.len() <= 4096, "message is {} bytes", message.len())
+        }
         other => panic!("{other:?}"),
     }
 }
@@ -803,7 +834,10 @@ fn capabilities_cannot_be_reached() {
     assert_eq!(describe(&mut lua, probes), "ok ");
     // Without STRING, strings have no methods and no metatable to abuse.
     let mut bare = Lua::new(Limits::default(), Libs::BASE);
-    assert_eq!(describe(&mut bare, "return getmetatable('') == nil, (pcall(function() return ('x'):upper() end))"), "ok Bool(true),Bool(false)");
+    assert_eq!(
+        describe(&mut bare, "return getmetatable('') == nil, (pcall(function() return ('x'):upper() end))"),
+        "ok Bool(true),Bool(false)"
+    );
     // `load` never takes binary chunks, in any mode, from a string or a reader.
     let mut all = Lua::new(Limits::default(), Libs::ALL);
     let r = describe(
@@ -825,8 +859,7 @@ fn host_reentrancy_and_gc_mid_call() {
         Ok(vec![])
     })
     .unwrap();
-    lua.register("host.call", |lua, args| lua.call(args[0], args.get(1..).unwrap_or_default()))
-    .unwrap();
+    lua.register("host.call", |lua, args| lua.call(args[0], args.get(1..).unwrap_or_default())).unwrap();
     lua.register("host.mk", |lua, _| {
         let t = lua.create_table()?;
         let s = lua.create_string("made by host")?;
@@ -877,15 +910,64 @@ impl Rng {
 }
 
 const INTS: &[&str] = &[
-    "0", "1", "-1", "2", "3", "7", "8", "100", "255", "256", "1000", "-1000", "65536", "1e6", "2^31", "-2^31",
-    "2^53", "math.maxinteger", "math.mininteger", "math.maxinteger - 1", "math.mininteger + 1", "1 << 40",
-    "1 << 62", "-(1 << 62)", "0.5", "-0.0", "1/0", "-1/0", "0/0", "'10'", "'0x10'", "N",
+    "0",
+    "1",
+    "-1",
+    "2",
+    "3",
+    "7",
+    "8",
+    "100",
+    "255",
+    "256",
+    "1000",
+    "-1000",
+    "65536",
+    "1e6",
+    "2^31",
+    "-2^31",
+    "2^53",
+    "math.maxinteger",
+    "math.mininteger",
+    "math.maxinteger - 1",
+    "math.mininteger + 1",
+    "1 << 40",
+    "1 << 62",
+    "-(1 << 62)",
+    "0.5",
+    "-0.0",
+    "1/0",
+    "-1/0",
+    "0/0",
+    "'10'",
+    "'0x10'",
+    "N",
 ];
 
 const STRS: &[&str] = &[
-    "''", "'x'", "'abc'", "'%d'", "'%s'", "'\\0'", "'\\255\\254'", "'é'", "string.rep('a', 1000)", "S",
-    "string.rep('ab', N % 4096)", "'(.-)'", "'%a+'", "'[^%z]'", "'%b()'", "'%f[%w]'", "'i16'", "'c10'",
-    "'<i4>!8d'", "'z'", "'s1'", "'xXi8'", "'j'",
+    "''",
+    "'x'",
+    "'abc'",
+    "'%d'",
+    "'%s'",
+    "'\\0'",
+    "'\\255\\254'",
+    "'é'",
+    "string.rep('a', 1000)",
+    "S",
+    "string.rep('ab', N % 4096)",
+    "'(.-)'",
+    "'%a+'",
+    "'[^%z]'",
+    "'%b()'",
+    "'%f[%w]'",
+    "'i16'",
+    "'c10'",
+    "'<i4>!8d'",
+    "'z'",
+    "'s1'",
+    "'xXi8'",
+    "'j'",
 ];
 
 fn int(r: &mut Rng) -> String {
@@ -989,11 +1071,7 @@ fn stmt(r: &mut Rng, depth: usize, known: bool) -> String {
 fn block(r: &mut Rng, depth: usize, known: bool) -> String {
     let mut out = String::new();
     for _ in 0..1 + r.below(4) {
-        let s = if depth < 3 && r.chance(15) {
-            block(r, depth + 1, known)
-        } else {
-            stmt(r, depth, known)
-        };
+        let s = if depth < 3 && r.chance(15) { block(r, depth + 1, known) } else { stmt(r, depth, known) };
         // Most statements are protected, so the program goes on after an error.
         if r.chance(80) {
             out.push_str(&format!("pcall(function() {s} end)\n"));
@@ -1038,32 +1116,35 @@ fn check_program(src: &str, seed: u64) -> Result<(), String> {
     let fuel = 300_000;
     let cap = 4usize << 20;
     let src = src.to_owned();
-    let run = bounded(30, move || super::common::small_stack(move || {
-        let mut lua = Lua::new(Limits::default().fuel(fuel).memory(cap).string_len(1 << 20), Libs::ALL);
-        lua.register("host.call", |lua, args| lua.call(args[0], args.get(1..).unwrap_or_default())).unwrap();
-        lua.register("host.gc", |lua, _| {
-            lua.collect_garbage()?;
-            Ok(vec![])
+    let run = bounded(30, move || {
+        super::common::small_stack(move || {
+            let mut lua = Lua::new(Limits::default().fuel(fuel).memory(cap).string_len(1 << 20), Libs::ALL);
+            lua.register("host.call", |lua, args| lua.call(args[0], args.get(1..).unwrap_or_default()))
+                .unwrap();
+            lua.register("host.gc", |lua, _| {
+                lua.collect_garbage()?;
+                Ok(vec![])
+            })
+            .unwrap();
+            let mut problems = Vec::new();
+            for round in 0..2 {
+                let r = lua.exec(&src, "=fuzz");
+                if lua.memory_used() > cap {
+                    problems.push(format!("round {round}: memory_used {} > cap {cap}", lua.memory_used()));
+                }
+                if let Err(Error::Runtime { message, .. }) = &r
+                    && (message.contains("internal") || message.contains("CORRUPT"))
+                {
+                    problems.push(format!("round {round}: internal error: {message}"));
+                }
+                match lua.exec("return 1 + 1", "=alive") {
+                    Ok(v) if v == vec![Value::Int(2)] => {}
+                    other => problems.push(format!("round {round}: state not usable afterwards: {other:?}")),
+                }
+            }
+            problems
         })
-        .unwrap();
-        let mut problems = Vec::new();
-        for round in 0..2 {
-            let r = lua.exec(&src, "=fuzz");
-            if lua.memory_used() > cap {
-                problems.push(format!("round {round}: memory_used {} > cap {cap}", lua.memory_used()));
-            }
-            if let Err(Error::Runtime { message, .. }) = &r
-                && (message.contains("internal") || message.contains("CORRUPT"))
-            {
-                problems.push(format!("round {round}: internal error: {message}"));
-            }
-            match lua.exec("return 1 + 1", "=alive") {
-                Ok(v) if v == vec![Value::Int(2)] => {}
-                other => problems.push(format!("round {round}: state not usable afterwards: {other:?}")),
-            }
-        }
-        problems
-    }));
+    });
     match run {
         Ok((problems, took)) if problems.is_empty() => {
             // 300k fuel twice is milliseconds of normal work; allow generous debug slack.

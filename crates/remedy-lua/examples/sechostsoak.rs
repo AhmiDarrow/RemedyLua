@@ -8,7 +8,11 @@ use remedy_lua::{Data, Libs, Limits, Lua, Value};
 struct Payload(#[allow(dead_code)] Arc<()>);
 
 fn rss() -> usize {
-    std::fs::read_to_string("/proc/self/statm").ok().and_then(|s| s.split_whitespace().nth(1)?.parse::<usize>().ok()).unwrap_or(0) * 4096
+    std::fs::read_to_string("/proc/self/statm")
+        .ok()
+        .and_then(|s| s.split_whitespace().nth(1)?.parse::<usize>().ok())
+        .unwrap_or(0)
+        * 4096
 }
 
 fn main() {
@@ -26,10 +30,12 @@ fn main() {
     let mut prev: Vec<(&'static str, usize)> = Vec::new();
     for i in 0..n {
         let t = Arc::clone(&token);
-        let f = lua.create_function("echo", move |_, a| {
-            let _held = &t;
-            Ok(a.to_vec())
-        }).unwrap();
+        let f = lua
+            .create_function("echo", move |_, a| {
+                let _held = &t;
+                Ok(a.to_vec())
+            })
+            .unwrap();
         let rf = lua.root(f);
         let ud = lua.create_userdata(Payload(Arc::clone(&token)), Some(mt)).unwrap();
         let ru = lua.root(ud);
@@ -39,7 +45,8 @@ fn main() {
         lua.register(&format!("lib.f{}", i % 8), move |_, _| {
             let _held = &t2;
             Ok(vec![Value::Int(1)])
-        }).unwrap();
+        })
+        .unwrap();
         let d = lua.from_data(&Data::Table(vec![(Data::Str(format!("k{i}")), Data::Int(i as i64))])).unwrap();
         lua.set_global("last", d).unwrap();
         drop((rf, ru));
@@ -53,7 +60,12 @@ fn main() {
                 .filter(|(k, v)| prev.iter().find(|(pk, _)| pk == k).is_none_or(|(_, pv)| pv != v))
                 .map(|(k, v)| format!("{k}={v}"))
                 .collect();
-            println!("{i:>8}: rss {:>6} KiB, used {:>6} KiB | {}", rss() >> 10, lua.memory_used() >> 10, changed.join(" "));
+            println!(
+                "{i:>8}: rss {:>6} KiB, used {:>6} KiB | {}",
+                rss() >> 10,
+                lua.memory_used() >> 10,
+                changed.join(" ")
+            );
             prev = sizes;
         }
     }

@@ -73,18 +73,24 @@ function FOREVER() while true do coroutine.yield(1) end end \n";
 const SHAPES: &[(&str, u32, ShapeGen)] = &[
     ("sparse array", 1 << 20, |n, a| {
         let keep = [2, 64, 1024][a as usize % 3];
-        format!("do local t = {{}} for i = 1, {n} do t[i] = i end for i = 1, {n} do if i % {keep} ~= 0 then t[i] = nil end end TABS[#TABS + 1] = t end")
+        format!(
+            "do local t = {{}} for i = 1, {n} do t[i] = i end for i = 1, {n} do if i % {keep} ~= 0 then t[i] = nil end end TABS[#TABS + 1] = t end"
+        )
     }),
     ("churned string keys", 1 << 18, |n, a| {
         let left = [1, 16, n / 2][a as usize % 3];
-        format!("do local t = {{}} for i = 1, {n} do t['k' .. i] = i end for i = 1, {n} - {left} do t['k' .. i] = nil end \
-                 TABS[#TABS + 1] = t KEYS[#KEYS + 1] = 'k' .. {n} KEYS[#KEYS + 1] = 'k1' end")
+        format!(
+            "do local t = {{}} for i = 1, {n} do t['k' .. i] = i end for i = 1, {n} - {left} do t['k' .. i] = nil end \
+                 TABS[#TABS + 1] = t KEYS[#KEYS + 1] = 'k' .. {n} KEYS[#KEYS + 1] = 'k1' end"
+        )
     }),
     ("mixed keys with deletions", 1 << 17, |n, _| {
-        format!("do local t, keep = {{}}, {{}} for i = 1, {n} do t[i * 3] = i t[i + 0.5] = i t['s' .. i] = i t[i % 2 == 0] = i \
+        format!(
+            "do local t, keep = {{}}, {{}} for i = 1, {n} do t[i * 3] = i t[i + 0.5] = i t['s' .. i] = i t[i % 2 == 0] = i \
                  local o = {{}} t[o] = i if i % 7 == 0 then keep[#keep + 1] = o end t[-i] = i end \
                  for i = 1, {n}, 2 do t[i * 3] = nil t[i + 0.5] = nil t['s' .. i] = nil t[-i] = nil end \
-                 TABS[#TABS + 1] = t TABS[#TABS + 1] = keep KEYS[#KEYS + 1] = 2.5 KEYS[#KEYS + 1] = -2 KEYS[#KEYS + 1] = true end")
+                 TABS[#TABS + 1] = t TABS[#TABS + 1] = keep KEYS[#KEYS + 1] = 2.5 KEYS[#KEYS + 1] = -2 KEYS[#KEYS + 1] = true end"
+        )
     }),
     ("integer collision chains", 1 << 16, |n, a| {
         // Keys at the end of chains of colliding integers (Lua's node layout; no seed).
@@ -100,39 +106,62 @@ const SHAPES: &[(&str, u32, ShapeGen)] = &[
     }),
     ("__index/__newindex chain", 1 << 14, |n, a| {
         let nw = if a % 2 == 0 { ", __newindex = b" } else { "" };
-        format!("do local b = {{v = 1, k1 = 2}} for i = 1, {n} do b = setmetatable({{}}, {{__index = b{nw}}}) end TABS[#TABS + 1] = b end")
+        format!(
+            "do local b = {{v = 1, k1 = 2}} for i = 1, {n} do b = setmetatable({{}}, {{__index = b{nw}}}) end TABS[#TABS + 1] = b end"
+        )
     }),
     ("__index function chain", 180, |n, _| {
-        format!("do local b = {{v = 1}} for i = 1, {n} do local p = b b = setmetatable({{}}, {{__index = function(t, k) return p[k] end}}) end TABS[#TABS + 1] = b end")
+        format!(
+            "do local b = {{v = 1}} for i = 1, {n} do local p = b b = setmetatable({{}}, {{__index = function(t, k) return p[k] end}}) end TABS[#TABS + 1] = b end"
+        )
     }),
-    ("__index self loop", 1, |_, _| "do local t = {} setmetatable(t, {__index = t, __newindex = t}) TABS[#TABS + 1] = t end".into()),
+    ("__index self loop", 1, |_, _| {
+        "do local t = {} setmetatable(t, {__index = t, __newindex = t}) TABS[#TABS + 1] = t end".into()
+    }),
     ("metatable chain", 1 << 12, |n, _| {
-        format!("do local m = {{__index = function() return 1 end}} for i = 1, {n} do m = setmetatable({{__index = m, __eq = m.__eq, __len = function() return i end}}, m) end \
-                 TABS[#TABS + 1] = setmetatable({{}}, m) end")
+        format!(
+            "do local m = {{__index = function() return 1 end}} for i = 1, {n} do m = setmetatable({{__index = m, __eq = m.__eq, __len = function() return i end}}, m) end \
+                 TABS[#TABS + 1] = setmetatable({{}}, m) end"
+        )
     }),
     ("dead objects, few survivors", 1 << 21, |n, a| {
-        let make = ["{}", "function() return i end", "coroutine.create(FOREVER)", "'d' .. i", "{i, i}", "setmetatable({}, {__mode = 'k'})"][a as usize % 6];
+        let make = [
+            "{}",
+            "function() return i end",
+            "coroutine.create(FOREVER)",
+            "'d' .. i",
+            "{i, i}",
+            "setmetatable({}, {__mode = 'k'})",
+        ][a as usize % 6];
         // Each kind sized to fit the 256 MiB cap alone, with room (at most about 150 MiB):
         // a weak table costs about 150 bytes, a plain or two-slot table 75 (long-run
         // finding: at 2^21 they did not fit and the setup failed).
         let n = n.min([1 << 20, 1 << 20, 1 << 17, 1 << 21, 1 << 20, 1 << 19][a as usize % 6]);
-        format!("do KEEP = KEEP or {{}} local j = {{}} for i = 1, {n} do j[i] = {make} end for i = 1000, {n}, 1000 do KEEP[#KEEP + 1] = j[i] end \
-                 KEEP[#KEEP + 1] = j[{n}] end collectgarbage() collectgarbage()")
+        format!(
+            "do KEEP = KEEP or {{}} local j = {{}} for i = 1, {n} do j[i] = {make} end for i = 1000, {n}, 1000 do KEEP[#KEEP + 1] = j[i] end \
+                 KEEP[#KEEP + 1] = j[{n}] end collectgarbage() collectgarbage()"
+        )
     }),
     ("coroutines parked deep", 1 << 16, |n, a| {
         let depth = [10, 190, 1900][a as usize % 3].min(n);
         let count = (n / depth).clamp(1, 2000);
-        format!("for j = 1, {count} do local co = coroutine.create(function() PARK({depth}, FOREVER) end) coroutine.resume(co) COS[#COS + 1] = co end")
+        format!(
+            "for j = 1, {count} do local co = coroutine.create(function() PARK({depth}, FOREVER) end) coroutine.resume(co) COS[#COS + 1] = co end"
+        )
     }),
     ("coroutines parked in coroutines", 150, |n, _| {
         // A chain of suspended coroutines: each holds the next, and resumes it when resumed.
-        format!("do local function nest(d) if d == 0 then while true do coroutine.yield(0) end end \
+        format!(
+            "do local function nest(d) if d == 0 then while true do coroutine.yield(0) end end \
                  local co = coroutine.wrap(function() return nest(d - 1) end) co() while true do coroutine.yield(co()) end end \
-                 local co = coroutine.create(nest) coroutine.resume(co, {n}) COS[#COS + 1] = co end")
+                 local co = coroutine.create(nest) coroutine.resume(co, {n}) COS[#COS + 1] = co end"
+        )
     }),
     ("closures sharing an upvalue", 1 << 17, |n, a| {
         if a % 2 == 0 {
-            format!("do local x = 0 for i = 1, {n} do FNS[#FNS + 1] = function(y) x = x + 1 return x end end end")
+            format!(
+                "do local x = 0 for i = 1, {n} do FNS[#FNS + 1] = function(y) x = x + 1 return x end end end"
+            )
         } else {
             format!("for i = 1, {n} do local x = i FNS[#FNS + 1] = function(y) x = x + 1 return x end end")
         }
@@ -159,12 +188,16 @@ const SHAPES: &[(&str, u32, ShapeGen)] = &[
     ("long strings", 1 << 24, |n, _| format!("STRS[#STRS + 1] = string.rep('ab', {n} // 2) .. 'x'")),
     ("short strings sharing a prefix", 1 << 18, |n, a| {
         let pre = "p".repeat([1, 30, 39][a as usize % 3]);
-        format!("do local l = {{}} for i = 1, {n} do l[i] = '{pre}' .. i end LISTS[#LISTS + 1] = l STRS[#STRS + 1] = l[1] end")
+        format!(
+            "do local l = {{}} for i = 1, {n} do l[i] = '{pre}' .. i end LISTS[#LISTS + 1] = l STRS[#STRS + 1] = l[1] end"
+        )
     }),
     ("weak table", 1 << 18, |n, a| {
         let mode = ["k", "v", "kv"][a as usize % 3];
-        format!("do local w = setmetatable({{}}, {{__mode = '{mode}'}}) KEEP = KEEP or {{}} for i = 1, {n} do local o = {{}} w[o] = o w[i] = {{}} \
-                 if i % 3 == 0 then KEEP[#KEEP + 1] = o end end TABS[#TABS + 1] = w end")
+        format!(
+            "do local w = setmetatable({{}}, {{__mode = '{mode}'}}) KEEP = KEEP or {{}} for i = 1, {n} do local o = {{}} w[o] = o w[i] = {{}} \
+                 if i % 3 == 0 then KEEP[#KEEP + 1] = o end end TABS[#TABS + 1] = w end"
+        )
     }),
     ("ephemeron chain", 1 << 17, |n, a| {
         // e[k_i] = k_{i+1}, keys inserted last first: each atomic pass finds one more.
@@ -172,31 +205,49 @@ const SHAPES: &[(&str, u32, ShapeGen)] = &[
         let rev = a % 2 == 0;
         let (from, to, step) = if rev { (n, 1, -1) } else { (1, n, 1) };
         let mode = if a % 6 >= 4 { "" } else { "__mode = 'k'" };
-        format!("do local e = setmetatable({{}}, {{{mode}}}) local ks = {{}} for i = 1, {n} + 1 do ks[i] = {{}} end \
-                 for i = {from}, {to}, {step} do e[ks[i]] = ks[i + 1] end ROOT = ks[1] ks = nil TABS[#TABS + 1] = e end")
+        format!(
+            "do local e = setmetatable({{}}, {{{mode}}}) local ks = {{}} for i = 1, {n} + 1 do ks[i] = {{}} end \
+                 for i = {from}, {to}, {step} do e[ks[i]] = ks[i + 1] end ROOT = ks[1] ks = nil TABS[#TABS + 1] = e end"
+        )
     }),
     ("pending to-be-closed variables", 1900, |n, _| {
-        format!("do local function tbc(d) if d <= 0 then while true do coroutine.yield() end end \
+        format!(
+            "do local function tbc(d) if d <= 0 then while true do coroutine.yield() end end \
                  local x <close> = setmetatable({{}}, {{__close = function() end}}) local r = tbc(d - 1) return r end \
-                 local co = coroutine.create(tbc) coroutine.resume(co, {n}) COS[#COS + 1] = co end")
+                 local co = coroutine.create(tbc) coroutine.resume(co, {n}) COS[#COS + 1] = co end"
+        )
     }),
     ("coroutine parked with big varargs", 1 << 20, |n, _| {
-        format!("do local co = coroutine.create(function(...) while true do coroutine.yield(select('#', ...)) end end) \
-                 local t = {{}} for i = 1, {n} do t[i] = i end coroutine.resume(co, table.unpack(t)) COS[#COS + 1] = co end")
+        format!(
+            "do local co = coroutine.create(function(...) while true do coroutine.yield(select('#', ...)) end end) \
+                 local t = {{}} for i = 1, {n} do t[i] = i end coroutine.resume(co, table.unpack(t)) COS[#COS + 1] = co end"
+        )
     }),
     ("main stack: big varargs", 1 << 20, |n, _| format!("NARGS = {n} for i = 1, {n} do ARGS[i] = i end")),
     ("main stack: deep", 1900, |n, _| format!("DEPTH = {n}")),
     ("many functions loaded", 1 << 14, |n, _| {
-        format!("for i = 1, {n} do FNS[#FNS + 1] = load('local a = ... return function(b) return (b or 0) + ' .. i .. ' end')() end")
+        format!(
+            "for i = 1, {n} do FNS[#FNS + 1] = load('local a = ... return function(b) return (b or 0) + ' .. i .. ' end')() end"
+        )
     }),
     ("array of strings", 1 << 17, |n, _| {
-        format!("do local l = {{}} for i = 1, {n} do l[i] = tostring(i * 7919 % {n}) end LISTS[#LISTS + 1] = l TABS[#TABS + 1] = l end")
+        format!(
+            "do local l = {{}} for i = 1, {n} do l[i] = tostring(i * 7919 % {n}) end LISTS[#LISTS + 1] = l TABS[#TABS + 1] = l end"
+        )
     }),
-    ("interner churn", 1 << 20, |n, _| format!("do local l = {{}} for i = 1, {n} do l[i] = 'c' .. i end end collectgarbage() collectgarbage()")),
+    ("interner churn", 1 << 20, |n, _| {
+        format!(
+            "do local l = {{}} for i = 1, {n} do l[i] = 'c' .. i end end collectgarbage() collectgarbage()"
+        )
+    }),
     ("big live string-keyed table", 1 << 19, |n, _| {
-        format!("do local t = {{}} for i = 1, {n} do t['f' .. i] = i end TABS[#TABS + 1] = t KEYS[#KEYS + 1] = 'f1' end")
+        format!(
+            "do local t = {{}} for i = 1, {n} do t['f' .. i] = i end TABS[#TABS + 1] = t KEYS[#KEYS + 1] = 'f1' end"
+        )
     }),
-    ("nested tables", 1 << 16, |n, _| format!("do local t = {{}} for i = 1, {n} do t = {{t}} end TABS[#TABS + 1] = t end")),
+    ("nested tables", 1 << 16, |n, _| {
+        format!("do local t = {{}} for i = 1, {n} do t = {{t}} end TABS[#TABS + 1] = t end")
+    }),
     ("collector settings", 1, |_, a| {
         [
             "collectgarbage('generational')",
@@ -215,9 +266,11 @@ const SHAPES: &[(&str, u32, ShapeGen)] = &[
     }),
     ("objects with __tostring, __name and __pairs", 1 << 14, |n, a| {
         let name = "N".repeat([1, 100, 4000][a as usize % 3]);
-        format!("do local m = {{__name = '{name}', __tostring = function(t) return 'obj' end, __pairs = function(t) return next, t, nil end, \
+        format!(
+            "do local m = {{__name = '{name}', __tostring = function(t) return 'obj' end, __pairs = function(t) return next, t, nil end, \
                  __index = function(t, k) return k end, __len = function() return 3 end, __eq = function() return true end}} \
-                 for i = 1, {n} do local o = setmetatable({{i}}, m) if i % 64 == 0 then TABS[#TABS + 1] = o end end end")
+                 for i = 1, {n} do local o = setmetatable({{i}}, m) if i % 64 == 0 then TABS[#TABS + 1] = o end end end"
+        )
     }),
     // The opt-in libraries (`Libs::DEBUG_INFO`, `Libs::REQUIRE`): what a traceback's name
     // search and `require`'s lookups walk.
@@ -226,77 +279,192 @@ const SHAPES: &[(&str, u32, ShapeGen)] = &[
         format!("for i = 1, {n} do package.loaded['mod' .. i] = {v} end")
     }),
     ("churned loaded table", 1 << 16, |n, _| {
-        format!("for i = 1, {n} do package.loaded['c' .. i] = i end for i = 1, {n} - 1 do package.loaded['c' .. i] = nil end")
+        format!(
+            "for i = 1, {n} do package.loaded['c' .. i] = i end for i = 1, {n} - 1 do package.loaded['c' .. i] = nil end"
+        )
     }),
     ("table with a huge array part", 1 << 22, |n, _| {
-        format!("do local t = table.move({{}}, 1, 0, 1) t[{n}] = 1 for i = 1, {n} // 2 do t[i] = i end for i = 1, {n} // 2 - 1 do t[i] = nil end TABS[#TABS + 1] = t end")
+        format!(
+            "do local t = table.move({{}}, 1, 0, 1) t[{n}] = 1 for i = 1, {n} // 2 do t[i] = i end for i = 1, {n} // 2 - 1 do t[i] = nil end TABS[#TABS + 1] = t end"
+        )
     }),
 ];
 
 /// Operations: Lua run in the loop. `I` counts iterations, `ACC` collects results, `...`
 /// is the main stack's varargs.
 const OPS: &[(&str, &str)] = &[
-    ("lookup", "local t = PICK(TABS) if t then local v = t[I % 64] local w = t.v local k = PICK(KEYS) local z = k ~= nil and t[k] ACC = ACC + (v and 1 or 0) end"),
-    ("lookup absent", "local t = PICK(TABS) if t then local v = t[I * 7919 + 0.5] local w = t[-I] local z = t.absent ACC = ACC + (v and 1 or 0) end"),
-    ("rawget", "local t = PICK(TABS) if t then local k = PICK(KEYS) if k ~= nil then ACC = ACC + (rawget(t, k) and 1 or 0) end end"),
-    ("insert and delete", "local t = PICK(TABS) if t then pcall(function() t[-I - 0.5] = 1 t[-I - 0.5] = nil t['n' .. I] = 1 t['n' .. I] = nil end) end"),
-    ("churn a new integer key", "local t = PICK(TABS) if t then pcall(function() t[-I] = 1 t[-I] = nil end) end"),
+    (
+        "lookup",
+        "local t = PICK(TABS) if t then local v = t[I % 64] local w = t.v local k = PICK(KEYS) local z = k ~= nil and t[k] ACC = ACC + (v and 1 or 0) end",
+    ),
+    (
+        "lookup absent",
+        "local t = PICK(TABS) if t then local v = t[I * 7919 + 0.5] local w = t[-I] local z = t.absent ACC = ACC + (v and 1 or 0) end",
+    ),
+    (
+        "rawget",
+        "local t = PICK(TABS) if t then local k = PICK(KEYS) if k ~= nil then ACC = ACC + (rawget(t, k) and 1 or 0) end end",
+    ),
+    (
+        "insert and delete",
+        "local t = PICK(TABS) if t then pcall(function() t[-I - 0.5] = 1 t[-I - 0.5] = nil t['n' .. I] = 1 t['n' .. I] = nil end) end",
+    ),
+    (
+        "churn a new integer key",
+        "local t = PICK(TABS) if t then pcall(function() t[-I] = 1 t[-I] = nil end) end",
+    ),
     ("toggle a string key", "local t = PICK(TABS) if t then pcall(function() t.zz = 1 t.zz = nil end) end"),
-    ("close a coroutine with upvalues", "local co = coroutine.create(function() local a, b, c = I, 2, 3 local f = function() return a + b + c end coroutine.yield(f) end) coroutine.resume(co) coroutine.close(co)"),
-    ("table.move", "local l = PICK(LISTS) if l and #l > 2 then table.move(l, 1, math.min(#l - 1, 64), 2) end"),
+    (
+        "close a coroutine with upvalues",
+        "local co = coroutine.create(function() local a, b, c = I, 2, 3 local f = function() return a + b + c end coroutine.yield(f) end) coroutine.resume(co) coroutine.close(co)",
+    ),
+    (
+        "table.move",
+        "local l = PICK(LISTS) if l and #l > 2 then table.move(l, 1, math.min(#l - 1, 64), 2) end",
+    ),
     ("string.rep with separator", "ACC = ACC + #string.rep('ab', I % 50, ',')"),
     ("nested pcall", "local ok = pcall(pcall, pcall, error, 'x') ACC = ACC + (ok and 1 or 0)"),
     ("utf8", "local s = PICK(STRS) if s then ACC = ACC + (utf8.len(s:sub(1, 64)) or 0) end"),
-    ("compare objects", "local a, b = PICK(TABS), PICK(TABS) if a and b then local ok, e = pcall(function() return a == b end) ACC = ACC + (e and 1 or 0) end"),
+    (
+        "compare objects",
+        "local a, b = PICK(TABS), PICK(TABS) if a and b then local ok, e = pcall(function() return a == b end) ACC = ACC + (e and 1 or 0) end",
+    ),
     ("insert new int", "local t = PICK(TABS) if t then pcall(function() t[I * 64 + 3] = I end) end"),
-    ("length", "local t = PICK(TABS) if t then local ok, n = pcall(function() return #t end) ACC = ACC + (ok and type(n) == 'number' and 1 or 0) end"),
+    (
+        "length",
+        "local t = PICK(TABS) if t then local ok, n = pcall(function() return #t end) ACC = ACC + (ok and type(n) == 'number' and 1 or 0) end",
+    ),
     ("rawlen", "local t = PICK(TABS) if t then ACC = ACC + rawlen(t) % 3 end"),
-    ("next", "local t = PICK(TABS) if t then local k = next(t) local kk = PICK(KEYS) if kk ~= nil then pcall(next, t, kk) end ACC = ACC + (k ~= nil and 1 or 0) end"),
-    ("pairs partial", "local t = PICK(TABS) if t then local c = 0 for k, v in next, t do c = c + 1 if c > 20 then break end end ACC = ACC + c end"),
-    ("pairs full", "local t = PICK(TABS) if t then local c = 0 for k, v in pairs(t) do c = c + 1 end ACC = ACC + c end"),
-    ("ipairs", "local t = PICK(TABS) if t then local c = 0 pcall(function() for i, v in ipairs(t) do c = c + 1 if c > 50 then break end end end) ACC = ACC + c end"),
+    (
+        "next",
+        "local t = PICK(TABS) if t then local k = next(t) local kk = PICK(KEYS) if kk ~= nil then pcall(next, t, kk) end ACC = ACC + (k ~= nil and 1 or 0) end",
+    ),
+    (
+        "pairs partial",
+        "local t = PICK(TABS) if t then local c = 0 for k, v in next, t do c = c + 1 if c > 20 then break end end ACC = ACC + c end",
+    ),
+    (
+        "pairs full",
+        "local t = PICK(TABS) if t then local c = 0 for k, v in pairs(t) do c = c + 1 end ACC = ACC + c end",
+    ),
+    (
+        "ipairs",
+        "local t = PICK(TABS) if t then local c = 0 pcall(function() for i, v in ipairs(t) do c = c + 1 if c > 50 then break end end end) ACC = ACC + c end",
+    ),
     ("concat", "local l = PICK(LISTS) if l then ACC = ACC + #table.concat(l, ',', 1, math.min(#l, 64)) end"),
     ("concat whole", "local l = PICK(LISTS) if l then ACC = ACC + #table.concat(l, ',') end"),
     ("sort", "local l = PICK(LISTS) if l then pcall(table.sort, l) end"),
-    ("sort comparator", "local l = PICK(LISTS) if l then pcall(table.sort, l, function(a, b) return a > b end) end"),
+    (
+        "sort comparator",
+        "local l = PICK(LISTS) if l then pcall(table.sort, l, function(a, b) return a > b end) end",
+    ),
     ("front insert/remove", "local l = PICK(LISTS) if l then table.insert(l, 1, 'z') table.remove(l, 1) end"),
-    ("unpack", "local l = PICK(LISTS) if l then ACC = ACC + select('#', table.unpack(l, 1, math.min(#l, 100))) end"),
-    ("string ops", "local s = PICK(STRS) if s then ACC = ACC + #s:sub(2, 9) + (s:find('x', 1, true) or 0) + #(s:sub(1, 4) .. I) end"),
-    ("string match", "local s = PICK(STRS) if s then ACC = ACC + #(s:match('^p*') or '') + select(2, s:gsub('b', 'c', 2)) end"),
-    ("string compare", "local l = PICK(LISTS) if l and #l > 1 then ACC = ACC + (l[1] < l[#l] and 1 or 0) + (l[1] == l[2] and 1 or 0) end"),
-    ("string as key", "local s = PICK(STRS) local t = PICK(TABS) if s and t then ACC = ACC + (rawget(t, s) and 1 or 0) end"),
-    ("make short strings", "local s = 'p' .. (I % 4096) local u = string.format('%d:%s', I, s) ACC = ACC + #u"),
-    ("tostring objects", "local t = PICK(TABS) local f = PICK(FNS) local c = PICK(COS) ACC = ACC + #tostring(t) + #tostring(f) + #tostring(c)"),
-    ("format objects", "local t = PICK(TABS) local s = PICK(STRS) ACC = ACC + #string.format('%s %q %d', t, s and s:sub(1, 10) or '', I)"),
-    ("closures", "local x = I local f = function() return x + 1 end local g = function() x = x + 1 return f() end ACC = ACC + g()"),
-    ("call functions", "local f = PICK(FNS) if f then local ok, r = pcall(f, I) ACC = ACC + (ok and type(r) == 'number' and 1 or 0) end"),
-    ("new coroutine", "local co = coroutine.create(function(a) local b = coroutine.yield(a) return b end) coroutine.resume(co, 1) coroutine.resume(co, 2) ACC = ACC + 1"),
-    ("new coroutine closed", "local co = coroutine.create(function(a) local x <close> = setmetatable({}, {__close = function() end}) coroutine.yield(a) end) coroutine.resume(co, 1) coroutine.close(co)"),
-    ("wrap", "local w = coroutine.wrap(function(...) local n = select('#', ...) coroutine.yield(n) end) ACC = ACC + w(1, 2, 3)"),
-    ("resume parked", "local co = PICK(COS) if co then local ok, v = coroutine.resume(co) ACC = ACC + (ok and 1 or 0) end"),
+    (
+        "unpack",
+        "local l = PICK(LISTS) if l then ACC = ACC + select('#', table.unpack(l, 1, math.min(#l, 100))) end",
+    ),
+    (
+        "string ops",
+        "local s = PICK(STRS) if s then ACC = ACC + #s:sub(2, 9) + (s:find('x', 1, true) or 0) + #(s:sub(1, 4) .. I) end",
+    ),
+    (
+        "string match",
+        "local s = PICK(STRS) if s then ACC = ACC + #(s:match('^p*') or '') + select(2, s:gsub('b', 'c', 2)) end",
+    ),
+    (
+        "string compare",
+        "local l = PICK(LISTS) if l and #l > 1 then ACC = ACC + (l[1] < l[#l] and 1 or 0) + (l[1] == l[2] and 1 or 0) end",
+    ),
+    (
+        "string as key",
+        "local s = PICK(STRS) local t = PICK(TABS) if s and t then ACC = ACC + (rawget(t, s) and 1 or 0) end",
+    ),
+    (
+        "make short strings",
+        "local s = 'p' .. (I % 4096) local u = string.format('%d:%s', I, s) ACC = ACC + #u",
+    ),
+    (
+        "tostring objects",
+        "local t = PICK(TABS) local f = PICK(FNS) local c = PICK(COS) ACC = ACC + #tostring(t) + #tostring(f) + #tostring(c)",
+    ),
+    (
+        "format objects",
+        "local t = PICK(TABS) local s = PICK(STRS) ACC = ACC + #string.format('%s %q %d', t, s and s:sub(1, 10) or '', I)",
+    ),
+    (
+        "closures",
+        "local x = I local f = function() return x + 1 end local g = function() x = x + 1 return f() end ACC = ACC + g()",
+    ),
+    (
+        "call functions",
+        "local f = PICK(FNS) if f then local ok, r = pcall(f, I) ACC = ACC + (ok and type(r) == 'number' and 1 or 0) end",
+    ),
+    (
+        "new coroutine",
+        "local co = coroutine.create(function(a) local b = coroutine.yield(a) return b end) coroutine.resume(co, 1) coroutine.resume(co, 2) ACC = ACC + 1",
+    ),
+    (
+        "new coroutine closed",
+        "local co = coroutine.create(function(a) local x <close> = setmetatable({}, {__close = function() end}) coroutine.yield(a) end) coroutine.resume(co, 1) coroutine.close(co)",
+    ),
+    (
+        "wrap",
+        "local w = coroutine.wrap(function(...) local n = select('#', ...) coroutine.yield(n) end) ACC = ACC + w(1, 2, 3)",
+    ),
+    (
+        "resume parked",
+        "local co = PICK(COS) if co then local ok, v = coroutine.resume(co) ACC = ACC + (ok and 1 or 0) end",
+    ),
     ("status parked", "local co = PICK(COS) if co then ACC = ACC + #coroutine.status(co) end"),
     ("close parked", "local co = PICK(COS) if co and I % 97 == 0 then coroutine.close(co) end"),
     ("error from depth", "local ok, e = pcall(DEEPERR, 40) ACC = ACC + (ok and 0 or 1)"),
-    ("error with traceback", "local ok, e = xpcall(DEEPERR, function(m) return tostring(m) end, 20) ACC = ACC + (ok and 0 or 1)"),
+    (
+        "error with traceback",
+        "local ok, e = xpcall(DEEPERR, function(m) return tostring(m) end, 20) ACC = ACC + (ok and 0 or 1)",
+    ),
     ("error string", "local ok, e = pcall(error, 'x' .. I) ACC = ACC + #e"),
     ("collector step", "collectgarbage('step')"),
     ("full collection", "if I % 16 == 0 then collectgarbage() end"),
     ("collector count", "ACC = ACC + (collectgarbage('count') > 0 and 1 or 0)"),
     ("garbage", "local t = {I, {}, 'g' .. I} local f = function() return t end"),
-    ("setmetatable", "local t = PICK(TABS) if t then pcall(function() local m = getmetatable(t) setmetatable(t, nil) setmetatable(t, m) end) end"),
-    ("weak table made", "local w = setmetatable({}, {__mode = I % 2 == 0 and 'k' or 'v'}) w[{}] = {} w[1] = {}"),
+    (
+        "setmetatable",
+        "local t = PICK(TABS) if t then pcall(function() local m = getmetatable(t) setmetatable(t, nil) setmetatable(t, m) end) end",
+    ),
+    (
+        "weak table made",
+        "local w = setmetatable({}, {__mode = I % 2 == 0 and 'k' or 'v'}) w[{}] = {} w[1] = {}",
+    ),
     ("load", "local f = load('return ' .. (I % 100) .. ' + 1') ACC = ACC + f()"),
     ("varargs", "ACC = ACC + select('#', ...) + (select(-1, 0, ...) or 0) % 2"),
     ("varargs packed", "if I % 8 == 0 then local t = {...} ACC = ACC + #t % 3 end"),
     ("to-be-closed", "do local x <close> = setmetatable({}, {__close = function() ACC = ACC + 1 end}) end"),
     ("deep recursion", "local ok = pcall(PARK, 100, function() return 1 end) ACC = ACC + (ok and 1 or 0)"),
     ("traceback", "local s = debug.traceback('m') ACC = ACC + #s % 7"),
-    ("traceback from depth", "local ok, s = pcall(PARK, 60, function() return debug.traceback() end) ACC = ACC + #tostring(s) % 5"),
-    ("traceback in handler", "local ok, e = xpcall(function() DEEPERR(20) end, debug.traceback) ACC = ACC + (ok and 0 or 1)"),
-    ("traceback of a parked coroutine", "local co = PICK(COS) if co then ACC = ACC + #debug.traceback(co) % 3 end"),
-    ("getinfo", "local t = debug.getinfo(1, 'Slnut') local u = debug.getinfo(2, 'n') ACC = ACC + t.currentline % 3"),
-    ("getinfo of a parked coroutine", "local co = PICK(COS) if co then local t = debug.getinfo(co, 1, 'Sl') ACC = ACC + (t and 1 or 0) end"),
-    ("require", "package.loaded.cm = nil package.preload.cm = package.preload.cm or function(n) return {n} end local m = require('cm') ACC = ACC + #m"),
+    (
+        "traceback from depth",
+        "local ok, s = pcall(PARK, 60, function() return debug.traceback() end) ACC = ACC + #tostring(s) % 5",
+    ),
+    (
+        "traceback in handler",
+        "local ok, e = xpcall(function() DEEPERR(20) end, debug.traceback) ACC = ACC + (ok and 0 or 1)",
+    ),
+    (
+        "traceback of a parked coroutine",
+        "local co = PICK(COS) if co then ACC = ACC + #debug.traceback(co) % 3 end",
+    ),
+    (
+        "getinfo",
+        "local t = debug.getinfo(1, 'Slnut') local u = debug.getinfo(2, 'n') ACC = ACC + t.currentline % 3",
+    ),
+    (
+        "getinfo of a parked coroutine",
+        "local co = PICK(COS) if co then local t = debug.getinfo(co, 1, 'Sl') ACC = ACC + (t and 1 or 0) end",
+    ),
+    (
+        "require",
+        "package.loaded.cm = nil package.preload.cm = package.preload.cm or function(n) return {n} end local m = require('cm') ACC = ACC + #m",
+    ),
     ("require loaded", "local m = require('string') ACC = ACC + (m and 1 or 0)"),
     ("require missing", "local ok, e = pcall(require, 'missing' .. I % 8) ACC = ACC + #e % 3"),
     ("require host module", "package.loaded.hostmod = nil local m = require('hostmod') ACC = ACC + m.n"),
@@ -350,7 +518,8 @@ impl Prog {
     }
 
     fn describe(&self) -> String {
-        let shapes: Vec<String> = self.shapes.iter().map(|&(i, n, a)| format!("{}(n={n}, a={a})", SHAPES[i].0)).collect();
+        let shapes: Vec<String> =
+            self.shapes.iter().map(|&(i, n, a)| format!("{}(n={n}, a={a})", SHAPES[i].0)).collect();
         let ops: Vec<&str> = self.ops.iter().map(|&o| OPS[o].0).collect();
         format!("shapes [{}] ops [{}]", shapes.join(", "), ops.join(", "))
     }
@@ -392,7 +561,10 @@ impl Prog {
     fn named(shapes: &[(&str, u32, u32)], ops: &[&str]) -> Prog {
         let shape = |name: &str| SHAPES.iter().position(|s| s.0 == name).expect(name);
         let op = |name: &str| OPS.iter().position(|o| o.0 == name).expect(name);
-        Prog { shapes: shapes.iter().map(|&(n, size, a)| (shape(n), size, a)).collect(), ops: ops.iter().map(|o| op(o)).collect() }
+        Prog {
+            shapes: shapes.iter().map(|&(n, size, a)| (shape(n), size, a)).collect(),
+            ops: ops.iter().map(|o| op(o)).collect(),
+        }
     }
 }
 
@@ -405,7 +577,10 @@ fn state(mem: usize, fast: bool) -> Lua {
         Limits::default().memory(mem).string_len(32 << 20).fuel(SETUP_FUEL).hash_seed(SEED),
         super::common::ALL_OPT_IN,
     );
-    lua.add_module("hostmod", "local M = {n = 1} for i = 1, 20 do M[i] = function() return i end end return M");
+    lua.add_module(
+        "hostmod",
+        "local M = {n = 1} for i = 1, 20 do M[i] = function() return i end end return M",
+    );
     lua.set_fast_loop(fast);
     lua.set_print(|_| {});
     lua
@@ -438,7 +613,8 @@ fn measure(p: &Prog, fuel: u64, mem: usize, fast: bool) -> Result<Measured, Stri
     // built (`MARK`): the clock and the fuel start there.
     lua.exec("MARK = coroutine.yield", "=mark").unwrap();
     lua.exec(p.setup(), "=setup").map_err(|e| format!("setup: {e}"))?;
-    let chunk = format!("MAIN = coroutine.create(function() {} end) return coroutine.resume(MAIN)", p.chunk(None));
+    let chunk =
+        format!("MAIN = coroutine.create(function() {} end) return coroutine.resume(MAIN)", p.chunk(None));
     let r = lua.exec(chunk, "=ops").map_err(|e| format!("ops: {e}"))?;
     if !matches!(r.first(), Some(remedy_lua::Value::Bool(true))) {
         return Err(format!("never reached the loop: {:?}", r.get(1).and_then(|v| lua.to_string_lossy(*v))));
@@ -539,13 +715,19 @@ fn verdict(p: &Prog, c: Config) -> Option<String> {
     // pages, setup peaks), but not far past it.
     let slack = 3 * c.mem + (96 << 20);
     if m.rss_gain > slack {
-        return Some(format!("resident memory grew {} MB with {} MB accounted (cap {} MB)", m.rss_gain >> 20, m.used >> 20, c.mem >> 20));
+        return Some(format!(
+            "resident memory grew {} MB with {} MB accounted (cap {} MB)",
+            m.rss_gain >> 20,
+            m.used >> 20,
+            c.mem >> 20
+        ));
     }
     if m.cpu <= c.bound * c.base {
         return None;
     }
     let med = median3(p, c.fuel, c.mem).ok()?;
-    (med > c.bound * c.base).then(|| format!("{:.1}x plain code per unit of fuel ({med:.1} vs {:.1})", med / c.base, c.base))
+    (med > c.bound * c.base)
+        .then(|| format!("{:.1}x plain code per unit of fuel ({med:.1} vs {:.1})", med / c.base, c.base))
 }
 
 /// Shrinks a failing program: drops operations and shapes, halves sizes, while it fails.
@@ -587,7 +769,14 @@ fn minimize(mut p: Prog, c: Config) -> (Prog, String) {
 }
 
 /// Runs `n` programs from `seed` (or until `deadline`): the failures, minimized.
-fn run(seed: u64, n: usize, scale: u32, c: Config, deadline: Option<Instant>, log: bool) -> (Vec<String>, usize) {
+fn run(
+    seed: u64,
+    n: usize,
+    scale: u32,
+    c: Config,
+    deadline: Option<Instant>,
+    log: bool,
+) -> (Vec<String>, usize) {
     let mut r = Rng::new(seed);
     let mut bad = Vec::new();
     let mut done = 0;
@@ -602,7 +791,12 @@ fn run(seed: u64, n: usize, scale: u32, c: Config, deadline: Option<Instant>, lo
             println!("   ... #{k} {}", p.describe());
         }
         if let Err(e) = check_modes(&p, 8, 400_000) {
-            bad.push(format!("seed {seed} #{k}: {}\n  {e}\n  setup: {}\n  ops: {}", p.describe(), p.setup(), p.ops_text()));
+            bad.push(format!(
+                "seed {seed} #{k}: {}\n  {e}\n  setup: {}\n  ops: {}",
+                p.describe(),
+                p.setup(),
+                p.ops_text()
+            ));
             continue;
         }
         match measure(&p, c.fuel, c.mem, true) {
@@ -614,12 +808,20 @@ fn run(seed: u64, n: usize, scale: u32, c: Config, deadline: Option<Instant>, lo
                 }
                 continue;
             }
-            Ok(m) if log => println!("{:6.1}x #{k} ({} ms) {}", m.cpu / c.base, t0.elapsed().as_millis(), p.describe()),
+            Ok(m) if log => {
+                println!("{:6.1}x #{k} ({} ms) {}", m.cpu / c.base, t0.elapsed().as_millis(), p.describe())
+            }
             Ok(_) => {}
         }
         if verdict(&p, c).is_some() {
             let (q, why) = minimize(p.clone(), c);
-            let msg = format!("seed {seed} #{k}: {why}\n  minimized: {}\n  from: {}\n  setup: {}\n  ops: {}", q.describe(), p.describe(), q.setup(), q.ops_text());
+            let msg = format!(
+                "seed {seed} #{k}: {why}\n  minimized: {}\n  from: {}\n  setup: {}\n  ops: {}",
+                q.describe(),
+                p.describe(),
+                q.setup(),
+                q.ops_text()
+            );
             if log {
                 println!("FLAGGED {msg}");
             }
@@ -657,13 +859,24 @@ fn cost_fuzz_quick() {
                 Err(e) => bad.push(format!("fixed #{k}: {}: {e}", p.describe())),
             }
             if let Some(why) = verdict(&p, c) {
-                bad.push(format!("fixed #{k}: {why}\n  {}\n  setup: {}\n  ops: {}", p.describe(), p.setup(), p.ops_text()));
+                bad.push(format!(
+                    "fixed #{k}: {why}\n  {}\n  setup: {}\n  ops: {}",
+                    p.describe(),
+                    p.setup(),
+                    p.ops_text()
+                ));
             }
         }
         for &s in &seeds {
             bad.extend(run(s, 24, 4, c, None, std::env::var("S5B_COST_LOG").is_ok()).0);
         }
-        assert!(bad.is_empty(), "seeds {seeds:?}, plain code {:.1} cpu/unit, bound {}x:\n{}", c.base, c.bound, bad.join("\n\n"));
+        assert!(
+            bad.is_empty(),
+            "seeds {seeds:?}, plain code {:.1} cpu/unit, bound {}x:\n{}",
+            c.base,
+            c.bound,
+            bad.join("\n\n")
+        );
     });
 }
 
@@ -674,7 +887,8 @@ fn cost_fuzz_quick() {
 fn cost_fuzz_long() {
     super::common::small_stack(|| {
         let secs: u64 = std::env::var("S5B_COST_SECS").ok().and_then(|s| s.parse().ok()).unwrap_or(300);
-        let seed: u64 = std::env::var("S5B_COST_SEED").ok().and_then(|s| s.parse().ok()).unwrap_or_else(fresh_seed);
+        let seed: u64 =
+            std::env::var("S5B_COST_SEED").ok().and_then(|s| s.parse().ok()).unwrap_or_else(fresh_seed);
         let scale: u32 = std::env::var("S5B_COST_SCALE").ok().and_then(|s| s.parse().ok()).unwrap_or(1);
         let fuel = 400_000;
         let mut c = Config { fuel, mem: 256 << 20, base: baseline(fuel), bound: bound() };
@@ -712,7 +926,11 @@ fn cost_probe() {
             let r = lua.call(f.value(), &[]);
             let t = remedy_lua_oracle::thread_cpu().saturating_sub(start) as f64;
             let used = fuel - lua.fuel_left();
-            println!("fast {fast}: {:.1}x plain ({:.1} vs {base:.1} cpu/unit, {used} fuel), {r:?}", t / used.max(1) as f64 / base, t / used.max(1) as f64);
+            println!(
+                "fast {fast}: {:.1}x plain ({:.1} vs {base:.1} cpu/unit, {used} fuel), {r:?}",
+                t / used.max(1) as f64 / base,
+                t / used.max(1) as f64
+            );
         }
     });
 }
@@ -730,13 +948,19 @@ fn assert_metered(progs: &[Prog], fuel: u64, mem: usize) {
         for fast in [true, false] {
             let mut cpu = f64::MAX;
             for _ in 0..3 {
-                cpu = cpu.min(measure(p, fuel, mem, fast).map_or_else(|e| panic!("{}: {e}", p.describe()), |m| m.cpu));
+                cpu = cpu.min(
+                    measure(p, fuel, mem, fast).map_or_else(|e| panic!("{}: {e}", p.describe()), |m| m.cpu),
+                );
                 if cpu <= bound() * base {
                     break;
                 }
             }
             if cpu > bound() * base {
-                bad.push(format!("fast {fast}: {:.1}x plain code per unit of fuel: {}", cpu / base, p.describe()));
+                bad.push(format!(
+                    "fast {fast}: {:.1}x plain code per unit of fuel: {}",
+                    cpu / base,
+                    p.describe()
+                ));
             }
         }
     }
@@ -803,7 +1027,10 @@ fn s5b_cost_2_rehash_at_every_new_key_is_charged() {
         assert_metered(
             &[
                 Prog::named(&[("one key short of a power of two", 1 << 18, 0)], &["churn a new integer key"]),
-                Prog::named(&[("one key short of a power of two", 1 << 18, 0)], &["toggle a string key", "churn a new integer key"]),
+                Prog::named(
+                    &[("one key short of a power of two", 1 << 18, 0)],
+                    &["toggle a string key", "churn a new integer key"],
+                ),
                 Prog::named(&[("one key short of a power of two", 1 << 17, 1)], &["churn a new integer key"]),
                 Prog::named(&[("one key short of a power of two", 1 << 17, 2)], &["toggle a string key"]),
             ],
@@ -855,7 +1082,10 @@ fn s5b_cost_3_ephemeron_entries_are_charged() {
                     break;
                 }
             }
-            assert!(ratio <= 1.35, "fast {fast}: an ephemeron entry costs {ratio:.1}x a strong one per unit of fuel");
+            assert!(
+                ratio <= 1.35,
+                "fast {fast}: an ephemeron entry costs {ratio:.1}x a strong one per unit of fuel"
+            );
         }
         let prog = "local ks = {} for i = 1, 3001 do ks[i] = {} end local e = setmetatable({}, {__mode = 'k'}) \
                     for i = 3000, 1, -1 do e[ks[i]] = ks[i + 1] end local root = ks[1] ks = nil \
@@ -891,13 +1121,27 @@ fn s5b_cost_4_new_coroutines_reuse_closed_stacks() {
             &[
                 Prog::named(&[("collector settings", 1, 4)], &["new coroutine closed"]),
                 Prog::named(
-                    &[("main stack: deep", 64, 5), ("collector settings", 1, 4), ("coroutines parked in coroutines", 2, 2)],
+                    &[
+                        ("main stack: deep", 64, 5),
+                        ("collector settings", 1, 4),
+                        ("coroutines parked in coroutines", 2, 2),
+                    ],
                     &["new coroutine closed"],
                 ),
-                Prog::named(&[("collector settings", 1, 4), ("main stack: big varargs", 15165, 5)], &["new coroutine closed"]),
-                Prog::named(&[("collector settings", 1, 1), ("main stack: deep", 453, 0)], &["new coroutine closed", "lookup"]),
                 Prog::named(
-                    &[("array of strings", 13249, 2), ("main stack: big varargs", 4, 0), ("collector settings", 1, 4)],
+                    &[("collector settings", 1, 4), ("main stack: big varargs", 15165, 5)],
+                    &["new coroutine closed"],
+                ),
+                Prog::named(
+                    &[("collector settings", 1, 1), ("main stack: deep", 453, 0)],
+                    &["new coroutine closed", "lookup"],
+                ),
+                Prog::named(
+                    &[
+                        ("array of strings", 13249, 2),
+                        ("main stack: big varargs", 4, 0),
+                        ("collector settings", 1, 4),
+                    ],
                     &["closures", "new coroutine closed", "status parked"],
                 ),
                 Prog::named(&[("collector settings", 1, 4)], &["new coroutine"]),
@@ -908,16 +1152,28 @@ fn s5b_cost_4_new_coroutines_reuse_closed_stacks() {
                 Prog::named(&[("collector settings", 1, 4), ("main stack: deep", 64, 0)], &["wrap"]),
                 // Seed 530394 #5 (scale 7).
                 Prog::named(
-                    &[("dead objects, few survivors", 211, 1), ("collector settings", 1, 4), ("main stack: big varargs", 212, 5)],
+                    &[
+                        ("dead objects, few survivors", 211, 1),
+                        ("collector settings", 1, 4),
+                        ("main stack: big varargs", 212, 5),
+                    ],
                     &["new coroutine closed"],
                 ),
                 // Seed 7043 #19 (a 1000% pause) and seed 6331 #4.
                 Prog::named(
-                    &[("main stack: big varargs", 9535, 3), ("weak table", 68, 3), ("collector settings", 1, 1)],
+                    &[
+                        ("main stack: big varargs", 9535, 3),
+                        ("weak table", 68, 3),
+                        ("collector settings", 1, 1),
+                    ],
                     &["new coroutine closed", "require missing", "garbage"],
                 ),
                 Prog::named(
-                    &[("main stack: deep", 28, 0), ("pending to-be-closed variables", 43, 1), ("collector settings", 1, 4)],
+                    &[
+                        ("main stack: deep", 28, 0),
+                        ("pending to-be-closed variables", 43, 1),
+                        ("collector settings", 1, 4),
+                    ],
                     &["churn a new integer key", "new coroutine closed"],
                 ),
             ],
@@ -995,10 +1251,16 @@ fn s5b_cost_4_new_coroutines_reuse_closed_stacks() {
         // `wrap` makes a thread as `create` does (and a function): it costs no less.
         let made = |make: &str| {
             let mut lua = Lua::new(Limits::default().fuel(1 << 40), Libs::ALL);
-            lua.exec(format!("local f = function() end for i = 1, 1000 do local c = {make}(f) end"), "=make").unwrap();
+            lua.exec(format!("local f = function() end for i = 1, 1000 do local c = {make}(f) end"), "=make")
+                .unwrap();
             (1u64 << 40) - lua.fuel_left()
         };
-        assert!(made("coroutine.wrap") >= made("coroutine.create"), "wrap {} < create {}", made("coroutine.wrap"), made("coroutine.create"));
+        assert!(
+            made("coroutine.wrap") >= made("coroutine.create"),
+            "wrap {} < create {}",
+            made("coroutine.wrap"),
+            made("coroutine.create")
+        );
         // The fuel is the same under any hash seed.
         let prog = "collectgarbage('stop') for i = 1, 300 do \
                     local co = coroutine.create(function(a) local x <close> = setmetatable({}, {__close = function() end}) coroutine.yield(a) end) \

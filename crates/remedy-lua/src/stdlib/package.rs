@@ -30,9 +30,10 @@ pub(crate) fn open(lua: &mut Lua) {
     let _ = lua.raw_set(reg, k, Value::Table(preload));
     lua.set_field(pkg, "preload", Value::Table(preload));
     let searchers = lua.new_table(2, 0).unwrap_or(pkg);
-    for (i, (f, name)) in [(searcher_preload as crate::vm::NativeFn, "searcher_preload"), (searcher_host, "searcher_host")]
-        .into_iter()
-        .enumerate()
+    for (i, (f, name)) in
+        [(searcher_preload as crate::vm::NativeFn, "searcher_preload"), (searcher_host, "searcher_host")]
+            .into_iter()
+            .enumerate()
     {
         // Each searcher holds the package table (as in C Lua).
         let v = lua.new_native(f, name, vec![Value::Table(pkg)]).unwrap_or_default();

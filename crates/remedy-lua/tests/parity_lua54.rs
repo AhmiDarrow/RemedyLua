@@ -188,7 +188,8 @@ fn parity_4_deep_recursion_runs_as_in_c_lua() {
     let r = super::common::small_stack(|| {
         let mut out = Vec::new();
         for fast in [true, false] {
-            let mut lua = remedy_lua::Lua::new(remedy_lua::Limits::default().fuel(1 << 32), remedy_lua::Libs::ALL);
+            let mut lua =
+                remedy_lua::Lua::new(remedy_lua::Limits::default().fuel(1 << 32), remedy_lua::Libs::ALL);
             lua.set_fast_loop(fast);
             let v = lua
                 .exec(
@@ -529,7 +530,6 @@ fn parity_18_format_q_names_its_own_argument() {
     );
 }
 
-
 /// Each program's error, caught, against C Lua's (fast loop on and off, via `remedy`);
 /// `want` must be in it, so the test cannot pass on a message both engines lost.
 fn same_error_as_c(cases: &[(&str, &str)]) {
@@ -572,7 +572,10 @@ fn parity_20_type_names_follow_typename_or_name_as_c_does() {
     let s = r#"getmetatable("").__name = "Foo" "#;
     let t = r#"local T = setmetatable({}, {__name = "T"}) "#;
     same_error_as_c(&[
-        (r#"return table.concat({1, setmetatable({}, {__name = "MyType"})})"#, "invalid value (table) at index 2"),
+        (
+            r#"return table.concat({1, setmetatable({}, {__name = "MyType"})})"#,
+            "invalid value (table) at index 2",
+        ),
         (&format!("{s}return math.floor('x')"), "number expected, got Foo"),
         (&format!("{s}return string.char('x')"), "number expected, got Foo"),
         (&format!("{s}return table.insert('x', 1)"), "table expected, got Foo"),
@@ -771,19 +774,24 @@ fn parity_24_vararg_recursion_overflows_catchably() {
     assert!(ours.as_ref().is_ok_and(|s| s.contains("stack overflow")), "{ours:?}");
     // The budget's room comes back: the same program runs again in the same state.
     let again = super::common::small_stack(move || {
-        let mut lua = remedy_lua::Lua::new(remedy_lua::Limits::default().fuel(1 << 34), remedy_lua::Libs::ALL);
+        let mut lua =
+            remedy_lua::Lua::new(remedy_lua::Limits::default().fuel(1 << 34), remedy_lua::Libs::ALL);
         let mut out = Vec::new();
         for _ in 0..3 {
-            let v = lua.exec("function f(...) return f('#', ...), ... end return select(2, pcall(f))", "=t").map(|v| lua.to_string_lossy(v[0]));
+            let v = lua
+                .exec("function f(...) return f('#', ...), ... end return select(2, pcall(f))", "=t")
+                .map(|v| lua.to_string_lossy(v[0]));
             out.push(v.map_err(|e| e.to_string()));
         }
         lua.exec("collectgarbage()", "=t").unwrap();
         (out, lua.memory_used())
     });
-    assert!(again.0.iter().all(|v| v.as_ref().is_ok_and(|s| s.as_deref() == Some("t:1: stack overflow"))), "{again:?}");
+    assert!(
+        again.0.iter().all(|v| v.as_ref().is_ok_and(|s| s.as_deref() == Some("t:1: stack overflow"))),
+        "{again:?}"
+    );
     assert!(again.1 < 4 << 20, "{again:?}");
 }
-
 
 /// S6-7 (sweep 6's open item; the C-level model LR-3 uses): a message handler that keeps
 /// failing is called again where its error was raised (`luaG_errormsg` runs at the raise),
@@ -857,7 +865,6 @@ return table.concat(out, "\n")
         "####,
     );
 }
-
 
 /// LR-19 (routed from the long-run triage): a `goto` out of a block holding a to-be-closed
 /// variable, to a label past a local with a run-time value, is compiled wrong by C Lua
@@ -934,16 +941,28 @@ fn parity_27_memory_past_c_luas_limits_is_its_error() {
     let again = super::common::small_stack(|| {
         // (256 MiB: with less, memory runs out before C Lua's 1,000,000 slots, and that
         // is the memory limit, as C Lua would not have overflowed yet.)
-        let mut lua = remedy_lua::Lua::new(remedy_lua::Limits::default().fuel(1 << 34).memory(256 << 20), remedy_lua::Libs::ALL);
+        let mut lua = remedy_lua::Lua::new(
+            remedy_lua::Limits::default().fuel(1 << 34).memory(256 << 20),
+            remedy_lua::Libs::ALL,
+        );
         let mut out = Vec::new();
         for _ in 0..3 {
-            let v = lua.exec("function r() return {} + r() end return pcall(r)", "=t").map(|v| v.iter().map(|x| lua.to_string_lossy(*x)).collect::<Vec<_>>());
+            let v = lua
+                .exec("function r() return {} + r() end return pcall(r)", "=t")
+                .map(|v| v.iter().map(|x| lua.to_string_lossy(*x)).collect::<Vec<_>>());
             out.push(v.map_err(|e| e.to_string()));
         }
         lua.exec("collectgarbage()", "=t").unwrap();
         (out, lua.memory_used())
     });
-    assert!(again.0.iter().all(|v| v.as_ref().is_ok_and(|s| s.get(1) == Some(&Some("t:1: stack overflow".to_string())))), "{:?}", again.0);
+    assert!(
+        again
+            .0
+            .iter()
+            .all(|v| v.as_ref().is_ok_and(|s| s.get(1) == Some(&Some("t:1: stack overflow".to_string())))),
+        "{:?}",
+        again.0
+    );
     assert!(again.1 < 4 << 20, "{}", again.1);
 }
 

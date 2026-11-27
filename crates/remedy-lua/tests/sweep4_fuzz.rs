@@ -32,20 +32,77 @@ fn env_u64(k: &str, d: u64) -> u64 {
 
 /// Boundary numbers, as Lua source.
 const NUMS: &[&str] = &[
-    "0", "1", "-1", "2", "3", "7", "-7", "63", "64", "-64", "255", "math.maxinteger", "math.mininteger", "math.maxinteger - 1",
-    "math.mininteger + 1", "0.0", "-0.0", "0.5", "-2.5", "1.5", "3.0", "1e308", "-1e308", "math.huge", "-math.huge", "2^53",
-    "2^53 + 1", "2^63", "-2^63", "2^31", "1e15", "1e16", "0.1", "5e-324", "9007199254740993", "0x7fffffffffffffff",
-    "0xffffffffffffffff", "1 // 1", "-0x8000000000000000", "2^-1074", "(2^53 - 1) // 1", "math.pi",
+    "0",
+    "1",
+    "-1",
+    "2",
+    "3",
+    "7",
+    "-7",
+    "63",
+    "64",
+    "-64",
+    "255",
+    "math.maxinteger",
+    "math.mininteger",
+    "math.maxinteger - 1",
+    "math.mininteger + 1",
+    "0.0",
+    "-0.0",
+    "0.5",
+    "-2.5",
+    "1.5",
+    "3.0",
+    "1e308",
+    "-1e308",
+    "math.huge",
+    "-math.huge",
+    "2^53",
+    "2^53 + 1",
+    "2^63",
+    "-2^63",
+    "2^31",
+    "1e15",
+    "1e16",
+    "0.1",
+    "5e-324",
+    "9007199254740993",
+    "0x7fffffffffffffff",
+    "0xffffffffffffffff",
+    "1 // 1",
+    "-0x8000000000000000",
+    "2^-1074",
+    "(2^53 - 1) // 1",
+    "math.pi",
 ];
 /// Strings that coerce (or almost) and plain ones.
 const STRS: &[&str] = &[
-    "\"10\"", "\"0x10\"", "\" 5 \"", "\"1e2\"", "\"abc\"", "\"\"", "\"-0\"", "\"1.5\"", "\"9223372036854775808\"",
-    "\"-9223372036854775808\"", "\"0x7fffffffffffffff\"", "\"1e\"", "\"inf\"", "\"nan\"", "\" 0x1p4 \"", "\"\\0\"",
-    "string.rep(\"ab\", 25)", "\"hello world\"", "\"3\"",
+    "\"10\"",
+    "\"0x10\"",
+    "\" 5 \"",
+    "\"1e2\"",
+    "\"abc\"",
+    "\"\"",
+    "\"-0\"",
+    "\"1.5\"",
+    "\"9223372036854775808\"",
+    "\"-9223372036854775808\"",
+    "\"0x7fffffffffffffff\"",
+    "\"1e\"",
+    "\"inf\"",
+    "\"nan\"",
+    "\" 0x1p4 \"",
+    "\"\\0\"",
+    "string.rep(\"ab\", 25)",
+    "\"hello world\"",
+    "\"3\"",
 ];
-const BINOPS: &[&str] = &["+", "-", "*", "/", "//", "%", "^", "&", "|", "~", "<<", ">>", "..", "==", "~=", "<", "<=", ">", ">="];
-const ARITH_EV: &[&str] =
-    &["__add", "__sub", "__mul", "__div", "__mod", "__pow", "__idiv", "__band", "__bor", "__bxor", "__shl", "__shr", "__concat"];
+const BINOPS: &[&str] =
+    &["+", "-", "*", "/", "//", "%", "^", "&", "|", "~", "<<", ">>", "..", "==", "~=", "<", "<=", ">", ">="];
+const ARITH_EV: &[&str] = &[
+    "__add", "__sub", "__mul", "__div", "__mod", "__pow", "__idiv", "__band", "__bor", "__bxor", "__shl",
+    "__shr", "__concat",
+];
 const UN_EV: &[&str] = &["__unm", "__bnot", "__len"];
 const CMP_EV: &[&str] = &["__eq", "__lt", "__le"];
 
@@ -193,16 +250,28 @@ impl<'a> Focus<'a> {
             match self.rng.below(8) {
                 0 if self.objs > 0 => {
                     let o = 1 + self.rng.below(self.objs);
-                    let _ = writeln!(s, "__emit(pcall(function() O{o}.nk = {e} return rawget(O{o}, \"nk\") end))");
+                    let _ = writeln!(
+                        s,
+                        "__emit(pcall(function() O{o}.nk = {e} return rawget(O{o}, \"nk\") end))"
+                    );
                 }
                 1 if self.objs > 0 => {
                     let o = 1 + self.rng.below(self.objs);
-                    let f = self.rng.pick(&["tostring", "print", "getmetatable", "rawlen", "next", "ipairs", "type"]);
+                    let f = self.rng.pick(&[
+                        "tostring",
+                        "print",
+                        "getmetatable",
+                        "rawlen",
+                        "next",
+                        "ipairs",
+                        "type",
+                    ]);
                     let _ = writeln!(s, "__emit(pcall({f}, O{o}))");
                 }
                 2 if self.objs > 0 => {
                     let o = 1 + self.rng.below(self.objs);
-                    let _ = writeln!(s, "__emit(pcall(function() local c <close> = O{o} return \"body\" end))");
+                    let _ =
+                        writeln!(s, "__emit(pcall(function() local c <close> = O{o} return \"body\" end))");
                 }
                 3 if self.objs > 0 => {
                     let o = 1 + self.rng.below(self.objs);
@@ -211,11 +280,17 @@ impl<'a> Focus<'a> {
                 }
                 4 if self.objs > 1 => {
                     let (a, b) = (1 + self.rng.below(self.objs), 1 + self.rng.below(self.objs));
-                    let _ = writeln!(s, "__emit(pcall(function() local x, y = O{a}, O{b} return x == y, x < y, x <= y, y > x, x .. y .. x end))");
+                    let _ = writeln!(
+                        s,
+                        "__emit(pcall(function() local x, y = O{a}, O{b} return x == y, x < y, x <= y, y > x, x .. y .. x end))"
+                    );
                 }
                 5 if self.objs > 0 => {
                     let o = 1 + self.rng.below(self.objs);
-                    let _ = writeln!(s, "__emit(pcall(function() local s = 0 for i, v in ipairs(O{o}) do s = s + 1 if i > 5 then break end end return s, #O{o} end))");
+                    let _ = writeln!(
+                        s,
+                        "__emit(pcall(function() local s = 0 for i, v in ipairs(O{o}) do s = s + 1 if i > 5 then break end end return s, #O{o} end))"
+                    );
                 }
                 _ => {
                     let _ = writeln!(s, "__emit(pcall(function() return {e} end))");
@@ -238,7 +313,10 @@ impl<'a> Focus<'a> {
                 0 => writeln!(s, "__emit(\"in\", pcall(function() return {e} end))"),
                 1 => writeln!(s, "do local c <close> = O{o} __emit(\"tbc\", O{o}.v) end"),
                 2 => writeln!(s, "acc[#acc + 1] = function() return #acc, O{o}.x end __emit(acc[#acc]())"),
-                3 => writeln!(s, "for i = 1, 2 do local k = i acc[#acc + 1] = function() k = k + 1 return k end end __emit(acc[#acc](), acc[#acc]())"),
+                3 => writeln!(
+                    s,
+                    "for i = 1, 2 do local k = i acc[#acc + 1] = function() k = k + 1 return k end end __emit(acc[#acc](), acc[#acc]())"
+                ),
                 4 => writeln!(s, "__emit(\"yv\", coroutine.yield({e}))"),
                 _ => writeln!(s, "__emit(O{o} .. \"s\", -O{o}, O{o} < O{o}, O{o} <= O{o}, O{o}(1, 2))"),
             };
@@ -273,9 +351,15 @@ impl<'a> Focus<'a> {
         let id = self.id();
         let n = self.rng.range(1, 5);
         let s = match self.rng.below(5) {
-            0 => format!("do local fs, i = {{}}, 1\n::top:: local j = i fs[#fs + 1] = function() j = j + 1 return j, i end i = i + 1 if i <= {n} then goto top end\nfor _, f in ipairs(fs) do __emit(\"g{id}\", f()) end end\n"),
-            1 => format!("for i = 1, {n} do local c <close> = setmetatable({{}}, {{__close = function() __emit(\"cl{id}\", i) end}}) if i % 2 == 0 then goto cont end __emit(\"body\", i) ::cont:: end\n"),
-            2 => format!("do local k = 0 while true do k = k + 1 for j = 1, 3 do if j == 2 then goto next end __emit(\"w{id}\", k, j) end ::next:: if k >= {n} then goto out end end ::out:: __emit(\"out\", k) end\n"),
+            0 => format!(
+                "do local fs, i = {{}}, 1\n::top:: local j = i fs[#fs + 1] = function() j = j + 1 return j, i end i = i + 1 if i <= {n} then goto top end\nfor _, f in ipairs(fs) do __emit(\"g{id}\", f()) end end\n"
+            ),
+            1 => format!(
+                "for i = 1, {n} do local c <close> = setmetatable({{}}, {{__close = function() __emit(\"cl{id}\", i) end}}) if i % 2 == 0 then goto cont end __emit(\"body\", i) ::cont:: end\n"
+            ),
+            2 => format!(
+                "do local k = 0 while true do k = k + 1 for j = 1, 3 do if j == 2 then goto next end __emit(\"w{id}\", k, j) end ::next:: if k >= {n} then goto out end end ::out:: __emit(\"out\", k) end\n"
+            ),
             3 => {
                 // Invalid gotos: the messages must agree (via load).
                 let src = self.rng.pick(&[
@@ -296,7 +380,9 @@ impl<'a> Focus<'a> {
                 ]);
                 format!("__emit(\"load{id}\", load({:?}))\n__emit(pcall(load({src:?}) or print))\n", src)
             }
-            _ => format!("do local r = {{}} for i = 1, {n} do do local x <close> = setmetatable({{}}, {{__close = function(_, e) r[#r + 1] = \"c\" .. i end}}) if i == 2 then goto skip end r[#r + 1] = i end ::skip:: end __emit(table.concat(r, \",\")) end\n"),
+            _ => format!(
+                "do local r = {{}} for i = 1, {n} do do local x <close> = setmetatable({{}}, {{__close = function(_, e) r[#r + 1] = \"c\" .. i end}}) if i == 2 then goto skip end r[#r + 1] = i end ::skip:: end __emit(table.concat(r, \",\")) end\n"
+            ),
         };
         s
     }
@@ -310,16 +396,33 @@ impl<'a> Focus<'a> {
                 1 => format!("setmetatable({{}}, {{__close = function(_, e) error(\"{tag}-err\") end}})"),
                 2 => "nil".into(),
                 3 => "false".into(),
-                _ => format!("setmetatable({{}}, {{__close = function(_, e) __emit(\"{tag}\", e) error({{tag = \"{tag}\"}}) end}})"),
+                _ => format!(
+                    "setmetatable({{}}, {{__close = function(_, e) __emit(\"{tag}\", e) error({{tag = \"{tag}\"}}) end}})"
+                ),
             }
         };
         let (a, b, c) = (h(self.rng, "a"), h(self.rng, "b"), h(self.rng, "c"));
-        let exit = self.rng.pick(&["return 1, 2", "error(\"body\")", "error(nil)", "error(setmetatable({}, {__tostring = function() return \"E\" end}))", "", "break"]);
+        let exit = self.rng.pick(&[
+            "return 1, 2",
+            "error(\"body\")",
+            "error(nil)",
+            "error(setmetatable({}, {__tostring = function() return \"E\" end}))",
+            "",
+            "break",
+        ]);
         let wrapper = match self.rng.below(4) {
-            0 => format!("__emit(\"x{id}\", pcall(function() local a <close> = {a} local b <close> = {b} do local c <close> = {c} end {exit} end))"),
-            1 => format!("__emit(\"x{id}\", pcall(function() for i = 1, 2 do local a <close> = {a} local b <close> = {b} if i == 2 then {exit} end end end))"),
-            2 => format!("do local co = coroutine.create(function() local a <close> = {a} local b <close> = {b} coroutine.yield(1) {exit} end) __emit(coroutine.resume(co)) __emit(coroutine.close(co)) __emit(coroutine.status(co), coroutine.resume(co)) end"),
-            _ => format!("__emit(\"x{id}\", pcall(function() local n = 0 for k, v, _, c in next, {{1, 2}}, nil, {a} do n = n + 1 if n == 1 then {exit} end end return n end))"),
+            0 => format!(
+                "__emit(\"x{id}\", pcall(function() local a <close> = {a} local b <close> = {b} do local c <close> = {c} end {exit} end))"
+            ),
+            1 => format!(
+                "__emit(\"x{id}\", pcall(function() for i = 1, 2 do local a <close> = {a} local b <close> = {b} if i == 2 then {exit} end end end))"
+            ),
+            2 => format!(
+                "do local co = coroutine.create(function() local a <close> = {a} local b <close> = {b} coroutine.yield(1) {exit} end) __emit(coroutine.resume(co)) __emit(coroutine.close(co)) __emit(coroutine.status(co), coroutine.resume(co)) end"
+            ),
+            _ => format!(
+                "__emit(\"x{id}\", pcall(function() local n = 0 for k, v, _, c in next, {{1, 2}}, nil, {a} do n = n + 1 if n == 1 then {exit} end end return n end))"
+            ),
         };
         // `break` outside a loop does not compile: load it.
         if exit == &"break" && !wrapper.contains("for i") {
@@ -331,30 +434,96 @@ impl<'a> Focus<'a> {
     fn string_unit(&mut self) -> String {
         self.hit("unit:string");
         let subj = *self.rng.pick(&[
-            "\"hello world from lua\"", "string.rep(\"abcdefghij\", 5)", "\"\"", "\"a\\0b\\0c\"", "\"  x = 10, y = 20  \"",
-            "\"(a(b)c)[d]\"", "\"THE END\"", "\"1,2,,3\"", "string.rep(\"\\255\", 41)", "\"x\" .. string.rep(\"y\", 39)",
+            "\"hello world from lua\"",
+            "string.rep(\"abcdefghij\", 5)",
+            "\"\"",
+            "\"a\\0b\\0c\"",
+            "\"  x = 10, y = 20  \"",
+            "\"(a(b)c)[d]\"",
+            "\"THE END\"",
+            "\"1,2,,3\"",
+            "string.rep(\"\\255\", 41)",
+            "\"x\" .. string.rep(\"y\", 39)",
         ]);
         let pat = *self.rng.pick(&[
-            "\"%a+\"", "\"(%w)(%w*)\"", "\"()\"", "\"%f[%w]%w+\"", "\"%b()\"", "\"[^%s]+\"", "\"^(.-)$\"", "\"(a*(.)%w(%s*))\"",
-            "\"%d?\"", "\".-\"", "\"[%a-z]\"", "\"[]]\"", "\"%z\"", "\"x*\"", "\"$\"", "\"(()a)\"", "\"%s*(%w+)%s*=%s*(%w+)\"",
-            "\"([^,]*)\"", "\"%\"", "\"(\"", "\"[a\"", "\"%g+\"", "\"%1\"", "\"%f[%z]\"",
+            "\"%a+\"",
+            "\"(%w)(%w*)\"",
+            "\"()\"",
+            "\"%f[%w]%w+\"",
+            "\"%b()\"",
+            "\"[^%s]+\"",
+            "\"^(.-)$\"",
+            "\"(a*(.)%w(%s*))\"",
+            "\"%d?\"",
+            "\".-\"",
+            "\"[%a-z]\"",
+            "\"[]]\"",
+            "\"%z\"",
+            "\"x*\"",
+            "\"$\"",
+            "\"(()a)\"",
+            "\"%s*(%w+)%s*=%s*(%w+)\"",
+            "\"([^,]*)\"",
+            "\"%\"",
+            "\"(\"",
+            "\"[a\"",
+            "\"%g+\"",
+            "\"%1\"",
+            "\"%f[%z]\"",
         ]);
         let n = self.rng.range(-3, 6);
         let call = match self.rng.below(14) {
             0 => format!("s:find({pat}, {n})"),
             1 => format!("s:find({pat}, {n}, true)"),
             2 => format!("s:match({pat}, {n})"),
-            3 => format!("s:gsub({pat}, {}, {n})", self.rng.pick(&["\"<%0>\"", "\"%1-%2\"", "\"%%\"", "{a = 1, hello = false}", "string.upper", "function(a, b) return b end", "\"%9\""])),
-            4 => format!("(function() local r = {{}} for a, b in s:gmatch({pat}) do r[#r + 1] = tostring(a) .. \":\" .. tostring(b) if #r > 30 then break end end return table.concat(r, \" \") end)()"),
-            5 => format!("s:sub({n}, {}):upper():rep({}, \",\"):len()", self.rng.range(-8, 60), self.rng.range(0, 3)),
+            3 => format!(
+                "s:gsub({pat}, {}, {n})",
+                self.rng.pick(&[
+                    "\"<%0>\"",
+                    "\"%1-%2\"",
+                    "\"%%\"",
+                    "{a = 1, hello = false}",
+                    "string.upper",
+                    "function(a, b) return b end",
+                    "\"%9\""
+                ])
+            ),
+            4 => format!(
+                "(function() local r = {{}} for a, b in s:gmatch({pat}) do r[#r + 1] = tostring(a) .. \":\" .. tostring(b) if #r > 30 then break end end return table.concat(r, \" \") end)()"
+            ),
+            5 => format!(
+                "s:sub({n}, {}):upper():rep({}, \",\"):len()",
+                self.rng.range(-8, 60),
+                self.rng.range(0, 3)
+            ),
             6 => format!("s:byte({n}, {})", self.rng.range(-3, 8)),
-            7 => format!("string.format({}, s, {})", self.rng.pick(&["\"%s|%10.3s|%-5s|%q\"", "\"%q %d\"", "\"%.20s %x\"", "\"%5s%%%5.2f\""]), self.num()),
+            7 => format!(
+                "string.format({}, s, {})",
+                self.rng.pick(&["\"%s|%10.3s|%-5s|%q\"", "\"%q %d\"", "\"%.20s %x\"", "\"%5s%%%5.2f\""]),
+                self.num()
+            ),
             8 => format!("#(s .. {} .. s), s < {}, s == s:sub(1)", self.num(), self.rng.pick(STRS)),
-            9 => format!("string.pack({}, {})", self.rng.pick(&["\"<i4\"", "\">I2\"", "\"z\"", "\"s1\"", "\"j\"", "\"<d\"", "\"!4 i1 i8\"", "\"i3\""]), self.operand()),
+            9 => format!(
+                "string.pack({}, {})",
+                self.rng.pick(&[
+                    "\"<i4\"",
+                    "\">I2\"",
+                    "\"z\"",
+                    "\"s1\"",
+                    "\"j\"",
+                    "\"<d\"",
+                    "\"!4 i1 i8\"",
+                    "\"i3\""
+                ]),
+                self.operand()
+            ),
             10 => format!("select('#', string.gmatch(s, {pat})())"),
             11 => format!("s:reverse():lower(), s:len(), tostring(s):rep(0)"),
             12 => format!("string.char(s:byte(1, -1))"),
-            _ => format!("utf8.len(s), pcall(utf8.codepoint, s, 1, -1), utf8.char({}, 0x10FFFF)", self.rng.range(0, 300)),
+            _ => format!(
+                "utf8.len(s), pcall(utf8.codepoint, s, 1, -1), utf8.char({}, 0x10FFFF)",
+                self.rng.range(0, 300)
+            ),
         };
         format!("do local s = {subj} __emit(\"s{}\", pcall(function() return {call} end)) end\n", self.id())
     }
@@ -366,32 +535,82 @@ impl<'a> Focus<'a> {
         let s = match self.rng.below(9) {
             0 => {
                 let op = self.rng.pick(BINOPS);
-                format!("local a, b = {a}, {b} local x for _ = 1, 2 do x = a {op} b end return x, math.type(x)")
+                format!(
+                    "local a, b = {a}, {b} local x for _ = 1, 2 do x = a {op} b end return x, math.type(x)"
+                )
             }
             1 => {
                 let op = self.rng.pick(BINOPS);
                 format!("return {a} {op} {b}")
             }
             2 => {
-                let step = self.rng.pick(&["1", "-1", "2", "0.5", "-0.25", "math.maxinteger", "math.mininteger", "0.0", "\"2\"", "1e308"]);
-                format!("local n, f, l = 0 for i = {a}, {b}, {step} do n = n + 1 f = f or i l = i if n > 4 then break end end return n, f, l, math.type(l)")
+                let step = self.rng.pick(&[
+                    "1",
+                    "-1",
+                    "2",
+                    "0.5",
+                    "-0.25",
+                    "math.maxinteger",
+                    "math.mininteger",
+                    "0.0",
+                    "\"2\"",
+                    "1e308",
+                ]);
+                format!(
+                    "local n, f, l = 0 for i = {a}, {b}, {step} do n = n + 1 f = f or i l = i if n > 4 then break end end return n, f, l, math.type(l)"
+                )
             }
             3 => {
                 let f = self.rng.pick(&[
-                    "math.tointeger", "math.floor", "math.ceil", "math.abs", "math.fmod", "math.modf", "math.ult", "math.max", "math.min",
-                    "math.sqrt", "math.exp", "math.log", "tostring", "tonumber", "string.format, \"%d\"", "string.format, \"%.17g\"",
-                    "string.format, \"%x\"", "string.format, \"%5.2f\"", "string.format, \"%i\"", "string.format, \"%c\"",
+                    "math.tointeger",
+                    "math.floor",
+                    "math.ceil",
+                    "math.abs",
+                    "math.fmod",
+                    "math.modf",
+                    "math.ult",
+                    "math.max",
+                    "math.min",
+                    "math.sqrt",
+                    "math.exp",
+                    "math.log",
+                    "tostring",
+                    "tonumber",
+                    "string.format, \"%d\"",
+                    "string.format, \"%.17g\"",
+                    "string.format, \"%x\"",
+                    "string.format, \"%5.2f\"",
+                    "string.format, \"%i\"",
+                    "string.format, \"%c\"",
                 ]);
                 format!("return pcall({f}, {a}, {b})")
             }
             4 => {
                 // The Lua 5.3 compatibility functions (LUA_COMPAT_MATHLIB).
-                let f = self.rng.pick(&["math.pow", "math.ldexp", "math.log10", "math.cosh", "math.sinh", "math.tanh", "math.frexp"]);
-                format!("local x = {a} if math.abs(x) == math.huge and {f:?} == \"math.frexp\" then x = 1 end return pcall({f}, x, {b})")
+                let f = self.rng.pick(&[
+                    "math.pow",
+                    "math.ldexp",
+                    "math.log10",
+                    "math.cosh",
+                    "math.sinh",
+                    "math.tanh",
+                    "math.frexp",
+                ]);
+                format!(
+                    "local x = {a} if math.abs(x) == math.huge and {f:?} == \"math.frexp\" then x = 1 end return pcall({f}, x, {b})"
+                )
             }
-            5 => format!("return tonumber({}, {})", self.rng.pick(STRS), self.rng.pick(&["2", "8", "10", "16", "36", "1", "37", "nil"])),
-            6 => format!("local x = {a} return x == {b}, x < {b}, x <= {b}, {b} < x, x // 1 == x, math.type(x)"),
-            7 => format!("local t = {{}} t[{a}] = 1 t[{b}] = 2 local c = 0 for k in __spairs(t) do c = c + 1 end return c, t[{a}], t[{b}]"),
+            5 => format!(
+                "return tonumber({}, {})",
+                self.rng.pick(STRS),
+                self.rng.pick(&["2", "8", "10", "16", "36", "1", "37", "nil"])
+            ),
+            6 => format!(
+                "local x = {a} return x == {b}, x < {b}, x <= {b}, {b} < x, x // 1 == x, math.type(x)"
+            ),
+            7 => format!(
+                "local t = {{}} t[{a}] = 1 t[{b}] = 2 local c = 0 for k in __spairs(t) do c = c + 1 end return c, t[{a}], t[{b}]"
+            ),
             _ => format!("return {a} .. \"\", {b} .. \"\", string.format(\"%.14g\", {a})"),
         };
         format!("__emit(\"n{id}\", pcall(function() {s} end))\n")
@@ -402,7 +621,12 @@ impl<'a> Focus<'a> {
     fn compat_le_unit(&mut self) -> String {
         self.hit("unit:compat-le");
         let id = self.id();
-        let lt = self.rng.pick(&["function(a, b) return __tag(a) < __tag(b) end", "function(a, b) return nil end", "function(a, b) error(\"lt\") end", "function(a, b) return 1 end"]);
+        let lt = self.rng.pick(&[
+            "function(a, b) return __tag(a) < __tag(b) end",
+            "function(a, b) return nil end",
+            "function(a, b) error(\"lt\") end",
+            "function(a, b) return 1 end",
+        ]);
         let le = self.rng.pick(&["", "__le = function(a, b) return false end,", "__le = 5,"]);
         let (x, y) = (self.rng.range(1, 3), self.rng.range(1, 3));
         let other = self.rng.pick(&["1", "\"s\"", "{}", "B"]);
@@ -486,7 +710,8 @@ fn focus_quick() {
 #[test]
 #[ignore = "sweep4: fuzz driver (long); SWEEP4_ITERS/SWEEP4_SEED/SWEEP4_SECS"]
 fn fuzz_focus() {
-    let (iters, secs, seed) = (env_u64("SWEEP4_ITERS", 300), env_u64("SWEEP4_SECS", 600), env_u64("SWEEP4_SEED", 1));
+    let (iters, secs, seed) =
+        (env_u64("SWEEP4_ITERS", 300), env_u64("SWEEP4_SECS", 600), env_u64("SWEEP4_SEED", 1));
     let started = std::time::Instant::now();
     let mut rec = Recorder::new("s4focus");
     let mut hits = std::collections::BTreeMap::new();
@@ -510,7 +735,8 @@ fn fuzz_focus() {
 #[test]
 #[ignore = "sweep4: fuzz driver (long); SWEEP4_ITERS/SWEEP4_SEED/SWEEP4_SECS"]
 fn fuzz_focus_mutated() {
-    let (iters, secs, seed) = (env_u64("SWEEP4_ITERS", 300), env_u64("SWEEP4_SECS", 600), env_u64("SWEEP4_SEED", 1));
+    let (iters, secs, seed) =
+        (env_u64("SWEEP4_ITERS", 300), env_u64("SWEEP4_SECS", 600), env_u64("SWEEP4_SEED", 1));
     let started = std::time::Instant::now();
     let mut pool = super::sweep1_fuzz::conformance_corpus();
     for i in 0..300 {
@@ -584,11 +810,60 @@ fn coverage() {
     use super::sweep1_fuzz::grammar;
     use remedy_lua::__front::compile_new;
     const OPS: &[&str] = &[
-        "Move", "LoadK", "LoadInt", "LoadBool", "LoadFalseSkip", "LoadNil", "GetUpval", "SetUpval", "GetTabUp", "SetTabUp", "GetTable",
-        "GetTableK", "SetTable", "SetTableK", "NewTable", "SelfK", "Arith", "Add", "AddK", "Sub", "SubK", "Mul", "MulK", "Div", "DivK",
-        "Mod", "ModK", "IDiv", "IDivK", "Unm", "BNot", "Not", "Len", "Concat", "ToStr", "Jmp", "Eq", "Lt", "Le", "Test", "TestSet",
-        "Call", "TailCall", "Return", "ForPrep", "ForLoop", "TForPrep", "TForCall", "TForLoop", "SetList", "Closure", "VarArg",
-        "Close", "Tbc",
+        "Move",
+        "LoadK",
+        "LoadInt",
+        "LoadBool",
+        "LoadFalseSkip",
+        "LoadNil",
+        "GetUpval",
+        "SetUpval",
+        "GetTabUp",
+        "SetTabUp",
+        "GetTable",
+        "GetTableK",
+        "SetTable",
+        "SetTableK",
+        "NewTable",
+        "SelfK",
+        "Arith",
+        "Add",
+        "AddK",
+        "Sub",
+        "SubK",
+        "Mul",
+        "MulK",
+        "Div",
+        "DivK",
+        "Mod",
+        "ModK",
+        "IDiv",
+        "IDivK",
+        "Unm",
+        "BNot",
+        "Not",
+        "Len",
+        "Concat",
+        "ToStr",
+        "Jmp",
+        "Eq",
+        "Lt",
+        "Le",
+        "Test",
+        "TestSet",
+        "Call",
+        "TailCall",
+        "Return",
+        "ForPrep",
+        "ForLoop",
+        "TForPrep",
+        "TForCall",
+        "TForLoop",
+        "SetList",
+        "Closure",
+        "VarArg",
+        "Close",
+        "Tbc",
     ];
     // Library functions, from a fresh state.
     let mut lua = remedy_lua::Lua::new(remedy_lua::Limits::default(), remedy_lua::Libs::ALL);
@@ -602,7 +877,11 @@ fn coverage() {
         let mut libs: std::collections::BTreeMap<&str, u64> = names.iter().map(|s| (s.as_str(), 0)).collect();
         for i in 0..n {
             let mut rng = Rng::new(0xc0 + i);
-            let p = if which == "grammar" { grammar::Gen::new(&mut rng, false).program(10 + (i % 40) as i32).l } else { Focus::new(&mut rng).program(12) };
+            let p = if which == "grammar" {
+                grammar::Gen::new(&mut rng, false).program(10 + (i % 40) as i32).l
+            } else {
+                Focus::new(&mut rng).program(12)
+            };
             if let Ok(bc) = compile_new(p.as_bytes(), "c.lua") {
                 for tok in bc.split(|c: char| !c.is_ascii_alphanumeric()) {
                     if let Some(c) = ops.get_mut(tok) {
@@ -613,14 +892,19 @@ fn coverage() {
             for (name, c) in libs.iter_mut() {
                 let short = name.rsplit('.').next().unwrap();
                 // `lib.f(`, `:f(` (string methods), or a bare global `f(`.
-                if p.contains(&format!("{name}(")) || p.contains(&format!("{name},")) || (name.starts_with("string.") && p.contains(&format!(":{short}("))) {
+                if p.contains(&format!("{name}("))
+                    || p.contains(&format!("{name},"))
+                    || (name.starts_with("string.") && p.contains(&format!(":{short}(")))
+                {
                     *c += 1;
                 }
             }
         }
         let zero_ops: Vec<_> = ops.iter().filter(|(_, c)| **c == 0).map(|(k, _)| *k).collect();
         let zero_libs: Vec<_> = libs.iter().filter(|(_, c)| **c == 0).map(|(k, _)| *k).collect();
-        println!("== {which}: {n} programs\nops: {ops:?}\nopcodes never compiled: {zero_ops:?}\nlibrary functions never named: {zero_libs:?}\n");
+        println!(
+            "== {which}: {n} programs\nops: {ops:?}\nopcodes never compiled: {zero_ops:?}\nlibrary functions never named: {zero_libs:?}\n"
+        );
     }
 }
 
@@ -637,26 +921,34 @@ fn same_as_c(src: &str) {
 /// returns no values.
 #[test]
 fn s4fuzz_1_gmatch_end_returns_nothing() {
-    same_as_c("local it = string.gmatch('abc', 'x') __emit(select('#', it()))\nlocal it2 = ('ab'):gmatch('.') it2() it2() __emit(select('#', it2()), select('#', it2()))\nreturn select('#', string.gmatch(string.rep('a', 50), 'b')())");
+    same_as_c(
+        "local it = string.gmatch('abc', 'x') __emit(select('#', it()))\nlocal it2 = ('ab'):gmatch('.') it2() it2() __emit(select('#', it2()), select('#', it2()))\nreturn select('#', string.gmatch(string.rep('a', 50), 'b')())",
+    );
 }
 
 /// S4FUZZ-3: `table.move` into another table compares the two with `__eq` (C Lua's
 /// `lua_compare`) when the ranges overlap; a raw compare skipped the metamethod.
 #[test]
 fn s4fuzz_3_move_compares_with_eq() {
-    same_as_c("local mt = {__eq = function() error('eq called') end}\nlocal A, B = setmetatable({1, 2, 3}, mt), setmetatable({}, mt)\n__emit(pcall(table.move, A, 1, 3, 2, B))\n__emit(pcall(table.move, A, 1, 3, 5, B))\n__emit(pcall(table.move, A, 1, 3, 2))\nlocal C = setmetatable({}, {__eq = {}}) __emit(pcall(table.move, {1, 2, 3}, 1, 3, 2, C))\nlocal mt2 = {__eq = function() return true end} local X, Y = setmetatable({1, 2, 3}, mt2), setmetatable({}, mt2)\ntable.move(X, 1, 3, 2, Y) __emit(Y[2], Y[3], Y[4])");
+    same_as_c(
+        "local mt = {__eq = function() error('eq called') end}\nlocal A, B = setmetatable({1, 2, 3}, mt), setmetatable({}, mt)\n__emit(pcall(table.move, A, 1, 3, 2, B))\n__emit(pcall(table.move, A, 1, 3, 5, B))\n__emit(pcall(table.move, A, 1, 3, 2))\nlocal C = setmetatable({}, {__eq = {}}) __emit(pcall(table.move, {1, 2, 3}, 1, 3, 2, C))\nlocal mt2 = {__eq = function() return true end} local X, Y = setmetatable({1, 2, 3}, mt2), setmetatable({}, mt2)\ntable.move(X, 1, 3, 2, Y) __emit(Y[2], Y[3], Y[4])",
+    );
 }
 
 /// S4FUZZ-4: `table.move` checks its integers before its tables, as C Lua.
 #[test]
 fn s4fuzz_4_move_argument_order() {
-    same_as_c("__emit(pcall(table.move, 3, -1, {}))\n__emit(pcall(table.move, 1, 2, 3, 4))\n__emit(pcall(table.move, {}, 1, 2, 3, 4))\n__emit(pcall(table.move, nil, 1, 'x', 3))");
+    same_as_c(
+        "__emit(pcall(table.move, 3, -1, {}))\n__emit(pcall(table.move, 1, 2, 3, 4))\n__emit(pcall(table.move, {}, 1, 2, 3, 4))\n__emit(pcall(table.move, nil, 1, 'x', 3))",
+    );
 }
 
 /// S4FUZZ-5: names in error messages end at a zero byte (C Lua prints them with `%s`).
 #[test]
 fn s4fuzz_5_names_end_at_zero_byte() {
-    same_as_c("__emit(pcall(function() return '\\0' >> {} end))\n__emit(pcall(function() return 'a\\0b' >> {} end))\n__emit(pcall(function() local t = {} return t['x\\0y']() end))\n__emit(pcall(function() return _G['g\\0h']() end))");
+    same_as_c(
+        "__emit(pcall(function() return '\\0' >> {} end))\n__emit(pcall(function() return 'a\\0b' >> {} end))\n__emit(pcall(function() local t = {} return t['x\\0y']() end))\n__emit(pcall(function() return _G['g\\0h']() end))",
+    );
 }
 
 /// S4FUZZ-6: `__pairs` may yield (C Lua calls it with `lua_callk`); its results are cut to
@@ -692,7 +984,9 @@ local co4 = coroutine.wrap(function() for k, v in pairs(W) do __emit('yk', k, v)
 /// closes there from Rust (`close_with_error`), so the yield fails.
 #[test]
 fn s4fuzz_7_close_yields_while_unwinding() {
-    same_as_c("local co = coroutine.wrap(function() return pcall(function() local a <close> = setmetatable({}, {__close = function() coroutine.yield('closing') end}) error('boom') end) end)\n__emit(co()) __emit(co())");
+    same_as_c(
+        "local co = coroutine.wrap(function() return pcall(function() local a <close> = setmetatable({}, {__close = function() coroutine.yield('closing') end}) error('boom') end) end)\n__emit(co()) __emit(co())",
+    );
 }
 
 /// The other yield case of S4FUZZ-7's family: a Lua `__pairs` called as `pcall(pairs, t)`
@@ -728,14 +1022,18 @@ __emit(pcall(function() return getmetatable('').__mul('abc', O1) end))",
 /// declaration's last token (C Lua's), not the line of the name.
 #[test]
 fn s4fuzz_11_tbc_error_line() {
-    same_as_c("local O = {}\n__emit(pcall(function() local c <close>\n= O return 1 end))\n__emit(pcall(function() local a, c <close> = 1,\n\nO end))\n__emit(pcall(function() local c <close> = 5 end))");
+    same_as_c(
+        "local O = {}\n__emit(pcall(function() local c <close>\n= O return 1 end))\n__emit(pcall(function() local a, c <close> = 1,\n\nO end))\n__emit(pcall(function() local c <close> = 5 end))",
+    );
 }
 
 /// S4FUZZ-12: a `table.sort` that fails in a comparison leaves a plain table as far as
 /// the sort got (C Lua sorts in place); it was left untouched.
 #[test]
 fn s4fuzz_12_failed_sort_keeps_progress() {
-    same_as_c("for _, t in ipairs{{5, nil, 12, -8}, {3, 1, 'x', 2, 9, 7, 4}, {1, 2, 3, 'a', 5, 6, 7, 8, 9, 10, 11, 12}} do __emit(pcall(table.sort, t)) __emit(t) end\nlocal t = {5, 3, 1, 4, 2} __emit(pcall(table.sort, t, function(a, b) if a == 1 and b == 4 then error('cmp') end return a < b end)) __emit(t)\nlocal t2 = {5, 3, 1, 4, 2} __emit(pcall(table.sort, t2, function(a, b) return true end)) __emit(t2)");
+    same_as_c(
+        "for _, t in ipairs{{5, nil, 12, -8}, {3, 1, 'x', 2, 9, 7, 4}, {1, 2, 3, 'a', 5, 6, 7, 8, 9, 10, 11, 12}} do __emit(pcall(table.sort, t)) __emit(t) end\nlocal t = {5, 3, 1, 4, 2} __emit(pcall(table.sort, t, function(a, b) if a == 1 and b == 4 then error('cmp') end return a < b end)) __emit(t)\nlocal t2 = {5, 3, 1, 4, 2} __emit(pcall(table.sort, t2, function(a, b) return true end)) __emit(t2)",
+    );
 }
 
 /// S4FUZZ-13: after a memory (or other) limit, `fuel_left` reported 0, so "fuel used"
@@ -749,7 +1047,8 @@ fn s4fuzz_13_fuel_used_is_exact_at_a_memory_error() {
     assert_eq!(o.class, Class::Memory, "{}", o.text);
     assert!(used < harness::remedy_limits().fuel / 2, "fuel used {used}: the whole budget, not what ran");
     for d in [1, 2, 10, 1000] {
-        let (o2, u2) = harness::remedy_raw(src.as_bytes(), "=t", harness::remedy_limits().memory(mem).fuel(used - d));
+        let (o2, u2) =
+            harness::remedy_raw(src.as_bytes(), "=t", harness::remedy_limits().memory(mem).fuel(used - d));
         assert_eq!((o2.class, u2), (Class::Fuel, used - d), "fuel {} of {used}: {}", used - d, o2.text);
     }
 }
@@ -827,5 +1126,7 @@ local ok = 0 for i = 1, #t do if type(t[i].v) == 'number' then ok = ok + 1 end e
 /// normal exit: C Lua's message has the position and names the event.
 #[test]
 fn s4fuzz_2_uncallable_close_message() {
-    same_as_c("local O = setmetatable({}, {__close = 42})\n__emit(pcall(function() do local c <close> = O end end))\n__emit(pcall(function() local c <close> = O return 1 end))\n__emit(pcall(function() local c <close> = O error('x') end))\n__emit(pcall(coroutine.wrap(function() do local c <close> = O end end)))\nlocal mt = {__close = function() end} local P = setmetatable({}, mt)\n__emit(pcall(function() local c <close> = P mt.__close = {} end))\n__emit(pcall(function() for k in next, {1}, nil, O do break end end))");
+    same_as_c(
+        "local O = setmetatable({}, {__close = 42})\n__emit(pcall(function() do local c <close> = O end end))\n__emit(pcall(function() local c <close> = O return 1 end))\n__emit(pcall(function() local c <close> = O error('x') end))\n__emit(pcall(coroutine.wrap(function() do local c <close> = O end end)))\nlocal mt = {__close = function() end} local P = setmetatable({}, mt)\n__emit(pcall(function() local c <close> = P mt.__close = {} end))\n__emit(pcall(function() for k in next, {1}, nil, O do break end end))",
+    );
 }

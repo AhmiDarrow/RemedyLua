@@ -231,7 +231,11 @@ fn s6gc_2e_rebuilds_of_a_table_traversed_in_chunks() {
     let hashy = "if s % 10 == 0 then for j = 1, 4000 do T['h' .. pick(s, j, 30000)] = nil end \
                  for j = 1, 4000 do T[GK[(s // 10 - 1) * 4000 + j]] = take() end end \
                  for j = 1, 8 do T['h' .. pick(s, j, 30000)] = take() end";
-    same_everywhere("hash_nodes_rebuilt", &format!("return run(hashy(), function(T, s) {hashy} end, 500)"), true);
+    same_everywhere(
+        "hash_nodes_rebuilt",
+        &format!("return run(hashy(), function(T, s) {hashy} end, 500)"),
+        true,
+    );
 }
 
 /// A constructor of 6,000 items whose items step the collector: the table is reached and
@@ -364,7 +368,8 @@ fn s6gc_2e_a_step_does_no_more_than_the_call_pays_for() {
             for _ in 0..8 {
                 lua.exec("S[#S + 1] = string.rep('x', 16 << 20)", "=alloc").unwrap();
             }
-            let restart = lua.load("collectgarbage('restart') local t while true do t = {} end", "=restart").unwrap();
+            let restart =
+                lua.load("collectgarbage('restart') local t while true do t = {} end", "=restart").unwrap();
             let churn = lua.load("local t while true do t = {} end", "=churn").unwrap();
             lua.set_limits(lua.limits().fuel(200_000));
             let mut fuel = Vec::new();
@@ -383,7 +388,10 @@ fn s6gc_2e_a_step_does_no_more_than_the_call_pays_for() {
             ratios.push((longest * 10 / typical.max(1), longest / 1000, typical / 1000));
             lua.set_limits(lua.limits().fuel(1 << 40));
             let left = lua
-                .exec("local n = 0 for i = 1, #T do if T[i][1] == i then n = n + 1 end end return n, #S[8]", "=check")
+                .exec(
+                    "local n = 0 for i = 1, #T do if T[i][1] == i then n = n + 1 end end return n, #S[8]",
+                    "=check",
+                )
                 .unwrap();
             assert_eq!(left, [Value::Int(1_000_000), Value::Int(16 << 20)], "fast {fast}");
             runs.push(fuel);
@@ -391,9 +399,17 @@ fn s6gc_2e_a_step_does_no_more_than_the_call_pays_for() {
         // (Measured: the longest at 1.5 times the typical call, a few milliseconds; 7 times,
         // 36 ms, before.)
         let best = ratios.iter().min().copied().unwrap_or_default();
-        assert!(best.0 < 30, "fast {fast}: the longest call {} us, the typical one {} us (of three runs: {ratios:?})", best.1, best.2);
+        assert!(
+            best.0 < 30,
+            "fast {fast}: the longest call {} us, the typical one {} us (of three runs: {ratios:?})",
+            best.1,
+            best.2
+        );
     }
-    assert!(runs.iter().all(|r| *r == runs[0]), "fuel differs between runs, or between the fast loop and the full path");
+    assert!(
+        runs.iter().all(|r| *r == runs[0]),
+        "fuel differs between runs, or between the fast loop and the full path"
+    );
 }
 
 /// S6GC-2e-R: the atomic phase read only the host's interrupt as it went (every 16,384
@@ -426,14 +442,21 @@ fn s6gc_2e_the_collector_reads_the_deadline_often() {
             start.elapsed()
         });
         lua.set_time_limit(Some((clock, std::time::Duration::from_secs(3600))));
-        let steps = lua.load("local n = 0 while n < 2 do if collectgarbage('step') then n = n + 1 end end", "=steps").unwrap();
+        let steps = lua
+            .load("local n = 0 while n < 2 do if collectgarbage('step') then n = n + 1 end end", "=steps")
+            .unwrap();
         let _quiet = super::common::measuring();
         reads.lock().unwrap().clear();
         lua.call(steps.value(), &[]).unwrap();
         let r = reads.lock().unwrap().clone();
         let gap = r.windows(2).map(|w| w[1].saturating_sub(w[0])).max().unwrap_or(0);
         // (Measured: about 0.3 ms, some 1.5 ms with the machine busy; before, tens.)
-        assert!(gap < 2_000_000, "fast {fast}: {} us between two reads of the deadline ({} reads)", gap / 1000, r.len());
+        assert!(
+            gap < 2_000_000,
+            "fast {fast}: {} us between two reads of the deadline ({} reads)",
+            gap / 1000,
+            r.len()
+        );
         let left = lua
             .exec("local n, k, i = 0, ROOT, 1 while E[i % 64 + 1][k] do k = E[i % 64 + 1][k] n = n + 1 i = i + 1 end return n", "=walk")
             .unwrap();
@@ -482,7 +505,8 @@ fn s6gc_a_slab_is_cut_a_piece_at_a_time() {
     for (fast, seed) in [(true, 1u64), (false, 1), (true, 7)] {
         let mut lua = Lua::new(Limits::default().memory(2 << 30).fuel(1 << 40).hash_seed(seed), Libs::ALL);
         lua.set_fast_loop(fast);
-        lua.exec("collectgarbage('stop') local t = {} for i = 1, 1000000 do t[i] = {} end t = nil", "=setup").unwrap();
+        lua.exec("collectgarbage('stop') local t = {} for i = 1, 1000000 do t[i] = {} end t = nil", "=setup")
+            .unwrap();
         let reads = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
         let noted = std::sync::Arc::clone(&reads);
         let start = std::time::Instant::now();
@@ -502,7 +526,11 @@ fn s6gc_a_slab_is_cut_a_piece_at_a_time() {
         r.insert(0, t0);
         r.push(remedy_lua_oracle::thread_cpu());
         let gap = r.windows(2).map(|w| w[1].saturating_sub(w[0])).max().unwrap_or(0);
-        assert!(gap < 5_000_000, "fast {fast}, seed {seed}: {} us between two reads of the deadline", gap / 1000);
+        assert!(
+            gap < 5_000_000,
+            "fast {fast}, seed {seed}: {} us between two reads of the deadline",
+            gap / 1000
+        );
         fuel.push((1u64 << 40) - lua.fuel_left());
     }
     assert!(fuel.iter().all(|f| *f == fuel[0]), "fuel differs: {fuel:?}");
@@ -523,7 +551,8 @@ fn cov5_a_big_table_reached_late_costs_its_snapshot() {
                for j = 1, 4000 do for i = 1, 8 do big[#big + 1] = {j} end \
                  if j % 200 == 0 then big['s' .. j] = j end local g = {j} s = s + #g end return s";
     let mut fuel = Vec::new();
-    for (fast, seed) in [(true, 1u64), (false, 1), (true, 7), (true, 0xdead_beef), (true, 12345), (false, 99)] {
+    for (fast, seed) in [(true, 1u64), (false, 1), (true, 7), (true, 0xdead_beef), (true, 12345), (false, 99)]
+    {
         let mut lua = Lua::new(Limits::default().memory(1 << 30).fuel(1 << 40).hash_seed(seed), Libs::ALL);
         lua.set_fast_loop(fast);
         lua.exec(src, "=t").unwrap();

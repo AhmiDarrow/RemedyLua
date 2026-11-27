@@ -8,7 +8,8 @@ use super::common;
 #[test]
 fn conformance_suite() {
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/lua/conformance");
-    let mut files: Vec<_> = std::fs::read_dir(&dir).unwrap().filter_map(|e| e.ok().map(|e| e.path())).collect();
+    let mut files: Vec<_> =
+        std::fs::read_dir(&dir).unwrap().filter_map(|e| e.ok().map(|e| e.path())).collect();
     files.sort();
     let mut failures = Vec::new();
     let mut count = 0;
@@ -37,9 +38,7 @@ fn conformance_suite() {
                 _ => {}
             }
             let theirs = common::oracle(&body, 50_000_000);
-            if theirs != ours
-                && !common::c_limit_only_outcome(&ours, &theirs)
-            {
+            if theirs != ours && !common::c_limit_only_outcome(&ours, &theirs) {
                 failures.push(format!("{label}: differs\n  remedy: {ours:?}\n  c lua:  {theirs:?}"));
             }
         }

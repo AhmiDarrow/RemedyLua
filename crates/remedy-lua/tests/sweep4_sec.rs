@@ -82,11 +82,19 @@ fn interrupt_late(setup: &str, work: &str, memory: usize) -> Duration {
 fn probe_atomic() {
     let n = std::env::var("SWEEP4_N").ok().and_then(|s| s.parse().ok()).unwrap_or(1_000_000usize);
     let cases = [
-        format!("w = setmetatable({{}}, {{__mode = 'k'}}) keep = {{}} for i = 1, {n} do local k = {{}} keep[i] = k w[k] = {{}} end"),
-        format!("w = setmetatable({{}}, {{__mode = 'v'}}) keep = {{}} for i = 1, {n} do local t = {{}} keep[i] = t w[i] = t end"),
+        format!(
+            "w = setmetatable({{}}, {{__mode = 'k'}}) keep = {{}} for i = 1, {n} do local k = {{}} keep[i] = k w[k] = {{}} end"
+        ),
+        format!(
+            "w = setmetatable({{}}, {{__mode = 'v'}}) keep = {{}} for i = 1, {n} do local t = {{}} keep[i] = t w[i] = t end"
+        ),
         format!("ws = {{}} for i = 1, {n} // 4 do ws[i] = setmetatable({{{{}}}}, {{__mode = 'k'}}) end"),
-        format!("cs = {{}} for i = 1, {n} // 5000 do local co = coroutine.create(function(...) coroutine.yield() end) coroutine.resume(co, table.unpack({{}}, 1, 7000)) cs[i] = co end"),
-        format!("cs = {{}} for i = 1, {n} // 4 do local co = coroutine.wrap(function() coroutine.yield() end) co() cs[i] = co end"),
+        format!(
+            "cs = {{}} for i = 1, {n} // 5000 do local co = coroutine.create(function(...) coroutine.yield() end) coroutine.resume(co, table.unpack({{}}, 1, 7000)) cs[i] = co end"
+        ),
+        format!(
+            "cs = {{}} for i = 1, {n} // 4 do local co = coroutine.wrap(function() coroutine.yield() end) co() cs[i] = co end"
+        ),
     ];
     for setup in &cases {
         let late = interrupt_late(setup, "while true do collectgarbage() end", 4 << 30);
@@ -119,7 +127,10 @@ fn sec4_error_paths_and_option_strings_are_charged() {
         (s, "pcall(table.concat, {s, {}})"),
         // SEC4-6: `gsub` with a function or table that raises after the output has grown.
         (s, "pcall(string.gsub, 'ab', '.', function(c) if c == 'b' then error() end return s end)"),
-        (s, "pcall(string.gsub, 'ab', '.', setmetatable({}, {__index = function(_, c) if c == 'b' then error() end return s end}))"),
+        (
+            s,
+            "pcall(string.gsub, 'ab', '.', setmetatable({}, {__index = function(_, c) if c == 'b' then error() end return s end}))",
+        ),
         // SEC4-7: `string.format` built its output (or copied a long format), then raised.
         (s, "pcall(string.format, '%s%d', s, {})"),
         (s, "pcall(string.format, s .. '%d', {})"),
@@ -164,10 +175,7 @@ fn sec4_8_atomic_phase_stops_on_the_interrupt() {
             lua.interrupt_handle().reset();
             // Sound after an abandoned cycle: every object is there, the ephemerons hold.
             let out = lua
-                .exec(
-                    &format!("assert(count() == {n}) return collectgarbage('count')"),
-                    "=check",
-                )
+                .exec(&format!("assert(count() == {n}) return collectgarbage('count')"), "=check")
                 .unwrap();
             assert!(!out.is_empty());
         }
@@ -218,8 +226,7 @@ fn sec4_9_ephemeron_chain_does_not_overflow_the_native_stack() {
 #[test]
 fn sec4_12_sparse_traversals_are_charged() {
     let sparse_arr = "t = {} for i = 1, 1 << 18 do t[i] = i end for i = 1, 1 << 18 do if i % 1000 ~= 0 then t[i] = nil end end";
-    let sparse_hash =
-        "t = {} for i = 1, 1 << 17 do t['k' .. i] = i end for i = 1, 1 << 17 do if i % 1000 ~= 0 then t['k' .. i] = nil end end";
+    let sparse_hash = "t = {} for i = 1, 1 << 17 do t['k' .. i] = i end for i = 1, 1 << 17 do if i % 1000 ~= 0 then t['k' .. i] = nil end end";
     assert_metered(&[
         (sparse_arr, "for k in pairs(t) do end"),
         (sparse_arr, "local k = next(t) while k do k = next(t, k) end"),
@@ -282,7 +289,8 @@ fn sec4_15_quadratic_compiles_are_charged() {
                 .into(),
         }
     };
-    let setups: Vec<String> = ["locals", "labels", "gotos", "upvals", "consts", "assign"].iter().map(|w| source(w)).collect();
+    let setups: Vec<String> =
+        ["locals", "labels", "gotos", "upvals", "consts", "assign"].iter().map(|w| source(w)).collect();
     let cases: Vec<(&str, &str)> = setups.iter().map(|s| (s.as_str(), "assert(load(src))")).collect();
     // Fuel enough for `load`'s up-front charge (about 1M here) and some compiling.
     assert_metered_with(&cases, 6_000_000);
@@ -295,14 +303,15 @@ fn sec4_15_quadratic_compiles_are_charged() {
 #[test]
 fn sec4_16_per_argument_work_is_charged() {
     let setup = "t = {} for i = 1, 100000 do t[i] = 65 end t[#t] = -1";
-    let cases = [
-        "local _ = pcall(string.char, table.unpack(t))",
-        "local _ = pcall(utf8.char, table.unpack(t))",
-    ];
+    let cases =
+        ["local _ = pcall(string.char, table.unpack(t))", "local _ = pcall(utf8.char, table.unpack(t))"];
     let mut all: Vec<(String, &str)> = cases.iter().map(|c| (setup.to_owned(), *c)).collect();
     // The same arguments reused: no `unpack` per call to pay for them.
     for f in ["string.char", "utf8.char", "warn"] {
-        all.push((format!("{setup} function run(...) while true do pcall({f}, ...) end end"), "run(table.unpack(t))"));
+        all.push((
+            format!("{setup} function run(...) while true do pcall({f}, ...) end end"),
+            "run(table.unpack(t))",
+        ));
     }
     let refs: Vec<(&str, &str)> = all.iter().map(|(s, b)| (s.as_str(), *b)).collect();
     assert_metered_with(&refs, 2_000_000);
@@ -323,7 +332,9 @@ fn sec4_17_error_naming_is_not_recursive() {
         let c = super::common::oracle(&super::common::wrap(&src), 100_000_000);
         for fast in [true, false] {
             let s = src.clone();
-            let r = super::common::small_stack(move || super::common::remedy_measured(&super::common::wrap(&s), 100_000_000, fast).0);
+            let r = super::common::small_stack(move || {
+                super::common::remedy_measured(&super::common::wrap(&s), 100_000_000, fast).0
+            });
             assert_eq!(r, c, "n {n} fast {fast}");
         }
     }
@@ -343,7 +354,9 @@ fn stdlib_never_charges_from_a_built_buffer() {
         for (i, line) in text.lines().enumerate() {
             let code = line.split("//").next().unwrap_or("");
             if code.contains("charge(")
-                && ["out.len()", "buf.len()", "line.len()", "msg.len()", "res.len()"].iter().any(|b| code.contains(b))
+                && ["out.len()", "buf.len()", "line.len()", "msg.len()", "res.len()"]
+                    .iter()
+                    .any(|b| code.contains(b))
             {
                 bad.push(format!("{}:{}: {}", path.display(), i + 1, line.trim()));
             }

@@ -14,7 +14,13 @@
 //! generous limits. "unbounded" is the cheapest configuration the public API offers; it
 //! still counts fuel and memory, because there is no switch that turns accounting off. When
 //! one exists, `unbounded_limits` is the one place to use it.
-#![allow(clippy::unwrap_used, clippy::expect_used, missing_docs, clippy::print_stdout, clippy::indexing_slicing)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    missing_docs,
+    clippy::print_stdout,
+    clippy::indexing_slicing
+)]
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -83,7 +89,8 @@ fn short(s: &str) -> String {
 
 fn main() {
     // `BENCH_DIR`: another directory of benchmarks (micro-benchmarks while profiling).
-    let dir = std::env::var("BENCH_DIR").map_or_else(|_| Path::new(env!("CARGO_MANIFEST_DIR")).join("benches/lua"), PathBuf::from);
+    let dir = std::env::var("BENCH_DIR")
+        .map_or_else(|_| Path::new(env!("CARGO_MANIFEST_DIR")).join("benches/lua"), PathBuf::from);
     let runs: usize = std::env::var("BENCH_RUNS").ok().and_then(|s| s.parse().ok()).unwrap_or(3).max(1);
     let only: Vec<String> = std::env::var("BENCH_ONLY")
         .map(|s| s.split(',').map(|x| x.trim().to_owned()).filter(|x| !x.is_empty()).collect())
@@ -95,7 +102,10 @@ fn main() {
         .collect();
     files.sort();
     println!("best of {runs}; times in ms");
-    println!("{:<16} {:>10} {:>10} {:>7} {:>10} {:>7}  status", "benchmark", "C Lua", "sandbox", "ratio", "unbounded", "ratio");
+    println!(
+        "{:<16} {:>10} {:>10} {:>7} {:>10} {:>7}  status",
+        "benchmark", "C Lua", "sandbox", "ratio", "unbounded", "ratio"
+    );
     let mut rows = Vec::new();
     for path in &files {
         let name = path.file_stem().unwrap().to_string_lossy().into_owned();
@@ -122,10 +132,14 @@ fn main() {
             (_, Err(e), _) => format!("RemedyLua error: {}", short(e)),
             (_, _, Some(Err(e))) => format!("RemedyLua (unbounded) error: {}", short(e)),
             (Some(Err(e)), _, _) => format!("C Lua error: {}", short(e)),
-            (Some(Ok(c)), Ok(o), _) if c != o => format!("DIFFERENT: C `{}` vs ours `{}`", short(c), short(o)),
+            (Some(Ok(c)), Ok(o), _) if c != o => {
+                format!("DIFFERENT: C `{}` vs ours `{}`", short(c), short(o))
+            }
             (_, Ok(o), _) => format!("same: `{}`", short(o)),
         };
-        let ratio = |t: Duration| best_c.map_or("-".to_owned(), |c| format!("{:.2}", t.as_secs_f64() / c.as_secs_f64()));
+        let ratio = |t: Duration| {
+            best_c.map_or("-".to_owned(), |c| format!("{:.2}", t.as_secs_f64() / c.as_secs_f64()))
+        };
         println!(
             "{:<16} {:>10} {:>10.1} {:>7} {:>10.1} {:>7}  {}",
             name,
@@ -140,9 +154,15 @@ fn main() {
     }
 
     let ok_rows: Vec<&Row> = rows.iter().filter(|r| r.c.is_some() && r.status.starts_with("same")).collect();
-    let gm_on = geomean(&ok_rows.iter().map(|r| r.on.as_secs_f64() / r.c.unwrap().as_secs_f64()).collect::<Vec<_>>());
-    let gm_off = geomean(&ok_rows.iter().map(|r| r.off.as_secs_f64() / r.c.unwrap().as_secs_f64()).collect::<Vec<_>>());
-    println!("geometric mean of ratios over {} matching benchmarks: sandbox {gm_on:.2}, unbounded {gm_off:.2}", ok_rows.len());
+    let gm_on =
+        geomean(&ok_rows.iter().map(|r| r.on.as_secs_f64() / r.c.unwrap().as_secs_f64()).collect::<Vec<_>>());
+    let gm_off = geomean(
+        &ok_rows.iter().map(|r| r.off.as_secs_f64() / r.c.unwrap().as_secs_f64()).collect::<Vec<_>>(),
+    );
+    println!(
+        "geometric mean of ratios over {} matching benchmarks: sandbox {gm_on:.2}, unbounded {gm_off:.2}",
+        ok_rows.len()
+    );
 
     if std::env::var("BENCH_NO_WRITE").is_ok_and(|v| v == "1") {
         return;
@@ -159,15 +179,30 @@ fn main() {
          \"sandbox\" = fuel and memory accounting with real limits; \"unbounded\" = `Limits::unmetered()` (no budgets; \
          the interpreter still counts). Geometric means cover the benchmarks whose outputs match.\n"
     );
-    let _ = writeln!(sec, "| benchmark | C Lua ms | RemedyLua ms (sandbox) | ratio | RemedyLua ms (unbounded) | ratio | output |");
+    let _ = writeln!(
+        sec,
+        "| benchmark | C Lua ms | RemedyLua ms (sandbox) | ratio | RemedyLua ms (unbounded) | ratio | output |"
+    );
     let _ = writeln!(sec, "|---|---:|---:|---:|---:|---:|---|");
     for r in &rows {
         let c = r.c.map_or("-".into(), |c| format!("{:.1}", ms(c)));
         let ro = r.c.map_or("-".into(), |c| format!("{:.2}", r.on.as_secs_f64() / c.as_secs_f64()));
         let rf = r.c.map_or("-".into(), |c| format!("{:.2}", r.off.as_secs_f64() / c.as_secs_f64()));
-        let _ = writeln!(sec, "| {} | {c} | {:.1} | {ro} | {:.1} | {rf} | {} |", r.name, ms(r.on), ms(r.off), r.status);
+        let _ = writeln!(
+            sec,
+            "| {} | {c} | {:.1} | {ro} | {:.1} | {rf} | {} |",
+            r.name,
+            ms(r.on),
+            ms(r.off),
+            r.status
+        );
     }
-    let _ = writeln!(sec, "| **geometric mean** | | | **{gm_on:.2}** | | **{gm_off:.2}** | {} of {} match |\n", ok_rows.len(), rows.len());
+    let _ = writeln!(
+        sec,
+        "| **geometric mean** | | | **{gm_on:.2}** | | **{gm_off:.2}** | {} of {} match |\n",
+        ok_rows.len(),
+        rows.len()
+    );
 
     let old = std::fs::read_to_string(&out_path).unwrap_or_else(|_| {
         "# RemedyLua benchmark results\n\nOne section per measuring run (cycle). Produced by \

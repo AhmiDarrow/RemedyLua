@@ -5,7 +5,11 @@
 use remedy_lua::{Libs, Limits, Lua, Value};
 
 fn rss() -> usize {
-    std::fs::read_to_string("/proc/self/statm").ok().and_then(|s| s.split_whitespace().nth(1)?.parse::<usize>().ok()).unwrap_or(0) * 4096
+    std::fs::read_to_string("/proc/self/statm")
+        .ok()
+        .and_then(|s| s.split_whitespace().nth(1)?.parse::<usize>().ok())
+        .unwrap_or(0)
+        * 4096
 }
 
 fn main() {
@@ -14,7 +18,10 @@ fn main() {
     let n: usize = a.get(2).and_then(|s| s.parse().ok()).unwrap_or(200_000);
     let mut lua = Lua::new(Limits::default().memory(1 << 30).fuel(1 << 40), Libs::ALL);
     lua.exec("KEEP = {}", "=s").unwrap();
-    let keep = match lua.exec("return KEEP", "=s").unwrap()[0] { Value::Table(t) => t, _ => panic!() };
+    let keep = match lua.exec("return KEEP", "=s").unwrap()[0] {
+        Value::Table(t) => t,
+        _ => panic!(),
+    };
     let mut roots = Vec::new();
     lua.collect_garbage().unwrap();
     let (r0, m0) = (rss(), lua.memory_used());

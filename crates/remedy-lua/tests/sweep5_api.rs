@@ -8,7 +8,7 @@ use std::panic::AssertUnwindSafe;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use remedy_lua::{Data, DataLimits, Error, LimitKind, Libs, Limits, Lua, Value};
+use remedy_lua::{Data, DataLimits, Error, Libs, LimitKind, Limits, Lua, Value};
 
 fn states_with(limits: Limits) -> impl Iterator<Item = Lua> {
     [true, false].into_iter().map(move |fast| {
@@ -117,7 +117,12 @@ fn s5api_1_host_function_reading_in_a_loop() {
             Ok(vec![Value::Int(size(lua, "scratch") as i64), Value::Int(i)])
         })
         .unwrap();
-        let r = lua.exec("local s = 'same' return drain(setmetatable({}, {__index = function() return s end}))", "=t").unwrap();
+        let r = lua
+            .exec(
+                "local s = 'same' return drain(setmetatable({}, {__index = function() return s end}))",
+                "=t",
+            )
+            .unwrap();
         assert!(matches!(r[..], [Value::Int(n), Value::Int(200_001)] if n < 5_000), "{r:?}");
     }
 }
@@ -129,7 +134,8 @@ fn s5api_1_host_function_reading_in_a_loop() {
 fn s5api_2_host_reads_between_calls_do_not_grow_held() {
     for mut lua in states() {
         lua.exec("x = {}", "=t").unwrap();
-        let distinct: Vec<Value> = (0..3000).map(|i| lua.create_string(format!("{i:060}")).unwrap()).collect();
+        let distinct: Vec<Value> =
+            (0..3000).map(|i| lua.create_string(format!("{i:060}")).unwrap()).collect();
         for _ in 0..100_000 {
             lua.get_global("x").unwrap();
             lua.create_string("k").unwrap();
@@ -295,14 +301,17 @@ fn s5api_6_from_data_with_depth_is_capped_before_making() {
         }
         lua.collect_garbage().unwrap();
         let base = lua.memory_used();
-        let r = lua.from_data_with(&d, DataLimits { depth: usize::MAX, nodes: usize::MAX, bytes: usize::MAX });
+        let r =
+            lua.from_data_with(&d, DataLimits { depth: usize::MAX, nodes: usize::MAX, bytes: usize::MAX });
         assert!(matches!(r, Err(Error::Host(_))), "{r:?}");
         assert_eq!(lua.memory_used(), base);
         let mut d = Data::Int(1);
         for _ in 0..64 {
             d = Data::Table(vec![(Data::Int(1), d)]);
         }
-        assert!(lua.from_data_with(&d, DataLimits { depth: 1000, nodes: usize::MAX, bytes: usize::MAX }).is_ok());
+        assert!(
+            lua.from_data_with(&d, DataLimits { depth: 1000, nodes: usize::MAX, bytes: usize::MAX }).is_ok()
+        );
         assert!(lua.from_data(&d).is_ok());
     }
 }
@@ -318,7 +327,8 @@ fn s5api_7_math_random_depends_on_the_seed() {
         let r = lua.exec("math.random() return math.random(), math.random(1 << 40)", "=t").unwrap();
         format!("{r:?}")
     };
-    let fixed: Vec<String> = [0, 1, 2, u64::MAX].into_iter().map(|s| second(Limits::default().hash_seed(s))).collect();
+    let fixed: Vec<String> =
+        [0, 1, 2, u64::MAX].into_iter().map(|s| second(Limits::default().hash_seed(s))).collect();
     for (i, a) in fixed.iter().enumerate() {
         for b in &fixed[i + 1..] {
             assert_ne!(a, b);
@@ -329,7 +339,9 @@ fn s5api_7_math_random_depends_on_the_seed() {
     let run = |fast: bool| {
         let mut lua = Lua::new(Limits::default().hash_seed(7), Libs::ALL);
         lua.set_fast_loop(fast);
-        let r = lua.exec("local s = 0 for i = 1, 100 do s = s + math.random(1000) end return s, math.random()", "=t").unwrap();
+        let r = lua
+            .exec("local s = 0 for i = 1, 100 do s = s + math.random(1000) end return s, math.random()", "=t")
+            .unwrap();
         (format!("{r:?}"), lua.fuel_left())
     };
     assert_eq!(run(true), run(false));
@@ -447,7 +459,9 @@ fn s5api_probe_every_entry_after_poison() {
 fn s5api_probe_panics_in_host_callbacks() {
     for mut lua in states() {
         lua.set_print(|s| assert!(!s.contains("die"), "sink"));
-        let r = std::panic::catch_unwind(AssertUnwindSafe(|| lua.exec("print('ok') pcall(print, 'die') return 1", "=t")));
+        let r = std::panic::catch_unwind(AssertUnwindSafe(|| {
+            lua.exec("print('ok') pcall(print, 'die') return 1", "=t")
+        }));
         assert!(r.is_err());
         assert!(matches!(lua.exec("return 1", "=t"), Err(Error::Host(_))));
     }
@@ -460,7 +474,9 @@ fn s5api_probe_panics_in_host_callbacks() {
     }
     for mut lua in states() {
         lua.set_os_clocks(Some(Arc::new(|| panic!("wall"))), None);
-        assert!(std::panic::catch_unwind(AssertUnwindSafe(|| lua.exec("return pcall(os.time)", "=t"))).is_err());
+        assert!(
+            std::panic::catch_unwind(AssertUnwindSafe(|| lua.exec("return pcall(os.time)", "=t"))).is_err()
+        );
         assert!(matches!(lua.exec("return 1", "=t"), Err(Error::Host(_))));
     }
     for mut lua in states() {
@@ -473,7 +489,9 @@ fn s5api_probe_panics_in_host_callbacks() {
         })
         .unwrap();
         lua.register("boom", |_, _| panic!("boom")).unwrap();
-        let r = std::panic::catch_unwind(AssertUnwindSafe(|| lua.exec("local ok, e = pcall(m, boom) return ok, e", "=t")));
+        let r = std::panic::catch_unwind(AssertUnwindSafe(|| {
+            lua.exec("local ok, e = pcall(m, boom) return ok, e", "=t")
+        }));
         assert!(matches!(r, Ok(Err(Error::Host(_))) | Err(_)), "{r:?}");
         assert!(matches!(lua.exec("return m(print)", "=t"), Err(Error::Host(_))));
     }
@@ -601,18 +619,31 @@ fn s5api_probe_userdata_size_accounting() {
 fn s5api_probe_extreme_clocks() {
     for mut lua in states() {
         lua.set_os_clocks(Some(Arc::new(|| Duration::MAX)), Some(Arc::new(|| Duration::MAX)));
-        for src in ["return os.time()", "return os.clock()", "return os.date('%c')", "return os.date('*t').year", "return os.date('!%Y')"] {
+        for src in [
+            "return os.time()",
+            "return os.clock()",
+            "return os.date('%c')",
+            "return os.date('*t').year",
+            "return os.date('!%Y')",
+        ] {
             let _ = lua.exec(src, "=t");
         }
         for off in [i64::MAX, i64::MIN, 0] {
             lua.set_utc_offset(off);
-            for src in ["return os.date('%c')", "return os.time({year = 2000, month = 1, day = 1})", "return os.date('*t', 1 << 62)"] {
+            for src in [
+                "return os.date('%c')",
+                "return os.time({year = 2000, month = 1, day = 1})",
+                "return os.date('*t', 1 << 62)",
+            ] {
                 let _ = lua.exec(src, "=t");
             }
         }
         // The deadline saturates instead of wrapping to the past.
         lua.set_time_limit(Some((Arc::new(|| Duration::from_secs(u64::MAX - 1)), Duration::MAX)));
-        assert_eq!(lua.exec("local n = 0 for i = 1, 100000 do n = n + i end return 1", "=t").unwrap(), [Value::Int(1)]);
+        assert_eq!(
+            lua.exec("local n = 0 for i = 1, 100000 do n = n + i end return 1", "=t").unwrap(),
+            [Value::Int(1)]
+        );
         // A clock that goes backwards never reaches the deadline; fuel still stops the call.
         let t = Arc::new(Mutex::new(u64::MAX / 2));
         let t2 = Arc::clone(&t);
@@ -682,7 +713,10 @@ fn s5api_probe_set_limits_mid_call() {
 fn s5api_probe_raw_equal() {
     let mut lua = Lua::new(Limits::default(), Libs::ALL);
     let r = lua
-        .exec("return 2^53, math.tointeger(2^53), (2^53|0) + 1, 0/0, string.rep('a', 50), string.rep('a', 50)", "=t")
+        .exec(
+            "return 2^53, math.tointeger(2^53), (2^53|0) + 1, 0/0, string.rep('a', 50), string.rep('a', 50)",
+            "=t",
+        )
         .unwrap();
     assert!(lua.raw_equal(&r[0], &r[1]));
     assert!(!lua.raw_equal(&r[0], &r[2]));
@@ -705,7 +739,10 @@ fn s5api_probe_raw_equal() {
 fn s5api_probe_adversarial_data() {
     for mut lua in states() {
         let v = lua.exec("local u = {} for i = 1, 40 do u = {a = u, b = u} end return u, 0/0", "=t").unwrap();
-        assert!(matches!(lua.to_data(v[0], DataLimits { depth: 64, nodes: 100_000, bytes: 100 }), Err(Error::Host(_))));
+        assert!(matches!(
+            lua.to_data(v[0], DataLimits { depth: 64, nodes: 100_000, bytes: 100 }),
+            Err(Error::Host(_))
+        ));
         let zero = DataLimits { depth: 0, nodes: 0, bytes: 0 };
         assert!(lua.to_data(Value::Nil, zero).is_err());
         assert!(lua.from_data_with(&Data::Int(1), zero).is_err());
@@ -724,7 +761,10 @@ fn s5api_probe_adversarial_data() {
         let out = lua.to_data(t, DataLimits::default()).unwrap();
         let Data::Table(mut pairs) = out else { panic!() };
         pairs.sort_by_key(|(k, _)| format!("{k:?}"));
-        assert!(matches!(&pairs[..], [(Data::Int(0), Data::Int(4)), (Data::Int(1), Data::Num(f))] if f.is_nan()), "{pairs:?}");
+        assert!(
+            matches!(&pairs[..], [(Data::Int(0), Data::Int(4)), (Data::Int(1), Data::Num(f))] if f.is_nan()),
+            "{pairs:?}"
+        );
     }
 }
 

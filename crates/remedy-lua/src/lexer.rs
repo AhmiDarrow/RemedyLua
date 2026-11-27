@@ -149,7 +149,11 @@ impl Tok {
             Tok::Interp(_) => "`...`".into(),
             Tok::Error(_) => "<error>".into(),
             Tok::Other(c) => {
-                if c.is_ascii_graphic() { char::from(*c).to_string() } else { format!("<\\{c}>") }
+                if c.is_ascii_graphic() {
+                    char::from(*c).to_string()
+                } else {
+                    format!("<\\{c}>")
+                }
             }
             Tok::Eof => "<eof>".into(),
             Tok::OpAssign(op) => format!("{}=", op.symbol()),
@@ -371,12 +375,34 @@ impl<'a> Lexer<'a> {
     }
 
     pub fn of(src: Text<'a>, chunk: &'a str, dialect: Dialect) -> Self {
-        Lexer { src, i: 0, line: 1, line_start: 0, dialect, chunk, str_start: 0, esc_start: 0, memory: usize::MAX, failed: false }
+        Lexer {
+            src,
+            i: 0,
+            line: 1,
+            line_start: 0,
+            dialect,
+            chunk,
+            str_start: 0,
+            esc_start: 0,
+            memory: usize::MAX,
+            failed: false,
+        }
     }
 
     /// Starts at a position (for an interpolated expression's text).
     pub fn at(src: &'a [u8], chunk: &'a str, dialect: Dialect, pos: Pos) -> Self {
-        Lexer { src: Text::Whole(src), i: 0, line: pos.line, line_start: 0usize.wrapping_sub(pos.col as usize - 1), dialect, chunk, str_start: 0, esc_start: 0, memory: usize::MAX, failed: false }
+        Lexer {
+            src: Text::Whole(src),
+            i: 0,
+            line: pos.line,
+            line_start: 0usize.wrapping_sub(pos.col as usize - 1),
+            dialect,
+            chunk,
+            str_start: 0,
+            esc_start: 0,
+            memory: usize::MAX,
+            failed: false,
+        }
     }
 
     fn pos(&self) -> Pos {
@@ -455,7 +481,10 @@ impl<'a> Lexer<'a> {
     /// is reported first (as C Lua, which reads tokens as it parses).
     pub fn token(&mut self) -> (Token, bool) {
         if self.failed {
-            return (Token { tok: Tok::Eof, pos: self.pos(), span: (self.i, self.i), end: self.pos() }, false);
+            return (
+                Token { tok: Tok::Eof, pos: self.pos(), span: (self.i, self.i), end: self.pos() },
+                false,
+            );
         }
         let start = self.i;
         let mut t = match self.next() {
@@ -463,7 +492,10 @@ impl<'a> Lexer<'a> {
             Err(d) => {
                 self.failed = true;
                 let pos = d.pos;
-                return (Token { tok: Tok::Error(Box::new(d)), pos, span: (self.i, self.i), end: pos }, false);
+                return (
+                    Token { tok: Tok::Error(Box::new(d)), pos, span: (self.i, self.i), end: pos },
+                    false,
+                );
             }
         };
         t.span.1 = self.i;
@@ -642,7 +674,8 @@ impl<'a> Lexer<'a> {
                 while self.src.byte(j) == Some(b'=') {
                     j += 1;
                 }
-                let text = String::from_utf8_lossy(self.src.bytes().get(self.i..j).unwrap_or_default()).into_owned();
+                let text =
+                    String::from_utf8_lossy(self.src.bytes().get(self.i..j).unwrap_or_default()).into_owned();
                 return Err(self.err(pos, format!("invalid long string delimiter near '{text}'")));
             }
             return sym(Tok::LBracket, 1, self);
@@ -669,7 +702,8 @@ impl<'a> Lexer<'a> {
                 self.long_look(&mut look)?;
                 self.i += 1;
             }
-            let word = String::from_utf8_lossy(self.src.bytes().get(start..self.i).unwrap_or_default()).into_owned();
+            let word =
+                String::from_utf8_lossy(self.src.bytes().get(start..self.i).unwrap_or_default()).into_owned();
             let tok = keyword(&word).unwrap_or(Tok::Name(word));
             return Ok(Token { tok, pos, span: (tok_start, 0), end: pos });
         }
@@ -753,7 +787,12 @@ impl<'a> Lexer<'a> {
         let end = if with_current { self.i + 1 } else { self.i };
         let mut b = self.src.bytes().get(self.str_start..self.str_start + 1).unwrap_or_default().to_vec();
         b.extend_from_slice(out);
-        b.extend_from_slice(self.src.bytes().get(self.esc_start.min(end)..end.min(self.src.bytes().len())).unwrap_or_default());
+        b.extend_from_slice(
+            self.src
+                .bytes()
+                .get(self.esc_start.min(end)..end.min(self.src.bytes().len()))
+                .unwrap_or_default(),
+        );
         let cut = b.iter().position(|&c| c == 0).unwrap_or(b.len());
         b.truncate(cut);
         let mut m = format!("{what} near '").into_bytes();
@@ -1059,7 +1098,11 @@ impl<'a> Lexer<'a> {
         enum Level {
             /// Where the string starts, and the index of its backtick.
             Str(Pos, usize),
-            Code { epos: Pos, start: usize, depth: usize },
+            Code {
+                epos: Pos,
+                start: usize,
+                depth: usize,
+            },
         }
         let mut scratch = Vec::new();
         let tick = self.i;

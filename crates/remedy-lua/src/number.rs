@@ -627,6 +627,12 @@ mod tests {
         assert!(matches!(n("0x1p4"), Some(Value::Num(f)) if f == 16.0));
         assert!(matches!(n(".5"), Some(Value::Num(f)) if f == 0.5));
         assert!(matches!(n("5."), Some(Value::Num(f)) if f == 5.0));
-        assert!(n("inf").is_none() && n("nan").is_none() && n("1e").is_none() && n("").is_none() && n("0x").is_none());
+        assert!(
+            n("inf").is_none()
+                && n("nan").is_none()
+                && n("1e").is_none()
+                && n("").is_none()
+                && n("0x").is_none()
+        );
     }
 }

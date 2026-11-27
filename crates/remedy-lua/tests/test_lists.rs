@@ -63,7 +63,8 @@ fn module_path(rel: &Path) -> Vec<String> {
 
 /// The name of a top-level `fn` declared on `line` (column 0, any visibility).
 fn fn_name(line: &str) -> Option<&str> {
-    let rest = ["fn ", "pub fn ", "pub(crate) fn ", "pub(super) fn "].iter().find_map(|p| line.strip_prefix(p))?;
+    let rest =
+        ["fn ", "pub fn ", "pub(crate) fn ", "pub(super) fn "].iter().find_map(|p| line.strip_prefix(p))?;
     let end = rest.find(|c: char| !(c.is_alphanumeric() || c == '_'))?;
     Some(&rest[..end])
 }
@@ -90,7 +91,9 @@ fn functions() -> (Vec<Func>, BTreeMap<String, BTreeMap<String, String>>) {
             // `use super::sweep5b_open::{ns_per_unit, baseline};`, `use crate::x::y::f;`
             if let Some(u) = line.trim().strip_prefix("use ").and_then(|u| u.strip_suffix(';')) {
                 let (path, names) = match u.split_once("::{") {
-                    Some((p, n)) => (p, n.trim_end_matches('}').split(',').map(str::trim).collect::<Vec<_>>()),
+                    Some((p, n)) => {
+                        (p, n.trim_end_matches('}').split(',').map(str::trim).collect::<Vec<_>>())
+                    }
                     None => match u.rsplit_once("::") {
                         Some((p, n)) => (p, vec![n.trim()]),
                         None => continue,
@@ -116,7 +119,11 @@ fn functions() -> (Vec<Func>, BTreeMap<String, BTreeMap<String, String>>) {
             let mut j = i;
             while j > 0 {
                 let above = lines[j - 1].trim();
-                if above.starts_with("#[") || above.starts_with("//") || above.ends_with(")]") || above.ends_with("\",") {
+                if above.starts_with("#[")
+                    || above.starts_with("//")
+                    || above.ends_with(")]")
+                    || above.ends_with("\",")
+                {
                     is_test |= above == "#[test]";
                     j -= 1;
                 } else {
@@ -145,7 +152,10 @@ fn code_only(src: &str) -> String {
             while i < b.len() && b[i] != b'\n' {
                 i += 1;
             }
-        } else if c == b'r' && matches!(b.get(i + 1), Some(b'"' | b'#')) && !b[..i].last().is_some_and(|p| p.is_ascii_alphanumeric() || *p == b'_') {
+        } else if c == b'r'
+            && matches!(b.get(i + 1), Some(b'"' | b'#'))
+            && !b[..i].last().is_some_and(|p| p.is_ascii_alphanumeric() || *p == b'_')
+        {
             // A raw string: r"..." or r#"..."#.
             let mut j = i + 1;
             let mut hashes = 0;
@@ -201,7 +211,10 @@ fn calls(body: &str, name: &str) -> bool {
 /// The functions that read a clock, directly or through the functions they call: a
 /// fixpoint over the calls a body makes by bare name (resolved in its own module or
 /// through its imports) or by path (`harness::with_timeout(`, by its last segment).
-fn clock_readers(funcs: &[Func], imports: &BTreeMap<String, BTreeMap<String, String>>) -> BTreeMap<usize, String> {
+fn clock_readers(
+    funcs: &[Func],
+    imports: &BTreeMap<String, BTreeMap<String, String>>,
+) -> BTreeMap<usize, String> {
     let mut readers: BTreeMap<usize, String> = (0..funcs.len())
         .filter_map(|i| CLOCK.iter().find(|c| funcs[i].body.contains(**c)).map(|c| (i, (*c).to_owned())))
         .collect();
@@ -260,7 +273,8 @@ fn timing_list_names_are_tests() {
         }
     }
     let timing: BTreeSet<&String> = secs.get("timing").into_iter().flatten().collect();
-    let not_timing: Vec<&String> = secs.get("env").into_iter().flatten().filter(|n| !timing.contains(n)).collect();
+    let not_timing: Vec<&String> =
+        secs.get("env").into_iter().flatten().filter(|n| !timing.contains(n)).collect();
     assert!(not_timing.is_empty(), "timing.list: [env] names not in [timing]: {not_timing:?}");
 }
 
@@ -325,6 +339,9 @@ fn known_entries_name_open_findings() {
             panic!("timing.list [known]: {entry:?} is not `module::fn FINDING`");
         };
         assert!(tests.contains(name), "timing.list [known]: {name} is not a test");
-        assert!(finding_open(id), "timing.list [known]: {name} names {id}, which docs/known-issues.md does not show open: remove the entry if {id} is closed");
+        assert!(
+            finding_open(id),
+            "timing.list [known]: {name} names {id}, which docs/known-issues.md does not show open: remove the entry if {id} is closed"
+        );
     }
 }

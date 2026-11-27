@@ -104,13 +104,21 @@ pub(crate) fn format(source: &str, name: &str, dialect: Dialect) -> Result<Strin
             if let Some(f) = first_closes.get_mut(line) {
                 *f = matches!(
                     t.tok,
-                    Tok::End | Tok::Until | Tok::RBrace | Tok::RParen | Tok::RBracket | Tok::Else | Tok::Elseif
+                    Tok::End
+                        | Tok::Until
+                        | Tok::RBrace
+                        | Tok::RParen
+                        | Tok::RBracket
+                        | Tok::Else
+                        | Tok::Elseif
                 );
             }
             last_line = t.pos.line;
         }
         match t.tok {
-            Tok::Function | Tok::Do | Tok::Then | Tok::Repeat | Tok::LBrace | Tok::LParen | Tok::LBracket => depth += 1,
+            Tok::Function | Tok::Do | Tok::Then | Tok::Repeat | Tok::LBrace | Tok::LParen | Tok::LBracket => {
+                depth += 1
+            }
             Tok::End | Tok::Until | Tok::RBrace | Tok::RParen | Tok::RBracket | Tok::Elseif => depth -= 1,
             Tok::Else => {}
             _ => {}

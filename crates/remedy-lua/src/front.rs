@@ -9,7 +9,10 @@ use crate::heap::Heap;
 use crate::{Dialect, Libs, Limits, Lua, Value};
 
 fn diag(d: &Diagnostic) -> String {
-    format!("{}:{}: [{}:{}-{}:{}] {}", d.chunk, d.line, d.pos.line, d.pos.col, d.end.line, d.end.col, d.message)
+    format!(
+        "{}:{}: [{}:{}-{}:{}] {}",
+        d.chunk, d.line, d.pos.line, d.pos.col, d.end.line, d.end.col, d.message
+    )
 }
 
 fn dialect(name: &str) -> Dialect {
@@ -18,7 +21,9 @@ fn dialect(name: &str) -> Dialect {
 
 /// The syntax tree the recursive parser makes (printed), or its error.
 pub fn parse_old(src: &[u8], name: &str) -> Result<String, String> {
-    crate::front_oracle::parser::parse(src, name, dialect(name)).map(|b| format!("{b:?}")).map_err(|d| diag(&d))
+    crate::front_oracle::parser::parse(src, name, dialect(name))
+        .map(|b| format!("{b:?}"))
+        .map_err(|d| diag(&d))
 }
 
 /// The syntax tree the iterative parser makes (printed), or its error.
@@ -30,8 +35,13 @@ pub fn parse_new(src: &[u8], name: &str) -> Result<String, String> {
 pub fn compile_old(src: &[u8], name: &str) -> Result<String, String> {
     let block = crate::front_oracle::parser::parse(src, name, dialect(name)).map_err(|d| diag(&d))?;
     let mut lua = Lua::new(Limits::unmetered(), Libs::NONE);
-    let p = crate::front_oracle::compiler::compile(&block, name, &mut lua.heap, crate::front_oracle::parser::DEFAULT_STACK)
-        .map_err(|d| diag(&d))?;
+    let p = crate::front_oracle::compiler::compile(
+        &block,
+        name,
+        &mut lua.heap,
+        crate::front_oracle::parser::DEFAULT_STACK,
+    )
+    .map_err(|d| diag(&d))?;
     Ok(dump(&lua.heap, p))
 }
 
@@ -64,14 +74,20 @@ pub fn run_new(src: &[u8], name: &str, reuse: bool) -> String {
     };
     let env = Value::Table(lua.globals);
     let up = lua.heap.new_upval_charged(crate::heap::Upval::Closed(env));
-    let f = Value::Func(lua.heap.new_func_charged(crate::heap::Func::Lua { proto: p, upvals: vec![up].into_boxed_slice() }));
+    let f = Value::Func(
+        lua.heap.new_func_charged(crate::heap::Func::Lua { proto: p, upvals: vec![up].into_boxed_slice() }),
+    );
     lua.hold(f);
     match lua.call(f, &[]) {
-        Ok(v) => v.iter().map(|x| match x {
-            Value::Str(_) => format!("{:?}", lua.to_string_lossy(*x)),
-            Value::Int(_) | Value::Num(_) | Value::Bool(_) | Value::Nil => format!("{x:?}"),
-            other => other.type_name().to_owned(),
-        }).collect::<Vec<_>>().join(", "),
+        Ok(v) => v
+            .iter()
+            .map(|x| match x {
+                Value::Str(_) => format!("{:?}", lua.to_string_lossy(*x)),
+                Value::Int(_) | Value::Num(_) | Value::Bool(_) | Value::Nil => format!("{x:?}"),
+                other => other.type_name().to_owned(),
+            })
+            .collect::<Vec<_>>()
+            .join(", "),
         Err(e) => format!("error: {e}"),
     }
 }

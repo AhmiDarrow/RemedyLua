@@ -5,7 +5,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing, clippy::panic, missing_docs)]
 
 use super::common;
-use remedy_lua::{Error, LimitKind, Libs, Limits, Lua, Value};
+use remedy_lua::{Error, Libs, LimitKind, Limits, Lua, Value};
 use std::time::{Duration, Instant};
 
 fn state(limits: Limits, fast: bool) -> Lua {
@@ -41,7 +41,8 @@ fn in_child(case: &str) -> (usize, String) {
         .unwrap();
     let text = String::from_utf8_lossy(&out.stdout).into_owned();
     // (The test harness may print its own text before ours on a line.)
-    let field = |k: &str| text.lines().find_map(|l| l.split_once(k).map(|(_, v)| v)).unwrap_or_default().to_owned();
+    let field =
+        |k: &str| text.lines().find_map(|l| l.split_once(k).map(|(_, v)| v)).unwrap_or_default().to_owned();
     let peak: usize = field("S6HEAP_PEAK=")
         .parse()
         .unwrap_or_else(|_| panic!("child {case} failed: {text}\n{}", String::from_utf8_lossy(&out.stderr)));
@@ -230,7 +231,10 @@ fn s6_gcm2_parked_coroutines_keep_their_live_slots() {
     for fast in [true, false] {
         let src = src.to_owned();
         let ours = common::small_stack(move || {
-            let mut lua = Lua::new(Limits::default().memory(256 << 20).fuel(1 << 34).hash_seed(common::TEST_SEED), Libs::ALL);
+            let mut lua = Lua::new(
+                Limits::default().memory(256 << 20).fuel(1 << 34).hash_seed(common::TEST_SEED),
+                Libs::ALL,
+            );
             lua.set_fast_loop(fast);
             lua.set_gc_stress(true);
             match lua.exec(common::wrap(&src), "=wrapper") {
@@ -335,7 +339,9 @@ fn s6_5_big_natives_stop_at_the_time_limit() {
         let (time, interrupt) = overrun(src);
         let bound = Duration::from_millis(30);
         if time >= bound || interrupt >= bound {
-            late.push(format!("{src}: stopped {time:?} past the time limit, {interrupt:?} past the interrupt"));
+            late.push(format!(
+                "{src}: stopped {time:?} past the time limit, {interrupt:?} past the interrupt"
+            ));
         }
     }
     assert!(late.is_empty(), "{late:#?}");

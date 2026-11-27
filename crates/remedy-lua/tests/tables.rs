@@ -5,7 +5,7 @@
 //! against C Lua when the oracle is built; GC-stress runs check the collector's view.
 #![allow(clippy::unwrap_used, clippy::indexing_slicing, clippy::panic, missing_docs)]
 
-use remedy_lua::{Error, LimitKind, Libs, Limits, Lua};
+use remedy_lua::{Error, Libs, LimitKind, Limits, Lua};
 
 use super::common;
 
@@ -157,7 +157,10 @@ fn tables_in_the_fast_loop_hit_the_memory_cap() {
     let v = lua.exec("local t = {x = 1} return t.x + 1", "=t").unwrap();
     assert_eq!(common::show(&lua, v[0]), "2");
     // Garbage tables are collected, so a long loop of them fits.
-    check("local s = 0 for i = 1, 200000 do local t = {i, x = i} s = s + t[1] + t.x end return s", "40000200000");
+    check(
+        "local s = 0 for i = 1, 200000 do local t = {i, x = i} s = s + t[1] + t.x end return s",
+        "40000200000",
+    );
 }
 
 /// String methods go through the string metatable's cached `__index` hint: a new
@@ -404,7 +407,21 @@ fn length_matches_c_lua_after_random_writes() {
             x ^= x << 17;
             x % n
         };
-        let ctor = ["{}", "{1, 2, 3}", "{1, nil, 3, nil, 5}", "{nil, nil, 3}", "{1, 2, 3, 4, 5, 6, 7, 8}", "{n = 1, 2, 3}", "{(f())}", "{f()}", "{f(), f()}", "{x = 1, y = 2}", "{[1] = 1, [2] = 2, [4] = 4}", "{[3] = 3, 1, 2, f()}", "{1, 2, [7] = 7, [-1] = 0}"];
+        let ctor = [
+            "{}",
+            "{1, 2, 3}",
+            "{1, nil, 3, nil, 5}",
+            "{nil, nil, 3}",
+            "{1, 2, 3, 4, 5, 6, 7, 8}",
+            "{n = 1, 2, 3}",
+            "{(f())}",
+            "{f()}",
+            "{f(), f()}",
+            "{x = 1, y = 2}",
+            "{[1] = 1, [2] = 2, [4] = 4}",
+            "{[3] = 3, 1, 2, f()}",
+            "{1, 2, [7] = 7, [-1] = 0}",
+        ];
         let mut p = String::from("local function f() return 1, nil, 3, nil end\nlocal r = {}\n");
         let c = ctor[rnd(ctor.len() as u64) as usize];
         let c = if !with_str && c.contains(" = ") && !c.contains('[') { "{}" } else { c };
@@ -426,7 +443,11 @@ fn length_matches_c_lua_after_random_writes() {
                 9 => "if #t > 0 then table.remove(t) end".to_owned(),
                 10 => format!("if #t > 0 then table.remove(t, math.min(#t, {})) end", 1 + rnd(30)),
                 _ if !with_str => "t[1] = 1".to_owned(),
-                _ => format!("t.s{} = {}", rnd(6), if rnd(3) == 0 { "nil".to_owned() } else { rnd(9).to_string() }),
+                _ => format!(
+                    "t.s{} = {}",
+                    rnd(6),
+                    if rnd(3) == 0 { "nil".to_owned() } else { rnd(9).to_string() }
+                ),
             };
             p.push_str(&line);
             p.push_str(" r[#r + 1] = #t\n");
@@ -454,7 +475,11 @@ fn length_matches_c_lua_after_random_writes() {
                 }
             }
             let q = format!("{}\nreturn table.concat(r, ',')\n", keep.join("\n"));
-            fails.push(format!("seed {seed}:\n{q}ours:  {:?}\nC Lua: {:?}", common::remedy(&q, 50_000_000), common::oracle(&q, 50_000_000)));
+            fails.push(format!(
+                "seed {seed}:\n{q}ours:  {:?}\nC Lua: {:?}",
+                common::remedy(&q, 50_000_000),
+                common::oracle(&q, 50_000_000)
+            ));
         }
     }
     assert!(fails.is_empty(), "{} of {iters} differ from C Lua; first:\n{}", fails.len(), fails[0]);

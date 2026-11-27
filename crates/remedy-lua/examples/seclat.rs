@@ -17,7 +17,8 @@ fn main() {
     let mut worst = Duration::ZERO;
     let mut last = String::new();
     for _ in 0..5 {
-        let mut lua = Lua::new(Limits::default().memory(mem).string_len(64 << 20).fuel(1 << 40).hash_seed(7), libs);
+        let mut lua =
+            Lua::new(Limits::default().memory(mem).string_len(64 << 20).fuel(1 << 40).hash_seed(7), libs);
         lua.set_print(|_| {});
         lua.exec(&setup, "=setup").unwrap();
         let t0 = Instant::now();

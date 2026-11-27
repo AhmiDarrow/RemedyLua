@@ -15,7 +15,11 @@ struct Probe {
 impl Probe {
     fn new(setup: &str, body: &str, fast: bool) -> Probe {
         let mut lua = Lua::new(
-            Limits::default().memory(512 << 20).string_len(64 << 20).fuel(1 << 40).hash_seed(super::common::TEST_SEED),
+            Limits::default()
+                .memory(512 << 20)
+                .string_len(64 << 20)
+                .fuel(1 << 40)
+                .hash_seed(super::common::TEST_SEED),
             Libs::ALL,
         );
         lua.set_fast_loop(fast);
@@ -59,7 +63,10 @@ fn assert_ratio(setup: &str, body: &str, control: Option<(&str, &str)>, fuel: u6
                 break;
             }
         }
-        assert!(ratio <= bound, "fast {fast}: {body}: {ratio:.1}x the control per unit of fuel (bound {bound}x)");
+        assert!(
+            ratio <= bound,
+            "fast {fast}: {body}: {ratio:.1}x the control per unit of fuel (bound {bound}x)"
+        );
     }
 }
 
@@ -70,7 +77,8 @@ fn assert_ratio(setup: &str, body: &str, control: Option<(&str, &str)>, fuel: u6
 /// with the stack (so with the memory limit). Prototype constants likewise.
 #[test]
 fn s5b_walk_1_thread_stacks_are_counted() {
-    let parked = "local function f(...) coroutine.yield() end co = coroutine.wrap(f) co(table.unpack({}, 1, 1000000))";
+    let parked =
+        "local function f(...) coroutine.yield() end co = coroutine.wrap(f) co(table.unpack({}, 1, 1000000))";
     assert_ratio(parked, "collectgarbage('step')", None, 300_000, 12.0);
     assert_ratio(&format!("collectgarbage('setpause', 0) {parked}"), "local x = {}", None, 300_000, 12.0);
     assert_ratio(
@@ -190,7 +198,10 @@ fn s5b_walk_5_closure_upvalues_are_charged() {
         )
     };
     let fuel_of = |src: &str, fast: bool| {
-        let mut lua = remedy_lua::Lua::new(remedy_lua::Limits::default().hash_seed(super::common::TEST_SEED), remedy_lua::Libs::ALL);
+        let mut lua = remedy_lua::Lua::new(
+            remedy_lua::Limits::default().hash_seed(super::common::TEST_SEED),
+            remedy_lua::Libs::ALL,
+        );
         lua.set_fast_loop(fast);
         let f = lua.load(src, "=t").unwrap();
         let out: Vec<String> = lua.call(f.value(), &[]).unwrap().iter().map(|v| format!("{v:?}")).collect();

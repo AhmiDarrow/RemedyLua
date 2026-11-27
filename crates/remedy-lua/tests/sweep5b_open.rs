@@ -156,7 +156,10 @@ fn run_of_floats(bits: u32, fill: usize, run: usize) -> String {
         }
     }
     let k = aimed.pop().unwrap_or_default();
-    format!("t = {{x = 1}} for i = 1, {fill} do t[i + 0.25] = i end for _, f in ipairs({{{}}}) do t[f] = f end k = {k:?}", list(&aimed))
+    format!(
+        "t = {{x = 1}} for i = 1, {fill} do t[i + 0.25] = i end for _, f in ipairs({{{}}}) do t[f] = f end k = {k:?}",
+        list(&aimed)
+    )
 }
 
 /// The longest free walk now: `fill` plain keys, then keys aimed at both homes of one pair
@@ -178,7 +181,10 @@ fn chain_of_floats(bits: u32, fill: usize, seeds: usize) -> String {
     let n = PAIR_FULL + seeds - 1;
     let mut aimed = aimed_floats(&ss, bits, home, n + 1);
     let k = aimed.pop().unwrap_or_default();
-    format!("t = {{}} for i = 1, {fill} do t[i + 0.25] = i end for _, f in ipairs({{{}}}) do t[f] = f end k = {k:?}", list(&aimed))
+    format!(
+        "t = {{}} for i = 1, {fill} do t[i + 0.25] = i end for _, f in ipairs({{{}}}) do t[f] = f end k = {k:?}",
+        list(&aimed)
+    )
 }
 
 /// `m` `__index` chains of 1,999 distinct small tables (16 slots) each holding the same
@@ -214,10 +220,19 @@ pub(crate) fn index_chains(m: usize, aimed: bool) -> (String, String) {
 fn s5b_open_aimed_keys_are_metered() {
     let cases = [
         (run_of_floats(14, 6200, 150), "local x = t[k]"),
-        (format!("{} setmetatable(t, {{__index = t}})", run_of_floats(14, 6200, 150)), "pcall(function() return t[k] end)"),
+        (
+            format!("{} setmetatable(t, {{__index = t}})", run_of_floats(14, 6200, 150)),
+            "pcall(function() return t[k] end)",
+        ),
         (chain_of_floats(14, 6200, 1), "local x = t[k]"),
-        (format!("{} setmetatable(t, {{__index = t}})", chain_of_floats(14, 6200, 1)), "pcall(function() return t[k] end)"),
-        (format!("{} setmetatable(t, {{__index = t}})", chain_of_floats(5, 2, 1)), "pcall(function() return t[k] end)"),
+        (
+            format!("{} setmetatable(t, {{__index = t}})", chain_of_floats(14, 6200, 1)),
+            "pcall(function() return t[k] end)",
+        ),
+        (
+            format!("{} setmetatable(t, {{__index = t}})", chain_of_floats(5, 2, 1)),
+            "pcall(function() return t[k] end)",
+        ),
     ];
     for fast in [true, false] {
         let mut bad = Vec::new();
@@ -258,7 +273,11 @@ pub(crate) fn measured(src: &str, seed: u64, fast: bool) -> (String, u64, usize)
 #[test]
 fn s5b_open_walks_past_the_bound_are_fuel() {
     let aimed = chain_of_floats(5, 1, 2);
-    let lookups = |key: &str| format!("{aimed} local q, n = {key}, 0 for i = 1, 3000 do if t[q] == nil then n = n + 1 end end return n");
+    let lookups = |key: &str| {
+        format!(
+            "{aimed} local q, n = {key}, 0 for i = 1, 3000 do if t[q] == nil then n = n + 1 end end return n"
+        )
+    };
     for fast in [true, false] {
         // `k` is `CHAIN_FREE + 1` steps down the longer chain: 1 charged per lookup.
         let (r1, f_aimed, _) = measured(&lookups("k"), TEST_SEED, fast);
@@ -282,7 +301,12 @@ fn s5b_open_walks_past_the_bound_are_fuel() {
 /// results and fuel with the fast loop on and off.
 #[test]
 fn s5b_open_aimed_keys_match_c_lua_and_the_full_path() {
-    for setup in [chain_of_floats(14, 6200, 1), chain_of_floats(5, 1, 2), chain_of_floats(6, 20, 2), run_of_floats(14, 6200, 150)] {
+    for setup in [
+        chain_of_floats(14, 6200, 1),
+        chain_of_floats(5, 1, 2),
+        chain_of_floats(6, 20, 2),
+        run_of_floats(14, 6200, 150),
+    ] {
         let p = format!(
             "{setup} local u = setmetatable({{}}, {{__index = t}}) local n = 0 \
              for i = 1, 50 do if u[k] == nil then n = n + 1 end if t[k] == nil then n = n + 1 end end \
@@ -404,7 +428,8 @@ fn probe_dram() {
     for fast in [true, false] {
         let base = baseline(fast);
         for (name, probe) in [("plain", &plain), ("aimed", &absent)] {
-            let mut lua = Lua::new(Limits::default().memory(1 << 30).fuel(1 << 40).hash_seed(TEST_SEED), Libs::ALL);
+            let mut lua =
+                Lua::new(Limits::default().memory(1 << 30).fuel(1 << 40).hash_seed(TEST_SEED), Libs::ALL);
             lua.set_fast_loop(fast);
             for (g, b) in [("KEYS", &keys), ("PROBE", probe)] {
                 let s = lua.create_string(b).unwrap();
@@ -424,7 +449,11 @@ fn probe_dram() {
             let fuel = (left - lua.fuel_left()) as f64;
             let ns = el / fuel;
             println!("  {:.1} ns per lookup, {:.2} fuel per lookup", el / 1e6, fuel / 1e6);
-            println!("fast {fast} 2^{bits} {} chains of {chain}: {name} {:.1}x ({ns:.1} ns/unit)", picked.len(), ns / base);
+            println!(
+                "fast {fast} 2^{bits} {} chains of {chain}: {name} {:.1}x ({ns:.1} ns/unit)",
+                picked.len(),
+                ns / base
+            );
         }
     }
 }

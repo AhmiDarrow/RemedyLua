@@ -17,7 +17,10 @@ use remedy_lua::{Error, Libs, Limits, Lua, Value};
 // ---------------------------------------------------------------- helpers
 
 /// Runs `f` on a worker thread; `Err` when it panicked or did not finish in `secs`.
-fn bounded<T: Send + 'static>(secs: u64, f: impl FnOnce() -> T + Send + 'static) -> Result<(T, Duration), String> {
+fn bounded<T: Send + 'static>(
+    secs: u64,
+    f: impl FnOnce() -> T + Send + 'static,
+) -> Result<(T, Duration), String> {
     // (Never detached: `common::with_deadline`.)
     let r = super::common::with_deadline(16 << 20, Duration::from_secs(secs), move || {
         let start = Instant::now();
@@ -28,7 +31,10 @@ fn bounded<T: Send + 'static>(secs: u64, f: impl FnOnce() -> T + Send + 'static)
         Some(Ok(v)) => Ok(v),
         Some(Err(p)) => Err(format!(
             "PANIC: {}",
-            p.downcast_ref::<String>().cloned().or_else(|| p.downcast_ref::<&str>().map(|s| (*s).to_owned())).unwrap_or_default()
+            p.downcast_ref::<String>()
+                .cloned()
+                .or_else(|| p.downcast_ref::<&str>().map(|s| (*s).to_owned()))
+                .unwrap_or_default()
         )),
         None => Err(format!("HANG: still running after {secs} s")),
     }
@@ -130,8 +136,42 @@ impl Rng {
     }
 }
 
-const KEYS: &[&str] = &["1", "2", "3", "'a'", "'b'", "'__index'", "ls", "ls2", "2.0", "-0.0", "x", "t", "true", "#t + 1", "k", "'k' .. x % 7", "mm"];
-const VALS: &[&str] = &["1", "x", "nil", "'v'", "ls", "t", "u", "f", "2.5", "{}", "{1, 2}", "false", "s", "math.maxinteger", "mt"];
+const KEYS: &[&str] = &[
+    "1",
+    "2",
+    "3",
+    "'a'",
+    "'b'",
+    "'__index'",
+    "ls",
+    "ls2",
+    "2.0",
+    "-0.0",
+    "x",
+    "t",
+    "true",
+    "#t + 1",
+    "k",
+    "'k' .. x % 7",
+    "mm",
+];
+const VALS: &[&str] = &[
+    "1",
+    "x",
+    "nil",
+    "'v'",
+    "ls",
+    "t",
+    "u",
+    "f",
+    "2.5",
+    "{}",
+    "{1, 2}",
+    "false",
+    "s",
+    "math.maxinteger",
+    "mt",
+];
 
 fn stmt(r: &mut Rng, depth: usize) -> String {
     let k = r.pick(KEYS);
@@ -223,7 +263,10 @@ fn fuzz_one(src: &str, limits: Limits, stress: bool) -> Result<(), String> {
         let r = describe(&mut lua, &s);
         let used = (limits.fuel.saturating_sub(lua.fuel_left()), lua.memory_used());
         lua.set_limits(Limits::default().fuel(1_000_000));
-        let after = describe(&mut lua, "local t = {} for i = 1, 100 do t[i] = i .. '' end return #t, #table.concat(t)");
+        let after = describe(
+            &mut lua,
+            "local t = {} for i = 1, 100 do t[i] = i .. '' end return #t, #table.concat(t)",
+        );
         (r, used, after)
     };
     let ((a, b), _) = bounded(30, move || super::common::small_stack(move || (run(true), run(false))))?;
@@ -254,7 +297,10 @@ fn hostile_fuzz_fast_vs_full() {
         };
         let stress = r.below(16) == 0;
         if let Err(e) = fuzz_one(&src, limits, stress) {
-            println!("FAIL #{i} (fuel {}, memory {}, stress {stress}): {e}\n{src}\n", limits.fuel, limits.memory);
+            println!(
+                "FAIL #{i} (fuel {}, memory {}, stress {stress}): {e}\n{src}\n",
+                limits.fuel, limits.memory
+            );
             fails.push(i);
             if fails.len() >= 3 {
                 break;
@@ -299,16 +345,20 @@ fn state_usable_after_limits_in_new_paths() {
                 out
             })
             .unwrap_or_else(|e| panic!("{e}: {a}"));
-            assert!(r[0].starts_with("limit") || r[0].starts_with("ok Bool(false)"), "fast {fast}: {a}: {r:?}");
+            assert!(
+                r[0].starts_with("limit") || r[0].starts_with("ok Bool(false)"),
+                "fast {fast}: {a}: {r:?}"
+            );
             assert_eq!(r[4], "ok Int(1000)", "fast {fast}: state unusable after {a}: {r:?}");
             for x in &r[1..4] {
-                assert!(x.starts_with("ok dead") || x.starts_with("ok suspended") || x.starts_with("limit"), "fast {fast}: {a}: {r:?}");
+                assert!(
+                    x.starts_with("ok dead") || x.starts_with("ok suspended") || x.starts_with("limit"),
+                    "fast {fast}: {a}: {r:?}"
+                );
             }
         }
     }
 }
-
-
 
 // ---------------------------------------------------------------- findings
 
@@ -326,7 +376,9 @@ fn sec2_1_long_key_compared_once() {
         "local n = 0 while true do for k, v in next, t, s2 do n = n + 1 end end",
         "local n = 0 while true do n = n + (rawget(t, s2) or 0) end",
     ] {
-        let src = format!("local s = string.rep('x', 1e6) local t = {{[s] = 1, a = 2}} local s2 = string.rep('x', 1e6) {body}");
+        let src = format!(
+            "local s = string.rep('x', 1e6) local t = {{[s] = 1, a = 2}} local s2 = string.rep('x', 1e6) {body}"
+        );
         let (r, _) = both(&src, fuel(1_000_000), 8);
         assert_eq!(r, "limit Fuel", "{body}");
     }
@@ -347,7 +399,9 @@ fn sec2_1_long_key_compared_once() {
 // 4 units per replacement through a table or function.
 #[test]
 fn sec2_2_patterns_charge_their_work() {
-    let used = |body: &str| both(&format!("local s = string.rep('a', 10000) {body} return 1"), fuel(50_000_000), 20).1;
+    let used = |body: &str| {
+        both(&format!("local s = string.rep('a', 10000) {body} return 1"), fuel(50_000_000), 20).1
+    };
     assert!(used("local x = s:gsub('a', {a = 'bb'})") >= 10_000 * 4, "gsub with a table");
     assert!(used("local x = s:gsub('a', function(c) return c end)") >= 10_000 * 4, "gsub with a function");
     assert!(used("local x = s:gsub('a', 'b')") >= 10_000 / 2, "gsub with a string");
@@ -451,9 +505,17 @@ end"#,
 // bytes).
 #[test]
 fn sec2_4_format_charges_what_it_reads() {
-    let (r, _) = both("local s = string.rep('a', 1e6) while true do local x = string.format('%.3s', s) end", fuel(3_000_000), 10);
+    let (r, _) = both(
+        "local s = string.rep('a', 1e6) while true do local x = string.format('%.3s', s) end",
+        fuel(3_000_000),
+        10,
+    );
     assert_eq!(r, "limit Fuel");
-    let (r, _) = both("local s = string.rep(string.char(0), 1e6) while true do local x = string.format('%q', s) end", fuel(3_000_000), 10);
+    let (r, _) = both(
+        "local s = string.rep(string.char(0), 1e6) while true do local x = string.format('%q', s) end",
+        fuel(3_000_000),
+        10,
+    );
     assert_eq!(r, "limit Fuel");
     let (r, _) = both(
         "local t = {} for i = 0, 255 do t[#t + 1] = string.char(i) .. '1' .. string.char(i) end \
@@ -470,12 +532,24 @@ fn sec2_4_format_charges_what_it_reads() {
 // Fix: it counts the bytes it compares and stops once past the fuel left.
 #[test]
 fn sec2_5_plain_find_charges_compares() {
-    let (r, _) = both("local s = string.rep('a', 1e6) local p = string.rep('a', 1e4) .. 'b' while true do local x = s:find(p, 1, true) end", fuel(3_000_000), 10);
+    let (r, _) = both(
+        "local s = string.rep('a', 1e6) local p = string.rep('a', 1e4) .. 'b' while true do local x = s:find(p, 1, true) end",
+        fuel(3_000_000),
+        10,
+    );
     assert_eq!(r, "limit Fuel");
     // One call over the largest strings stops at the fuel, not at the end of its work.
-    let (r, _) = both("local s = string.rep('a', 8e6) local p = string.rep('a', 4e6) .. 'b' return s:find(p, 1, true)", fuel(1_000_000), 10);
+    let (r, _) = both(
+        "local s = string.rep('a', 8e6) local p = string.rep('a', 4e6) .. 'b' return s:find(p, 1, true)",
+        fuel(1_000_000),
+        10,
+    );
     assert_eq!(r, "limit Fuel");
-    let (r, _) = both("return ('hello world'):find('o w', 1, true), ('abc'):find('', 4, true), ('abc'):find('c', -1, true)", fuel(10_000), 10);
+    let (r, _) = both(
+        "return ('hello world'):find('o w', 1, true), ('abc'):find('', 4, true), ('abc'):find('c', -1, true)",
+        fuel(10_000),
+        10,
+    );
     assert_eq!(r, "ok Int(5),Int(4),Int(3),Int(3)");
 }
 
@@ -487,8 +561,13 @@ fn sec2_5_plain_find_charges_compares() {
 // gsub) and a match's step budget is capped by the fuel left.
 #[test]
 fn sec2_6_pattern_errors_are_paid_for() {
-    for call in ["pcall(string.find, s, 'a*a*a*a*b')", "pcall(string.gsub, s, 'a*a*a*a*b', '')", "pcall(function() for x in s:gmatch('a*a*a*a*b') do end end)"] {
-        let (r, _) = both(&format!("local s = string.rep('a', 1e5) while true do {call} end"), fuel(3_000_000), 10);
+    for call in [
+        "pcall(string.find, s, 'a*a*a*a*b')",
+        "pcall(string.gsub, s, 'a*a*a*a*b', '')",
+        "pcall(function() for x in s:gmatch('a*a*a*a*b') do end end)",
+    ] {
+        let (r, _) =
+            both(&format!("local s = string.rep('a', 1e5) while true do {call} end"), fuel(3_000_000), 10);
         assert_eq!(r, "limit Fuel", "{call}");
     }
     let (r, used) = both("return pcall(string.find, string.rep('a', 3e4), 'a*a*a*b')", fuel(10_000_000), 10);

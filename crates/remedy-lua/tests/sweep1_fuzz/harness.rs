@@ -26,7 +26,7 @@
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::time::Duration;
 
-use remedy_lua::{Dialect, Error, LimitKind, Libs, Limits, Lua};
+use remedy_lua::{Dialect, Error, Libs, LimitKind, Limits, Lua};
 
 pub const ORACLE_STEPS: u64 = 4_000_000;
 /// Fuel is counted differently from C Lua's hook steps; give RemedyLua far more, so a
@@ -244,7 +244,9 @@ fn lua_quote(src: &[u8]) -> String {
 
 pub fn wrap(src: &[u8], name: &str) -> String {
     let limits: Vec<String> = crate::common::C_LIMIT_ERRORS.iter().map(|m| lua_quote(m.as_bytes())).collect();
-    let head = WRAP_HEAD.replace("LIMITS_LIST", &limits.join(", ")).replace("LEFT_OUT", if all_libs() { LEFT_OUT_ALL } else { LEFT_OUT });
+    let head = WRAP_HEAD
+        .replace("LIMITS_LIST", &limits.join(", "))
+        .replace("LEFT_OUT", if all_libs() { LEFT_OUT_ALL } else { LEFT_OUT });
     format!("local SRC = {}\nlocal NAME = {}\n{head}{WRAP_TAIL}", lua_quote(src), lua_quote(name.as_bytes()))
 }
 
@@ -273,7 +275,8 @@ package.path, package.cpath, package.config, package.searchpath, package.loadlib
 package.searchers[3], package.searchers[4] = nil, nil";
 
 /// Every flag, `IO` and `ENV` included.
-const ALL_LIBS: Libs = Libs::ALL.union(Libs::DEBUG_INFO).union(Libs::REQUIRE).union(Libs::ENV).union(Libs::IO);
+const ALL_LIBS: Libs =
+    Libs::ALL.union(Libs::DEBUG_INFO).union(Libs::REQUIRE).union(Libs::ENV).union(Libs::IO);
 
 pub fn all_libs() -> bool {
     std::env::var_os("SWEEP1_ALL_LIBS").is_some()
@@ -318,7 +321,10 @@ pub fn remedy_raw(src: &[u8], name: &str, limits: Limits) -> (Outcome, u64) {
         if remedy_raw_with(src, name, limits, true).0.0.text != fast.0.text {
             return fast;
         }
-        let text = format!("<panic> fast/slow differ: {:?} {} {fast_mem} vs {:?} {} {slow_mem}", fast.0.text, fast.1, slow.0.text, slow.1);
+        let text = format!(
+            "<panic> fast/slow differ: {:?} {} {fast_mem} vs {:?} {} {slow_mem}",
+            fast.0.text, fast.1, slow.0.text, slow.1
+        );
         return (Outcome { class: Class::Panic, text }, fast.1);
     }
     fast
@@ -340,7 +346,11 @@ fn remedy_raw_with(src: &[u8], name: &str, limits: Limits, fast: bool) -> ((Outc
             if all_libs() {
                 let fs = crate::common::MemoryFiles::new();
                 lua.set_file_opener(Some(move |n: &str, m: &str| {
-                    if n == "sweep1.io" { fs.open(n, m) } else { Err(remedy_lua::IoError::new("No such file or directory", 2)) }
+                    if n == "sweep1.io" {
+                        fs.open(n, m)
+                    } else {
+                        Err(remedy_lua::IoError::new("No such file or directory", 2))
+                    }
                 }));
                 for k in ["HOME", "PATH"] {
                     lua.set_env(k, std::env::var(k).ok().as_deref().map(str::as_bytes));
@@ -353,7 +363,9 @@ fn remedy_raw_with(src: &[u8], name: &str, limits: Limits, fast: bool) -> ((Outc
             let out = match r {
                 Ok(v) => classify_text(v.first().and_then(|x| lua.to_string_lossy(*x)).unwrap_or_default()),
                 Err(Error::Limit(LimitKind::Fuel)) => Outcome { class: Class::Fuel, text: "<fuel>".into() },
-                Err(Error::Limit(LimitKind::Memory)) => Outcome { class: Class::Memory, text: "<memory>".into() },
+                Err(Error::Limit(LimitKind::Memory)) => {
+                    Outcome { class: Class::Memory, text: "<memory>".into() }
+                }
                 Err(e) => Outcome { class: Class::Host, text: format!("<host> {e}") },
             };
             // The state must stay usable after any outcome (with room to run again).
@@ -419,7 +431,10 @@ pub fn oracle_raw(src: &[u8]) -> Option<Result<String, String>> {
 /// on LR-19's shape (a segfault, `parity_26`), which in this process would end the driver.
 /// A crash is the error `<crash>`.
 fn oracle_in_child(src: &[u8]) -> Option<Result<String, String>> {
-    use std::{io::Write, process::{Command, Stdio}};
+    use std::{
+        io::Write,
+        process::{Command, Stdio},
+    };
     let mut c = Command::new(std::env::current_exe().unwrap())
         .args(["sweep1_fuzz::oracle_child", "--exact", "--ignored", "--nocapture", "--test-threads=1"])
         .stdin(Stdio::piped())
@@ -430,7 +445,11 @@ fn oracle_in_child(src: &[u8]) -> Option<Result<String, String>> {
     c.stdin.take().unwrap().write_all(src).unwrap();
     let out = c.wait_with_output().unwrap();
     let text = String::from_utf8_lossy(&out.stdout);
-    match text.split_once(CHILD_OPEN).and_then(|(_, r)| r.rsplit_once(CHILD_CLOSE)).map(|(r, _)| r.split_at(1)) {
+    match text
+        .split_once(CHILD_OPEN)
+        .and_then(|(_, r)| r.rsplit_once(CHILD_CLOSE))
+        .map(|(r, _)| r.split_at(1))
+    {
         Some(("O", t)) => Some(Ok(t.into())),
         Some(("E", t)) => Some(Err(t.into())),
         Some(_) => None,
@@ -445,7 +464,12 @@ pub const CHILD_CLOSE: &str = "}oracle\u{2}";
 /// Masks what legitimately differs: object addresses, NaN spellings, the `.rlua` chunk name.
 pub fn normalize(s: &str) -> String {
     // Known difference, reported once (sweep1 fuzz-eof-quote): RemedyLua says near '<eof>'.
-    let mut s = s.replace("-nan(ind)", "nan").replace("nan(ind)", "nan").replace("-nan", "nan").replace("t.rlua:", "t:").replace("near '<eof>'", "near <eof>");
+    let mut s = s
+        .replace("-nan(ind)", "nan")
+        .replace("nan(ind)", "nan")
+        .replace("-nan", "nan")
+        .replace("t.rlua:", "t:")
+        .replace("near '<eof>'", "near <eof>");
     for kind in ["table: ", "function: ", "thread: ", "userdata: ", "builtin: ", "MyType: "] {
         let mut out = String::with_capacity(s.len());
         let mut rest = s.as_str();
@@ -517,12 +541,23 @@ pub fn compare(ours: &Outcome, theirs: &Outcome) -> Option<String> {
 ///   the key `next` gives first under its random seed; up to three more runs, six for a
 ///   program that walks tables), and RemedyLua's differs only on lines that do (for a
 ///   program that walks tables, only with a line C Lua printed there in one of its runs);
-pub fn classify(src: &[u8], name: &str, c_src: &[u8], ours: &Outcome, theirs: &Outcome, sig: String) -> String {
+pub fn classify(
+    src: &[u8],
+    name: &str,
+    c_src: &[u8],
+    ours: &Outcome,
+    theirs: &Outcome,
+    sig: String,
+) -> String {
     // C Lua crashing on LR-19's shape (RemedyLua's result there is pinned, `parity_26`).
     if sig == "oracle-crash" && close_goto_shape(c_src) {
         return "expected:c-lua-close-goto-bug".into();
     }
-    if sig.starts_with("critical") || sig.starts_with("fuel:") || sig.starts_with("memory:") || sig.starts_with("oracle-") {
+    if sig.starts_with("critical")
+        || sig.starts_with("fuel:")
+        || sig.starts_with("memory:")
+        || sig.starts_with("oracle-")
+    {
         return sig;
     }
     let (la, lb): (Vec<&str>, Vec<&str>) = (ours.text.lines().collect(), theirs.text.lines().collect());
@@ -536,7 +571,9 @@ pub fn classify(src: &[u8], name: &str, c_src: &[u8], ours: &Outcome, theirs: &O
     }
     // C Lua stopped the whole program at one of its limits (its verdict is that error),
     // and everything it printed before is RemedyLua's too.
-    let verdict_limit = lb.last().is_some_and(|l| l.contains("=> ERR") && crate::common::C_LIMIT_ERRORS.iter().any(|m| l.contains(m)));
+    let verdict_limit = lb
+        .last()
+        .is_some_and(|l| l.contains("=> ERR") && crate::common::C_LIMIT_ERRORS.iter().any(|m| l.contains(m)));
     if theirs.class == Class::Runtime && verdict_limit {
         // (An empty output is an empty first line; RemedyLua may print more after the point
         // C Lua stopped at.)
@@ -571,9 +608,13 @@ pub fn classify(src: &[u8], name: &str, c_src: &[u8], ours: &Outcome, theirs: &O
     // 'setmetatable', LR-15). Every line that differs must differ only in one quoted name,
     // and the two names must hold the same function once the program has run.
     if la.len() == lb.len() {
-        let pairs: Vec<(String, String)> = la.iter().zip(&lb).filter(|(a, b)| a != b).filter_map(|(a, b)| quoted_name_swap(a, b)).collect();
+        let pairs: Vec<(String, String)> =
+            la.iter().zip(&lb).filter(|(a, b)| a != b).filter_map(|(a, b)| quoted_name_swap(a, b)).collect();
         let differing = la.iter().zip(&lb).filter(|(a, b)| a != b).count();
-        if differing > 0 && pairs.len() == differing && pairs.iter().all(|(x, y)| same_function(src, name, x, y)) {
+        if differing > 0
+            && pairs.len() == differing
+            && pairs.iter().all(|(x, y)| same_function(src, name, x, y))
+        {
             return "expected:name-alias".into();
         }
     }
@@ -586,7 +627,9 @@ pub fn classify(src: &[u8], name: &str, c_src: &[u8], ours: &Outcome, theirs: &O
     let walks = text.contains("pairs") || text.contains("next");
     // (Output that differs under its own seed, a clock's, says nothing of the seed: LR-24.)
     let run = |l: Limits| remedy_raw(src, name, l).0.text != ours.text;
-    let varies = !walks && !run(remedy_limits()) && [1u64, 2, 0xdead_beef].into_iter().any(|seed| run(remedy_limits().hash_seed(seed)));
+    let varies = !walks
+        && !run(remedy_limits())
+        && [1u64, 2, 0xdead_beef].into_iter().any(|seed| run(remedy_limits().hash_seed(seed)));
     if (varies || walks) && ours.class == theirs.class && permutation(&ours.text, &theirs.text) {
         return "expected:order".into();
     }
@@ -607,7 +650,8 @@ pub fn classify(src: &[u8], name: &str, c_src: &[u8], ours: &Outcome, theirs: &O
     // value must still be one some run printed, and the runs must disagree.
     if walks {
         for seed in [1u64, 2, 3, 4, 5, 6, 7, 0xdead_beef] {
-            let twins: &[(&[u8], &str)] = if src == c_src { &[(src, name)] } else { &[(src, name), (c_src, "=t")] };
+            let twins: &[(&[u8], &str)] =
+                if src == c_src { &[(src, name)] } else { &[(src, name), (c_src, "=t")] };
             for &(code, nm) in twins {
                 let o = remedy_raw(code, nm, remedy_limits().hash_seed(seed)).0;
                 runs.push(o.text.lines().map(str::to_owned).collect());
@@ -633,9 +677,13 @@ pub fn classify(src: &[u8], name: &str, c_src: &[u8], ours: &Outcome, theirs: &O
     let moved: Vec<&str> = moved.lines().collect();
     let digits_only = |a: &str, b: &str| {
         let d: Vec<(char, char)> = a.chars().zip(b.chars()).filter(|(x, y)| x != y).collect();
-        a.chars().count() == b.chars().count() && d.len() >= 4 && d.iter().all(|(x, y)| x.is_ascii_hexdigit() && y.is_ascii_hexdigit())
+        a.chars().count() == b.chars().count()
+            && d.len() >= 4
+            && d.iter().all(|(x, y)| x.is_ascii_hexdigit() && y.is_ascii_hexdigit())
     };
-    if la.len() == lb.len() && moved.len() == lb.len() && moved != lb
+    if la.len() == lb.len()
+        && moved.len() == lb.len()
+        && moved != lb
         && la.iter().zip(&lb).zip(&moved).all(|((a, b), m)| a == b || (m != b && digits_only(a, b)))
     {
         return "expected:c-address".into();
@@ -718,13 +766,17 @@ pub fn close_goto_shape(c_src: &[u8]) -> bool {
             _ => {}
         }
     }
-    let is_close_local = |i: usize| t(i) == "local" && t(i + 2) == "<" && t(i + 3) == "close" && t(i + 4) == ">";
+    let is_close_local =
+        |i: usize| t(i) == "local" && t(i + 2) == "<" && t(i + 3) == "close" && t(i + 4) == ">";
     for g in 0..toks.len() {
         if t(g) != "goto" || toks.get(g + 1).is_none_or(|k| !matches!(k.kind, Kind::Name)) {
             continue;
         }
         let name = t(g + 1);
-        let Some(l) = (g + 2..toks.len()).find(|&i| t(i) == "::" && t(i + 1) == name && t(i + 2) == "::") else { continue };
+        let Some(l) = (g + 2..toks.len()).find(|&i| t(i) == "::" && t(i + 1) == name && t(i + 2) == "::")
+        else {
+            continue;
+        };
         let dl = depth[l];
         // The label ends its block.
         if !matches!(t(l + 3), "end" | "until" | "elseif" | "else") {
@@ -755,7 +807,8 @@ pub fn close_goto_shape(c_src: &[u8]) -> bool {
             }
             let Some(eq) = (i..l).find(|&j| t(j) == "=") else { return false };
             let v = &toks[eq + 1];
-            let literal = matches!(v.kind, Kind::Num | Kind::Str) || matches!(v.text.as_str(), "true" | "false" | "nil");
+            let literal = matches!(v.kind, Kind::Num | Kind::Str)
+                || matches!(v.text.as_str(), "true" | "false" | "nil");
             !literal || !matches!(t(eq + 2), "" | ";" | "::" | "local" | "end")
         });
         if runtime_local {
@@ -804,7 +857,10 @@ fn close_goto_symptom(ours: &[&str], theirs: &[&str]) -> bool {
     };
     // (The error may also be a segment's, mid-output: the misplaced jump calls a nil value,
     // `seg N error "... attempt to call a nil value"`, where RemedyLua's segment ran.)
-    let err = |l: &str| l.contains("(metamethod 'close')") || (l.contains(" error \"") && l.contains("attempt to call a nil value"));
+    let err = |l: &str| {
+        l.contains("(metamethod 'close')")
+            || (l.contains(" error \"") && l.contains("attempt to call a nil value"))
+    };
     if let Some(i) = theirs.iter().position(|l| err(l)) {
         return within(&theirs[..i]);
     }
@@ -822,7 +878,8 @@ pub fn quoted_name_swap(a: &str, b: &str) -> Option<(String, String)> {
     let (ra, rb) = (&a[start..], &b[start..]);
     let (ea, eb) = (ra.find('\'')?, rb.find('\'')?);
     let (x, y) = (&ra[..ea], &rb[..eb]);
-    let name = |n: &str| !n.is_empty() && n.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_' || c == b'.');
+    let name =
+        |n: &str| !n.is_empty() && n.bytes().all(|c| c.is_ascii_alphanumeric() || c == b'_' || c == b'.');
     (name(x) && name(y) && x != y && ra[ea..] == rb[eb..]).then(|| (x.to_owned(), y.to_owned()))
 }
 
@@ -878,7 +935,12 @@ fn first_diff(a: &str, b: &str) -> (String, String) {
 /// Both lines report an error and differ only in the message text.
 fn is_message_only(a: &str, b: &str) -> bool {
     let (a, b) = (a.trim_start_matches('\u{1}'), b.trim_start_matches('\u{1}'));
-    let err = |s: &str| s.starts_with("=> ERR") || s.starts_with("=> SYNTAX") || s.contains(" error \"") || s.starts_with("print ");
+    let err = |s: &str| {
+        s.starts_with("=> ERR")
+            || s.starts_with("=> SYNTAX")
+            || s.contains(" error \"")
+            || s.starts_with("print ")
+    };
     err(a) && err(b) && a.split(' ').next() == b.split(' ').next()
 }
 

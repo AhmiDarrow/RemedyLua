@@ -83,8 +83,10 @@ fn levels(lua: &mut Lua, t: ThreadRef) -> Result<Vec<Act>, LuaError> {
     let bound = thread_state(lua, t).map_or(0, |ts| ts.frames.len()) + natives + 2;
     lua.charge((bound / LEVELS_PER_FUEL) as u64 + 1)?;
     let err_closing = if running { lua.err_closing } else { None };
-    let extra =
-        lua.handler_native.filter(|((nt, _, _), _)| running && *nt == t).map(|((_, d, slot), under)| (d, slot, under));
+    let extra = lua
+        .handler_native
+        .filter(|((nt, _, _), _)| running && *nt == t)
+        .map(|((_, d, slot), under)| (d, slot, under));
     // S6-2: a run of nested protected calls (`pcall(pcall, ..., f)`) is one frame but as many
     // activations: those past the bound are paid before they are listed.
     let count = thread_state(lua, t).map_or(0, |ts| lua.activation_count(ts, t, err_closing, extra));
@@ -107,9 +109,7 @@ fn levels(lua: &mut Lua, t: ThreadRef) -> Result<Vec<Act>, LuaError> {
             }
             // One that died by an error raised in a library function keeps that function as
             // a level, above the frame that called it (LIBS-4).
-            if !running
-                && let Some((d, slot, _)) = ts.died_in
-            {
+            if !running && let Some((d, slot, _)) = ts.died_in {
                 let at = acts.iter().position(|a| matches!(a, Act::Lua(i) if *i >= d)).unwrap_or(acts.len());
                 acts.insert(at, Act::C(Some(slot)));
             }
@@ -149,7 +149,9 @@ fn slot_func(ts: &ThreadState, slot: usize) -> Option<Value> {
 fn metamethod_name(i: &Instr) -> Option<&'static str> {
     use crate::bytecode::ArithOp as A;
     Some(match i {
-        Instr::SelfK { .. } | Instr::GetTabUp { .. } | Instr::GetTable { .. } | Instr::GetTableK { .. } => "index",
+        Instr::SelfK { .. } | Instr::GetTabUp { .. } | Instr::GetTable { .. } | Instr::GetTableK { .. } => {
+            "index"
+        }
         Instr::SetTabUp { .. } | Instr::SetTable { .. } | Instr::SetTableK { .. } => "newindex",
         Instr::Add { .. } | Instr::AddK { .. } | Instr::AddI { sub: false, .. } => "add",
         Instr::AddI { sub: true, .. } | Instr::Sub { .. } | Instr::SubK { .. } => "sub",
@@ -216,13 +218,19 @@ fn call_name(lua: &Lua, ts: &ThreadState, acts: &[Act], idx: usize) -> Option<(&
                 };
             }
             match f.kind {
-                crate::vm::FrameKind::Cont(c) if c.is_metamethod() => metamethod_name(ins).map(|n| ("metamethod", n.to_owned())),
+                crate::vm::FrameKind::Cont(c) if c.is_metamethod() => {
+                    metamethod_name(ins).map(|n| ("metamethod", n.to_owned()))
+                }
                 _ => None,
             }
         }
         Act::C(Some(slot)) => match ins {
-            Instr::Call { a, .. } | Instr::TailCall { a, .. } if cf.base + usize::from(*a) == *slot => named(*a),
-            Instr::TForCall { a, .. } if *slot >= cf.base + usize::from(*a) => Some(("for iterator", "for iterator".into())),
+            Instr::Call { a, .. } | Instr::TailCall { a, .. } if cf.base + usize::from(*a) == *slot => {
+                named(*a)
+            }
+            Instr::TForCall { a, .. } if *slot >= cf.base + usize::from(*a) => {
+                Some(("for iterator", "for iterator".into()))
+            }
             _ => None,
         },
         _ => None,

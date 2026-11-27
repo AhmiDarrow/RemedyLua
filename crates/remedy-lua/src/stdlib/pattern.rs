@@ -236,11 +236,8 @@ const fn item_sets() -> [[u64; 4]; 256] {
         let bit = CLASS_BIT[cl];
         let mut c = 0;
         while c < 256 {
-            let m = if bit == 0 {
-                c == cl
-            } else {
-                (CLASS_OF[c] & bit != 0) != (cl as u8).is_ascii_uppercase()
-            };
+            let m =
+                if bit == 0 { c == cl } else { (CLASS_OF[c] & bit != 0) != (cl as u8).is_ascii_uppercase() };
             if m {
                 t[cl][c >> 6] |= 1 << (c & 63);
             }
@@ -271,7 +268,19 @@ fn class_matches(c: u8, cl: u8) -> bool {
 impl MatchState {
     pub fn new(max_steps: u64, watch: Watch) -> Self {
         let caps = [(0, 0); MAX_CAPTURES];
-        MatchState { level: 0, caps, back: BackStack::new(), first: None, steps: 0, max_steps, watch, tick: 0, stop: None, sets: Vec::new(), ends: Vec::new() }
+        MatchState {
+            level: 0,
+            caps,
+            back: BackStack::new(),
+            first: None,
+            steps: 0,
+            max_steps,
+            watch,
+            tick: 0,
+            stop: None,
+            sets: Vec::new(),
+            ends: Vec::new(),
+        }
     }
 }
 
@@ -579,7 +588,8 @@ impl<'a> Matcher<'a> {
             }
             match self.p(p) {
                 b'(' => {
-                    let (np, what) = if self.p(p + 1) == b')' { (p + 2, CAP_POSITION) } else { (p + 1, CAP_UNFINISHED) };
+                    let (np, what) =
+                        if self.p(p + 1) == b')' { (p + 2, CAP_POSITION) } else { (p + 1, CAP_UNFINISHED) };
                     if self.level >= MAX_CAPTURES {
                         return Err(PatError("too many captures".into()));
                     }
@@ -593,8 +603,9 @@ impl<'a> Matcher<'a> {
                     continue;
                 }
                 b')' => {
-                    let Some(l) =
-                        (0..self.level).rev().find(|&i| self.caps.get(i).is_some_and(|c| c.1 == CAP_UNFINISHED))
+                    let Some(l) = (0..self.level)
+                        .rev()
+                        .find(|&i| self.caps.get(i).is_some_and(|c| c.1 == CAP_UNFINISHED))
                     else {
                         return Err(PatError("invalid pattern capture".into()));
                     };
@@ -630,7 +641,8 @@ impl<'a> Matcher<'a> {
                         !self.match_bracket(prev, p, ep - 1) && self.match_bracket(cur, p, ep - 1)
                     } else {
                         let set = self.class_set(p, ep - 1);
-                        let has = |c: u8| set.get(usize::from(c >> 6)).is_some_and(|w| w >> (c & 63) & 1 != 0);
+                        let has =
+                            |c: u8| set.get(usize::from(c >> 6)).is_some_and(|w| w >> (c & 63) & 1 != 0);
                         !has(prev) && has(cur)
                     };
                     if hit {
@@ -822,7 +834,11 @@ impl Captures {
             }
             let at = if i < CAPS_INLINE { self.caps.get(i) } else { self.more.get(i - CAPS_INLINE) };
             let (start, len) = at.copied().unwrap_or((0, 0));
-            if len == CAP_POSITION { Cap::Pos(start + 1) } else { Cap::Str(start, start + len.max(0) as usize) }
+            if len == CAP_POSITION {
+                Cap::Pos(start + 1)
+            } else {
+                Cap::Str(start, start + len.max(0) as usize)
+            }
         })
     }
 }
@@ -898,9 +914,28 @@ mod tests {
     #[test]
     fn sets_match_the_walk_for_every_byte() {
         let sets: &[&[u8]] = &[
-            b"[abc]", b"[^abc]", b"[a-z]", b"[z-a]", b"[-a]", b"[a-]", b"[%a]", b"[%A%d_]", b"[^%s%p]",
-            b"[%]]", b"[]]", b"[^]]", b"[%%-z]", b"[a-c-e]", b"[\x00-\x1f]", b"[%w%x%z%c%g%l%u]", b"[^%W]",
-            b"[%.%-%[]", b"[\x80-\xff]", b"[^\0]", b"[%1]", b"[a-%]",
+            b"[abc]",
+            b"[^abc]",
+            b"[a-z]",
+            b"[z-a]",
+            b"[-a]",
+            b"[a-]",
+            b"[%a]",
+            b"[%A%d_]",
+            b"[^%s%p]",
+            b"[%]]",
+            b"[]]",
+            b"[^]]",
+            b"[%%-z]",
+            b"[a-c-e]",
+            b"[\x00-\x1f]",
+            b"[%w%x%z%c%g%l%u]",
+            b"[^%W]",
+            b"[%.%-%[]",
+            b"[\x80-\xff]",
+            b"[^\0]",
+            b"[%1]",
+            b"[a-%]",
         ];
         let mut all: Vec<Vec<u8>> = sets.iter().map(|s| s.to_vec()).collect();
         // Raw bytes, including the high half and zero.
@@ -922,4 +957,3 @@ mod tests {
         }
     }
 }
-

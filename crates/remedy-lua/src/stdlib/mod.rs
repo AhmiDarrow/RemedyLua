@@ -13,8 +13,8 @@ mod os;
 mod pack;
 mod package;
 pub(crate) mod pattern;
-pub(crate) mod string;
 mod strformat;
+pub(crate) mod string;
 pub(crate) mod table;
 pub(crate) mod utf8;
 
@@ -258,12 +258,26 @@ pub(crate) const NATIVE_CHUNK: usize = 1 << 16;
 /// (about half a millisecond of fresh memory).
 pub(crate) const COPY_PIECE: usize = 1 << 20;
 
-const TYPE_NAMES: [&str; 8] = ["nil", "boolean", "number", "string", "table", "function", "userdata", "thread"];
+const TYPE_NAMES: [&str; 8] =
+    ["nil", "boolean", "number", "string", "table", "function", "userdata", "thread"];
 
 impl Names {
     pub fn new(heap: &mut Heap) -> Names {
         let mk = |h: &mut Heap, s: &str| h.intern(s.as_bytes()).unwrap_or(StrRef { idx: 0, generation: 0 });
-        Names { n: mk(heap, "n"), types: TYPE_NAMES.map(|t| mk(heap, t)), next_fn: None, ipairs_aux: None, utf8_iters: [None; 2], math_fast: [None; 6], math_mask: 0, table_fast: [None; 2], table_mask: 0, yield_fn: None, collect_fn: None, loaded: None }
+        Names {
+            n: mk(heap, "n"),
+            types: TYPE_NAMES.map(|t| mk(heap, t)),
+            next_fn: None,
+            ipairs_aux: None,
+            utf8_iters: [None; 2],
+            math_fast: [None; 6],
+            math_mask: 0,
+            table_fast: [None; 2],
+            table_mask: 0,
+            yield_fn: None,
+            collect_fn: None,
+            loaded: None,
+        }
     }
 
     pub fn mark(&self, heap: &mut Heap) {
@@ -426,9 +440,8 @@ impl Lua {
     pub(crate) fn check_int(&mut self, a: Args, i: usize) -> Result<i64, LuaError> {
         match self.tonumber_charged(self.arg(a, i))? {
             Some(Value::Int(n)) => Ok(n),
-            Some(Value::Num(f)) => {
-                crate::number::float_to_int(f).ok_or_else(|| LuaError::Arg(i + 1, "number has no integer representation".into()))
-            }
+            Some(Value::Num(f)) => crate::number::float_to_int(f)
+                .ok_or_else(|| LuaError::Arg(i + 1, "number has no integer representation".into())),
             _ => Err(self.type_error(a, i, "number")),
         }
     }
@@ -511,7 +524,13 @@ impl Lua {
     /// Appends bytes `from..to` of `s` to `out` a piece at a time (`COPY_PIECE`), looking at
     /// the host's interrupt and deadline between pieces: a 16 MiB string copied in one go
     /// ran 6 to 9 ms past a time limit (`string.pack('s')`, `string.format('%s')`).
-    pub(crate) fn extend_watched(&mut self, out: &mut Vec<u8>, s: StrRef, from: usize, to: usize) -> Result<(), LuaError> {
+    pub(crate) fn extend_watched(
+        &mut self,
+        out: &mut Vec<u8>,
+        s: StrRef,
+        from: usize,
+        to: usize,
+    ) -> Result<(), LuaError> {
         let to = to.min(self.heap.str_bytes(s).len());
         if from >= to {
             return Ok(());
@@ -571,14 +590,26 @@ impl Lua {
     }
 
     /// Returns a string made from bytes `from..to` of `s` (see `new_derived`).
-    pub(crate) fn ret_derived(&mut self, s: StrRef, from: usize, to: usize, fill: impl Fn(&[u8], &mut [u8])) -> R {
+    pub(crate) fn ret_derived(
+        &mut self,
+        s: StrRef,
+        from: usize,
+        to: usize,
+        fill: impl Fn(&[u8], &mut [u8]),
+    ) -> R {
         let v = self.new_derived(s, from, to, fill)?;
         self.ret1(v)
     }
 
     /// A string made from bytes `from..to` of `s` by `fill(source, dest)` (`dest` as long
     /// as the source).
-    pub(crate) fn new_derived(&mut self, s: StrRef, from: usize, to: usize, fill: impl Fn(&[u8], &mut [u8])) -> Result<Value, LuaError> {
+    pub(crate) fn new_derived(
+        &mut self,
+        s: StrRef,
+        from: usize,
+        to: usize,
+        fill: impl Fn(&[u8], &mut [u8]),
+    ) -> Result<Value, LuaError> {
         // The source's real length, so `dest` always matches it.
         let len = self.heap.str_bytes(s).get(from..to).map_or(0, <[u8]>::len);
         self.new_built(len, |h, dest| fill(h.str_bytes(s).get(from..to).unwrap_or_default(), dest))
@@ -614,7 +645,11 @@ impl Lua {
     /// A string of `len` bytes (within the string limit) written by `fill(heap, dest)`,
     /// copied once: a short one is built on the stack and interned; a long one is charged
     /// first, then built in its own buffer.
-    pub(crate) fn new_built(&mut self, len: usize, fill: impl Fn(&Heap, &mut [u8])) -> Result<Value, LuaError> {
+    pub(crate) fn new_built(
+        &mut self,
+        len: usize,
+        fill: impl Fn(&Heap, &mut [u8]),
+    ) -> Result<Value, LuaError> {
         if len <= crate::heap::SHORT_LEN {
             let mut buf = [0u8; crate::heap::SHORT_LEN];
             let dest = buf.get_mut(..len).unwrap_or_default();
@@ -640,7 +675,13 @@ impl Lua {
 
     /// `luaL_checkoption(L, i, def, names)`: the index of the name argument `i` gives (read
     /// up to a zero byte, as C compares it).
-    pub(crate) fn check_option(&mut self, a: Args, i: usize, def: Option<&str>, names: &[&str]) -> Result<usize, LuaError> {
+    pub(crate) fn check_option(
+        &mut self,
+        a: Args,
+        i: usize,
+        def: Option<&str>,
+        names: &[&str],
+    ) -> Result<usize, LuaError> {
         let name = match (self.arg(a, i), def) {
             (Value::Nil, Some(d)) => d.as_bytes().to_vec(),
             _ => {
@@ -649,7 +690,10 @@ impl Lua {
             }
         };
         names.iter().position(|n| n.as_bytes() == name).ok_or_else(|| {
-            let shown = String::from_utf8_lossy(name.get(..name.len().min(self.limits.error_len)).unwrap_or_default()).into_owned();
+            let shown = String::from_utf8_lossy(
+                name.get(..name.len().min(self.limits.error_len)).unwrap_or_default(),
+            )
+            .into_owned();
             LuaError::Arg(i + 1, format!("invalid option '{shown}'"))
         })
     }

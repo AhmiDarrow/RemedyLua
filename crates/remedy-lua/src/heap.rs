@@ -289,7 +289,13 @@ impl Mem {
 
     /// Records an operation that started at `start` (`trace_begin`), in the step under way.
     #[cold]
-    pub(crate) fn trace_note(&mut self, op: crate::gctrace::TraceOp, slots: u64, bytes: u64, start: Option<std::time::Duration>) {
+    pub(crate) fn trace_note(
+        &mut self,
+        op: crate::gctrace::TraceOp,
+        slots: u64,
+        bytes: u64,
+        start: Option<std::time::Duration>,
+    ) {
         if let (Some(t), Some(start)) = (self.trace.as_mut(), start) {
             let step = t.step;
             t.note(op, step, slots, bytes, 0, start);
@@ -298,7 +304,27 @@ impl Mem {
 
     /// A new account under `cap`.
     pub(crate) fn new(cap: usize, debt: isize) -> Mem {
-        Mem { used: 0, cap, debt, refused: false, headroom: 0, stress: false, pool: Pool::default(), slack: 0, cycle: 0, marking: false, obj_work: 0, watch: Watch::default(), deadline: None, fuel: usize::MAX, fuel_watch: None, fuel_watchable: false, partials: Vec::new(), freeing: Vec::new(), trace: None }
+        Mem {
+            used: 0,
+            cap,
+            debt,
+            refused: false,
+            headroom: 0,
+            stress: false,
+            pool: Pool::default(),
+            slack: 0,
+            cycle: 0,
+            marking: false,
+            obj_work: 0,
+            watch: Watch::default(),
+            deadline: None,
+            fuel: usize::MAX,
+            fuel_watch: None,
+            fuel_watchable: false,
+            partials: Vec::new(),
+            freeing: Vec::new(),
+            trace: None,
+        }
     }
 
     /// Bytes the live objects hold (what the collector paces on).
@@ -500,7 +526,8 @@ pub(crate) const UD_BASE: usize = std::mem::size_of::<UserData>() + 5 + 32;
 pub(crate) const ALLOC_OVERHEAD: usize = 16;
 /// A host handle's root (LR-17): its `Arc<()>` (counts and the allocation's header) and
 /// its entry in `Lua::roots`.
-pub(crate) const ROOT_BYTES: usize = 16 + ALLOC_OVERHEAD + std::mem::size_of::<(std::sync::Weak<()>, crate::value::Value)>();
+pub(crate) const ROOT_BYTES: usize =
+    16 + ALLOC_OVERHEAD + std::mem::size_of::<(std::sync::Weak<()>, crate::value::Value)>();
 /// A thread's own record: its state (boxed: the slab slot holds the pointer) and the box's
 /// allocation, at least 256. It was a flat 256 while the state had grown to 272 bytes
 /// (304 now): the charge follows the type.
@@ -510,17 +537,31 @@ pub(crate) const THREAD_BASE: usize = {
 };
 
 /// A host function: reentrant, so it may be called again from script code it calls.
-pub(crate) type HostFn = Arc<dyn Fn(&mut crate::vm::Vm, crate::vm::Args) -> Result<crate::vm::Flow, crate::vm::LuaError> + Send + Sync>;
+pub(crate) type HostFn = Arc<
+    dyn Fn(&mut crate::vm::Vm, crate::vm::Args) -> Result<crate::vm::Flow, crate::vm::LuaError> + Send + Sync,
+>;
 
 /// A function object.
 pub(crate) enum Func {
-    Lua { proto: u32, upvals: Box<[crate::value::FuncRef]> },
+    Lua {
+        proto: u32,
+        upvals: Box<[crate::value::FuncRef]>,
+    },
     /// `in_place`: 1 + its index in `stdlib::string::IN_PLACE` for a library function a
     /// call from Lua code runs in place (`Lua::call_in_place`), else 0.
-    Native { f: NativeFn, upvals: Box<[Value]>, name: &'static str, in_place: u8 },
+    Native {
+        f: NativeFn,
+        upvals: Box<[Value]>,
+        name: &'static str,
+        in_place: u8,
+    },
     /// `bytes`: what it is charged beyond `FUNC_BASE` (its closure's and name's allocations,
     /// LR-17), given back when it is swept.
-    Host { f: HostFn, name: Arc<str>, bytes: usize },
+    Host {
+        f: HostFn,
+        name: Arc<str>,
+        bytes: usize,
+    },
 }
 
 impl Default for Func {
@@ -865,7 +906,9 @@ impl<T> Chunked<T> {
         }
         let (lo, hi, il, ih) = if ka < kb { (ka, kb, ia, ib) } else { (kb, ka, ib, ia) };
         let (left, right) = self.chunks.split_at_mut(hi);
-        if let (Some(x), Some(y)) = (left.get_mut(lo).and_then(|c| c.get_mut(il)), right.first_mut().and_then(|c| c.get_mut(ih))) {
+        if let (Some(x), Some(y)) =
+            (left.get_mut(lo).and_then(|c| c.get_mut(il)), right.first_mut().and_then(|c| c.get_mut(ih)))
+        {
             std::mem::swap(x, y);
         }
     }
@@ -893,7 +936,6 @@ pub(crate) struct Slab<T> {
     /// Bytes a free slot holds, counted in `Mem::slack` (SEC-M5).
     pub(crate) slot_bytes: usize,
 }
-
 
 impl<T> Slab<T> {
     /// The object in slot `i` (a slot index, not a handle: no generation checked).
@@ -1172,7 +1214,6 @@ impl<T: Default> Slab<T> {
         self.at_mut(idx as usize)
     }
 
-
     pub fn live(&self, idx: u32, generation: u32) -> bool {
         self.gens.get(idx as usize) == Some(&generation)
             && self.color.get(idx as usize).is_some_and(|&c| c != FREE)
@@ -1289,8 +1330,13 @@ struct GrayPage {
 impl Gray {
     fn index(self) -> u32 {
         match self {
-            Self::Proto(i) | Self::Table(i) | Self::TablePart(i, _) | Self::Func(i)
-            | Self::Upval(i) | Self::Ud(i) | Self::Thread(i) => i,
+            Self::Proto(i)
+            | Self::Table(i)
+            | Self::TablePart(i, _)
+            | Self::Func(i)
+            | Self::Upval(i)
+            | Self::Ud(i)
+            | Self::Thread(i) => i,
         }
     }
 
@@ -1529,7 +1575,11 @@ fn walk(
         } else if slot_bits(s) == bits {
             if let Some(st) = strings.get(slot_idx(s))
                 && st.hash.get() == hash
-                && (if bytes.len() >= GROUP_FROM { st.bytes.len() == bytes.len() } else { *st.bytes == *bytes })
+                && (if bytes.len() >= GROUP_FROM {
+                    st.bytes.len() == bytes.len()
+                } else {
+                    *st.bytes == *bytes
+                })
             {
                 break Ok(slot_idx(s));
             }
@@ -1795,7 +1845,11 @@ impl Interner {
             Ok(c) if bytes.len() >= GROUP_FROM => {
                 // A string of the same whole hash and length: the one member these bytes can
                 // equal, compared once.
-                let best = if self.groups.is_empty() { c } else { self.group_best(strings, hash, bytes).unwrap_or(c) };
+                let best = if self.groups.is_empty() {
+                    c
+                } else {
+                    self.group_best(strings, hash, bytes).unwrap_or(c)
+                };
                 let other = strings.get(best).map_or(&[][..], |st| &st.bytes[..]);
                 let diff = first_diff(bytes, other, 0, bytes.len());
                 // SEC-M11: the bytes compared are paid for (with the probe steps). A miss
@@ -1892,7 +1946,10 @@ impl Interner {
                     // the lookup just before (none compares them again), else compared now.
                     let diff = match hint {
                         Some((h, l, m, at, ob)) if h == hash && l == b.len() && m == best => Some((at, ob)),
-                        _ => strings.get(best).and_then(|o| first_diff(b, &o.bytes, 0, b.len()).map(|at| (at, o.bytes.get(at).copied().unwrap_or(0)))),
+                        _ => strings.get(best).and_then(|o| {
+                            first_diff(b, &o.bytes, 0, b.len())
+                                .map(|at| (at, o.bytes.get(at).copied().unwrap_or(0)))
+                        }),
                     };
                     if let Some((at, ob)) = diff {
                         g.insert(idx, b, at, ob);
@@ -2063,7 +2120,10 @@ impl Interner {
             // frees and the allocator's merging of small blocks at each nearly doubled.)
             let mut v = std::mem::take(&mut self.old);
             // (Not after a shrink: the next regrow wants at most twice the slots.)
-            if v.capacity() >= self.spare_want(self.count + self.tombs) && v.capacity() > self.spare.capacity() && v.capacity() <= 2 * self.slots.len() {
+            if v.capacity() >= self.spare_want(self.count + self.tombs)
+                && v.capacity() > self.spare.capacity()
+                && v.capacity() <= 2 * self.slots.len()
+            {
                 v.clear();
                 self.spare = v;
             }
@@ -2428,7 +2488,6 @@ fn hash_finish(seed: u64, h: u64, tail: &[u8]) -> u64 {
     fold_mul(h ^ k2, k1 | 1).max(1)
 }
 
-
 impl Heap {
     pub fn new(cap: usize, seed: u64) -> Heap {
         // Each state's generations start elsewhere, so a handle from another state almost
@@ -2519,7 +2578,14 @@ impl Heap {
     #[inline]
     pub fn intern_hashed(&mut self, bytes: &[u8], hash: Option<u64>) -> Result<StrRef, ()> {
         let (seed, phase, sweep) = (self.seed, self.phase, self.sweep);
-        Self::intern_in(&mut self.strings, &mut self.interner, &mut self.mem, (seed, phase, sweep), bytes, hash)
+        Self::intern_in(
+            &mut self.strings,
+            &mut self.interner,
+            &mut self.mem,
+            (seed, phase, sweep),
+            bytes,
+            hash,
+        )
     }
 
     /// `intern` on the parts of the heap it uses (the fast loop holds the others borrowed):
@@ -2538,7 +2604,12 @@ impl Heap {
             Err(slot) => slot,
         };
         mem.charge(str_mem(bytes.len()))?;
-        let lstr = LStr { bytes: bytes.into(), hash: std::cell::Cell::new(hash), interned: true, twin: std::cell::Cell::new(None) };
+        let lstr = LStr {
+            bytes: bytes.into(),
+            hash: std::cell::Cell::new(hash),
+            interned: true,
+            twin: std::cell::Cell::new(None),
+        };
         let r = Self::alloc_str_in(strings, mem, phase, sweep, lstr);
         mem.used = mem.used.saturating_add(interner.insert(strings, slot, r.idx));
         Ok(r)
@@ -2557,14 +2628,25 @@ impl Heap {
     /// A long string whose memory (`str_mem(len)`) is charged already: its bytes are
     /// moved in, not copied.
     pub fn new_long_charged(&mut self, bytes: Box<[u8]>) -> StrRef {
-        self.alloc_str(LStr { bytes: bytes.into(), hash: std::cell::Cell::new(0), interned: false, twin: std::cell::Cell::new(None) })
+        self.alloc_str(LStr {
+            bytes: bytes.into(),
+            hash: std::cell::Cell::new(0),
+            interned: false,
+            twin: std::cell::Cell::new(None),
+        })
     }
 
     fn alloc_str(&mut self, s: LStr) -> StrRef {
         Self::alloc_str_in(&mut self.strings, &mut self.mem, self.phase, self.sweep, s)
     }
 
-    fn alloc_str_in(strings: &mut Slab<LStr>, mem: &mut Mem, phase: Phase, sweep: (u8, usize), s: LStr) -> StrRef {
+    fn alloc_str_in(
+        strings: &mut Slab<LStr>,
+        mem: &mut Mem,
+        phase: Phase,
+        sweep: (u8, usize),
+        s: LStr,
+    ) -> StrRef {
         let (idx, generation) = strings.alloc(s, mem, |i| Self::new_color(phase, sweep, 0, i));
         // Strings have nothing to traverse: gray is black for them.
         if let Some(c) = strings.color.get_mut(idx as usize)
@@ -2646,7 +2728,8 @@ impl Heap {
     /// long string, not interned, whose interned copy is not known (`Lua::settle_key`).
     #[inline]
     pub fn key_needs_settling(&self, r: StrRef) -> bool {
-        self.strings.get(r.idx).is_some_and(|s| !s.interned && s.bytes.len() > crate::stdlib::COPY_PIECE) && self.known_canon(r).is_none()
+        self.strings.get(r.idx).is_some_and(|s| !s.interned && s.bytes.len() > crate::stdlib::COPY_PIECE)
+            && self.known_canon(r).is_none()
     }
 
     /// Hashes the next `COPY_PIECE` bytes of `b` from `run` (the state and the bytes done,
@@ -2683,7 +2766,8 @@ impl Heap {
     pub fn canon_absent(&mut self, r: StrRef, best: Option<(u32, usize)>) -> StrRef {
         let Some(s) = self.strings.get(r.idx) else { return r };
         let (hash, len) = (s.hash.get(), s.bytes.len());
-        let best = best.map(|(m, at)| (m, at, self.strings.get(m).and_then(|o| o.bytes.get(at).copied()).unwrap_or(0)));
+        let best = best
+            .map(|(m, at)| (m, at, self.strings.get(m).and_then(|o| o.bytes.get(at).copied()).unwrap_or(0)));
         let slot = self.interner.slot_for_absent(hash, len, best);
         if let Some(s) = self.strings.get_mut(r.idx) {
             s.interned = true;
@@ -2695,7 +2779,10 @@ impl Heap {
     /// Notes interned string `idx` as the copy of `r` (its bytes compared equal).
     pub fn set_twin(&self, r: StrRef, idx: u32) {
         if let Some(s) = self.strings.get(r.idx) {
-            s.twin.set(Some(StrRef { idx, generation: self.strings.gens.get(idx as usize).copied().unwrap_or(0) }));
+            s.twin.set(Some(StrRef {
+                idx,
+                generation: self.strings.gens.get(idx as usize).copied().unwrap_or(0),
+            }));
         }
     }
 
@@ -2743,7 +2830,8 @@ impl Heap {
         // (One lookup: a second compared a long string's bytes again, S6T-EQ.)
         match self.find_interned(self.str_hash(s), &s.bytes) {
             Ok(i) => {
-                let t = StrRef { idx: i, generation: self.strings.gens.get(i as usize).copied().unwrap_or(0) };
+                let t =
+                    StrRef { idx: i, generation: self.strings.gens.get(i as usize).copied().unwrap_or(0) };
                 s.twin.set(Some(t));
                 self.keep(i)
             }
@@ -2783,7 +2871,9 @@ impl Heap {
         if a == b {
             return Some(true);
         }
-        let (Some(x), Some(y)) = (self.strings.get(a.idx), self.strings.get(b.idx)) else { return Some(false) };
+        let (Some(x), Some(y)) = (self.strings.get(a.idx), self.strings.get(b.idx)) else {
+            return Some(false);
+        };
         let (hx, hy) = (x.hash.get(), y.hash.get());
         if x.bytes.len() != y.bytes.len() || (x.interned && y.interned) || (hx != 0 && hy != 0 && hx != hy) {
             return Some(false);
@@ -2814,7 +2904,14 @@ impl Heap {
     }
 
     pub fn new_table(&mut self, arr: usize, hash: usize) -> Result<TableRef, ()> {
-        Self::new_table_in::<false>(&mut self.mem, &mut self.tables, &mut self.born, (self.phase, self.sweep, self.table_seed), arr, hash)
+        Self::new_table_in::<false>(
+            &mut self.mem,
+            &mut self.tables,
+            &mut self.born,
+            (self.phase, self.sweep, self.table_seed),
+            arr,
+            hash,
+        )
     }
 
     /// [`Heap::new_table`] on the fields it touches (for the fast loop, which holds the
@@ -2831,7 +2928,8 @@ impl Heap {
         // A bytecode constructor is in its destination register before collection can
         // run again. Under pressure its owners (including that stack) trace it like any
         // other table. Host and native constructors retain their normal birth color.
-        let phase = if REGISTER && born.trace_new_tables && phase == Phase::Propagate { Phase::Pause } else { phase };
+        let phase =
+            if REGISTER && born.trace_new_tables && phase == Phase::Propagate { Phase::Pause } else { phase };
         let color = |i| Self::new_color(phase, sweep, 1, i);
         let free = if mem.charge(cost).is_ok() {
             tables.take_free(mem, color)
@@ -2839,7 +2937,9 @@ impl Heap {
             // Free slab slots are already charged to this state. At the cap a
             // replacement only needs room for its net growth. Check the final
             // account before consuming the slot so a refusal changes no handle.
-            let fits = mem.used.checked_sub(tables.slot_bytes)
+            let fits = mem
+                .used
+                .checked_sub(tables.slot_bytes)
                 .and_then(|used| used.checked_add(cost))
                 .is_some_and(|used| used <= mem.cap.saturating_add(mem.headroom));
             if !fits {
@@ -2851,13 +2951,16 @@ impl Heap {
         };
         let slots = crate::table::hash_slots(hash);
         let walked = arr + slots;
-        let (arr, nodes, live) = (mem.pool_arr(arr), mem.pool_nodes(slots), crate::table::LiveBits::for_len(slots));
+        let (arr, nodes, live) =
+            (mem.pool_arr(arr), mem.pool_nodes(slots), crate::table::LiveBits::for_len(slots));
         let (idx, generation) = match free {
             Some((i, generation, t)) => {
                 (t.seed, t.arr, t.nodes, t.live) = (seed, arr.into(), nodes, live);
                 (i, generation)
             }
-            None => tables.alloc(Table { seed, arr: arr.into(), nodes, live, ..Table::default() }, mem, color),
+            None => {
+                tables.alloc(Table { seed, arr: arr.into(), nodes, live, ..Table::default() }, mem, color)
+            }
         };
         born.add(phase, Gray::Table(idx), walked);
         Ok(TableRef { idx, generation })
@@ -2894,11 +2997,18 @@ impl Heap {
         FuncRef { idx, generation }
     }
 
-    pub fn new_userdata(&mut self, data: Box<dyn Any + Send>, size: usize, meta: Option<TableRef>) -> Result<UdRef, ()> {
+    pub fn new_userdata(
+        &mut self,
+        data: Box<dyn Any + Send>,
+        size: usize,
+        meta: Option<TableRef>,
+    ) -> Result<UdRef, ()> {
         self.mem.charge(UD_BASE + size)?;
         let (phase, sweep) = (self.phase, self.sweep);
         let (idx, generation) =
-            self.uds.alloc(UserData { data: Some(data), meta, size, notify: None }, &mut self.mem, |i| Self::new_color(phase, sweep, 4, i));
+            self.uds.alloc(UserData { data: Some(data), meta, size, notify: None }, &mut self.mem, |i| {
+                Self::new_color(phase, sweep, 4, i)
+            });
         self.born.add(phase, Gray::Ud(idx), 0);
         Ok(UdRef { idx, generation })
     }
@@ -2912,7 +3022,8 @@ impl Heap {
     pub fn place_thread(&mut self, state: ThreadState) -> ThreadRef {
         let (phase, sweep) = (self.phase, self.sweep);
         let n = state.stack.len() + state.frames.len() + state.open_upvals.len();
-        let (idx, generation) = self.threads.alloc(Box::new(state), &mut self.mem, |i| Self::new_color(phase, sweep, 5, i));
+        let (idx, generation) =
+            self.threads.alloc(Box::new(state), &mut self.mem, |i| Self::new_color(phase, sweep, 5, i));
         self.born.add(phase, Gray::Thread(idx), n);
         ThreadRef { idx, generation }
     }
@@ -3292,8 +3403,10 @@ impl Heap {
     /// (S6GC-2e).
     fn traverse_table(&mut self, i: u32, from: usize) -> usize {
         let cycle = self.cycle;
-        let Some((meta, alen, total, snap)) =
-            self.tables.at(i as usize).map(|t| (t.meta, t.arr.live_len(), t.arr.live_len() + t.hash_len(), t.slots_at(cycle)))
+        let Some((meta, alen, total, snap)) = self
+            .tables
+            .at(i as usize)
+            .map(|t| (t.meta, t.arr.live_len(), t.arr.live_len() + t.hash_len(), t.slots_at(cycle)))
         else {
             return 1;
         };
@@ -3328,7 +3441,8 @@ impl Heap {
         // a mutator write between two child traversals can change which old value
         // survives this cycle (SEC7-G2). Whole tables span at most TABLE_CHUNK
         // slots. Array-only scans already visit their entries in index order.
-        if total > alen && self.gray.len() > gray_start + 1
+        if total > alen
+            && self.gray.len() > gray_start + 1
             && let Some(children) = self.gray.get_mut(gray_start..)
         {
             children.sort_unstable();
@@ -3416,8 +3530,15 @@ impl Heap {
                     // (The two parts' slices, not `hash_nodes().skip()`: a chain stepped
                     // node by node cost a chunk of a big table twice its marking.)
                     let k = named.len();
-                    named.get(nf.min(k)..nt.min(k)).unwrap_or_default().iter().for_each(|n| node(n, &mut todo));
-                    ints.get(nf.saturating_sub(k)..nt.saturating_sub(k)).unwrap_or_default().iter().for_each(|n| node(n, &mut todo));
+                    named
+                        .get(nf.min(k)..nt.min(k))
+                        .unwrap_or_default()
+                        .iter()
+                        .for_each(|n| node(n, &mut todo));
+                    ints.get(nf.saturating_sub(k)..nt.saturating_sub(k))
+                        .unwrap_or_default()
+                        .iter()
+                        .for_each(|n| node(n, &mut todo));
                 }
             }
             // Each object marked is a mark read at a random place (hash order follows no
@@ -3442,7 +3563,12 @@ impl Heap {
                 }
                 let (consts, children, walked): (Vec<Value>, Vec<u32>, usize) = match self.protos.get(i) {
                     Some(p) => (
-                        p.consts.iter().copied().chain(std::iter::once(p.chunk_name)).filter(|v| v.is_collectable()).collect(),
+                        p.consts
+                            .iter()
+                            .copied()
+                            .chain(std::iter::once(p.chunk_name))
+                            .filter(|v| v.is_collectable())
+                            .collect(),
                         p.protos.clone(),
                         p.consts.len(),
                     ),
@@ -3566,7 +3692,11 @@ impl Heap {
         // at a random place: in a big heap these miss the caches as reaching an object
         // does, so they pay `obj_work` too (by the live heap's size, never its layout;
         // S6GC-2d: an 800,000-entry chain ran at 3x a strong one per unit of fuel).
-        let work = if self.eph_active { todo.len() * (EPH_ENTRY_WORK + 4 * self.obj_work) } else { todo.len() * (1 + self.obj_work / 2) };
+        let work = if self.eph_active {
+            todo.len() * (EPH_ENTRY_WORK + 4 * self.obj_work)
+        } else {
+            todo.len() * (1 + self.obj_work / 2)
+        };
         // While marking is incremental, values are left to the atomic step, all of them:
         // marked here when their key happened to be marked already, whether a value was
         // reached then (and, a weak table or thread, traversed again there) or only there
@@ -3660,7 +3790,11 @@ impl Heap {
         if !self.paused {
             // (Past the budget, what the work took is the caller's to carry, `gc_mark_over`;
             // what the prepaid slots took, this.)
-            self.pace_carry = if empty { 0 } else { (done + pre + carry).saturating_sub(given).saturating_sub(done.saturating_sub(given)) };
+            self.pace_carry = if empty {
+                0
+            } else {
+                (done + pre + carry).saturating_sub(given).saturating_sub(done.saturating_sub(given))
+            };
         }
         (empty, done, cut, slots)
     }
@@ -3674,7 +3808,12 @@ impl Heap {
         self.propagate_paced(budget, stop, st)
     }
 
-    fn propagate_from(&mut self, budget: usize, stop: &Stop<'_>, st: Prop) -> (bool, usize, bool, usize, usize) {
+    fn propagate_from(
+        &mut self,
+        budget: usize,
+        stop: &Stop<'_>,
+        st: Prop,
+    ) -> (bool, usize, bool, usize, usize) {
         // (A chunk a rebuild sent back over is not charged again: counted in `redone` for
         // the looks at the stop all the same; `slots`: the slots scanned, apart from the
         // work, `part_step`.)
@@ -3705,7 +3844,10 @@ impl Heap {
                 }
                 // At the end of the host's poll, after a chunk (never inside one), a step
                 // that may pause does: its state kept for `propagate_resume`.
-                if self.pause_ok && done + pre < budget && self.poll_allow.is_some_and(|a| self.scanned.wrapping_sub(self.poll_start) >= a) {
+                if self.pause_ok
+                    && done + pre < budget
+                    && self.poll_allow.is_some_and(|a| self.scanned.wrapping_sub(self.poll_start) >= a)
+                {
                     self.prop_saved = Some((budget, Prop { done, next, redone, slots, pre, given, carry }));
                     self.paused = true;
                     return (false, done, false, slots, pre);
@@ -3737,7 +3879,10 @@ impl Heap {
     /// slots scanned and objects traversed since the poll started reach `poll_allow`.
     #[inline]
     pub(crate) fn poll_over(&self) -> bool {
-        self.pause_ok && self.poll_allow.is_some_and(|a| self.scanned.wrapping_sub(self.poll_start) + self.poll_objs >= a)
+        self.pause_ok
+            && self
+                .poll_allow
+                .is_some_and(|a| self.scanned.wrapping_sub(self.poll_start) + self.poll_objs >= a)
     }
 
     /// The objects made since the last step, traversed (paid for when they were made).
@@ -3766,7 +3911,8 @@ impl Heap {
     pub fn atomic(&mut self, stop: &Stop<'_>, allow: usize) -> Atomic {
         // (Paused at the end of the host's poll: its counters as they stood.)
         let saved = self.atomic_saved.take();
-        let [mut work, mut next, saved_next, saved_scanned, saved_looked] = saved.unwrap_or([0, ATOMIC_CHECK, 0, 0, 0]);
+        let [mut work, mut next, saved_next, saved_scanned, saved_looked] =
+            saved.unwrap_or([0, ATOMIC_CHECK, 0, 0, 0]);
         let stage = match self.atomic_stage.take() {
             None => {
                 let again = std::mem::take(&mut self.grayagain);
@@ -3828,7 +3974,11 @@ impl Heap {
                 // them ran on to the next look, 3.6 ms between two reads of the deadline,
                 // 18 ms in a call (SEC7-G1).
                 // (Its own count: the clearing below looks by its work alone.)
-                let (scanned, mut looked, mut mark_next) = if saved.is_some() { (saved_scanned, saved_looked, saved_next) } else { (self.scanned, self.scanned, next) };
+                let (scanned, mut looked, mut mark_next) = if saved.is_some() {
+                    (saved_scanned, saved_looked, saved_next)
+                } else {
+                    (self.scanned, self.scanned, next)
+                };
                 while let Some(g) = self.pop_gray() {
                     work += self.obj_work + self.traverse(g, None);
                     self.poll_objs += 1;
@@ -3838,7 +3988,8 @@ impl Heap {
                         look = true;
                         mark_next = work + seen + ATOMIC_CHECK;
                         next = work + ATOMIC_CHECK;
-                        self.most_between_looks = self.most_between_looks.max(self.scanned.wrapping_sub(looked));
+                        self.most_between_looks =
+                            self.most_between_looks.max(self.scanned.wrapping_sub(looked));
                         looked = self.scanned;
                         if stop.interrupted() {
                             self.abandon_cycle();
@@ -4003,7 +4154,17 @@ impl Heap {
         fn b<T>(v: &Vec<T>) -> usize {
             v.capacity() * std::mem::size_of::<T>()
         }
-        (self.ordered_gray.pages.len() + usize::from(self.ordered_gray.active.is_some())) * std::mem::size_of::<GrayPage>() + b(&self.gray) + b(&self.grayagain) + b(&self.weak) + b(&self.eph_links) + b(&self.trav_vals) + b(&self.trav_ups) + b(&self.mem.watch.moved) + b(&self.part_queue) + self.eph_waiting.capacity() * 16
+        (self.ordered_gray.pages.len() + usize::from(self.ordered_gray.active.is_some()))
+            * std::mem::size_of::<GrayPage>()
+            + b(&self.gray)
+            + b(&self.grayagain)
+            + b(&self.weak)
+            + b(&self.eph_links)
+            + b(&self.trav_vals)
+            + b(&self.trav_ups)
+            + b(&self.mem.watch.moved)
+            + b(&self.part_queue)
+            + self.eph_waiting.capacity() * 16
     }
 
     fn force_gray(&mut self, g: Gray) {
@@ -4203,7 +4364,8 @@ impl Heap {
         let mut work = 1;
         match slab {
             0 => {
-                if self.strings.color.get(i) == Some(&WHITE) && self.strings.at(i).is_some_and(|s| s.interned) {
+                if self.strings.color.get(i) == Some(&WHITE) && self.strings.at(i).is_some_and(|s| s.interned)
+                {
                     work += self.unintern(i as u32);
                 }
                 sweep!(self.strings, |s: &LStr| str_mem(s.bytes.len()))
@@ -4349,7 +4511,13 @@ pub(crate) fn parked_live(t: &ThreadState, protos: &Slab<Proto>) -> Option<usize
 /// counted was only the objects found, so a stack of a million integers (a vararg frame, a suspended coroutine) was walked twice a cycle
 /// for one unit, and with a short pause (a cycle every few kilobytes allocated) a script
 /// ran at 100x to 500x plain code per unit of fuel, growing with the stack it kept.
-fn collect_thread(t: &ThreadState, live: usize, todo: &mut Vec<Value>, protos: &mut Vec<u32>, ups: &mut Vec<u32>) -> usize {
+fn collect_thread(
+    t: &ThreadState,
+    live: usize,
+    todo: &mut Vec<Value>,
+    protos: &mut Vec<u32>,
+    ups: &mut Vec<u32>,
+) -> usize {
     let stack = t.stack.get(..live.min(t.stack.len())).unwrap_or_default();
     todo.extend(stack.iter().copied().filter(|v| v.is_collectable()));
     for f in &t.frames {
@@ -4476,14 +4644,16 @@ mod tests {
 
     fn long_key_miss(len: usize) {
         let mut fuels = Vec::new();
-        for (fast, get) in [(true, "t[b]"), (false, "t[b]"), (true, "rawget(t, b)"), (false, "rawget(t, b)")] {
+        for (fast, get) in [(true, "t[b]"), (false, "t[b]"), (true, "rawget(t, b)"), (false, "rawget(t, b)")]
+        {
             fuels.push(long_key_miss_in(len, fast, get));
         }
         assert!(fuels[0] == fuels[1] && fuels[2] == fuels[3], "{len}: fast and full differ: {fuels:?}");
     }
 
     fn long_key_miss_in(len: usize, fast: bool, get: &str) -> u64 {
-        let mut lua = Lua::new(Limits::default().memory(256 << 20).fuel(1 << 40).hash_seed(0x5eed), Libs::ALL);
+        let mut lua =
+            Lua::new(Limits::default().memory(256 << 20).fuel(1 << 40).hash_seed(0x5eed), Libs::ALL);
         lua.set_fast_loop(fast);
         let seed = lua.heap.seed;
         let fill = vec![b'x'; len - 16];
@@ -4508,7 +4678,10 @@ mod tests {
         let r = lua.call(f.value(), &[crate::Value::Table(t), sa, sb]).unwrap();
         assert_eq!(r, [crate::Value::Int(0)]);
         let per_lookup = (before - lua.fuel_left()) / 200;
-        assert!(per_lookup >= (len / 1024) as u64, "{get}, fast {fast}: {per_lookup} fuel a lookup comparing {len} bytes");
+        assert!(
+            per_lookup >= (len / 1024) as u64,
+            "{get}, fast {fast}: {per_lookup} fuel a lookup comparing {len} bytes"
+        );
         per_lookup
     }
 
@@ -4560,7 +4733,11 @@ mod tests {
             s.trim(&mut m, true);
             assert_eq!(s.slots(), 0, "round {round}");
             let kept = s.gens.len();
-            assert_eq!((m.slack, m.used), (kept * super::GEN_BYTES, kept * super::GEN_BYTES), "round {round}");
+            assert_eq!(
+                (m.slack, m.used),
+                (kept * super::GEN_BYTES, kept * super::GEN_BYTES),
+                "round {round}"
+            );
             stale.extend(handles);
             for &(i, g) in &stale {
                 assert!(!s.live(i, g), "round {round}: stale handle ({i}, {g}) live");
@@ -4716,7 +4893,11 @@ mod tests {
             if round % 6 == 0 {
                 assert_eq!(s.end_of_used(), len, "round {round}: trim cuts every free slot at the end");
             }
-            assert_eq!(s.free.len(), (0..len).filter(|&i| s.color.get(i) == Some(&super::FREE)).count(), "round {round}");
+            assert_eq!(
+                s.free.len(),
+                (0..len).filter(|&i| s.color.get(i) == Some(&super::FREE)).count(),
+                "round {round}"
+            );
             for from in (0..=len + 70).step_by(1 + (rnd() % 37) as usize) {
                 let want = (from..len).find(|&i| s.color.get(i) != Some(&super::FREE)).unwrap_or(len);
                 assert_eq!(s.next_used(from), want, "round {round} from {from}");
@@ -4802,7 +4983,8 @@ mod tests {
         for (cap, most) in [(512 << 20, super::POOL_BYTES), (256 << 10, (256 << 10) / 16)] {
             let mut lua = Lua::new(Limits::default().memory(cap), Libs::ALL);
             for _ in 0..20 {
-                lua.exec("local t = {} for i = 1, 400 do t[i] = {1, 2, 3, x = 1, y = 2, z = 3} end", "=t").unwrap();
+                lua.exec("local t = {} for i = 1, 400 do t[i] = {1, 2, 3, x = 1, y = 2, z = 3} end", "=t")
+                    .unwrap();
                 lua.exec("for _ = 1, 2 do repeat until collectgarbage('step') end", "=t").unwrap();
                 assert!(lua.heap.mem.pool.bytes <= most, "{} > {most}", lua.heap.mem.pool.bytes);
                 assert!(lua.heap.mem.slack >= lua.heap.mem.pool.bytes);

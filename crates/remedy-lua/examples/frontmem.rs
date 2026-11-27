@@ -23,7 +23,10 @@ fn main() {
     let before = hwm();
     let t = std::time::Instant::now();
     let outcome = match mode.as_str() {
-        "check" => format!("{:?}", remedy_lua::check(&src, name.trim_start_matches('=')).first().map(|d| d.message.clone())),
+        "check" => format!(
+            "{:?}",
+            remedy_lua::check(&src, name.trim_start_matches('=')).first().map(|d| d.message.clone())
+        ),
         "call" => {
             let mut lua = Lua::new(Limits::default().memory(limit).fuel(1 << 40), Libs::ALL);
             let s = lua.create_string(&src).unwrap();

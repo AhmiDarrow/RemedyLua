@@ -26,7 +26,8 @@ fn run(program: &str, fuel: u64, memory: usize, fast: bool) -> Run {
 
 /// `run`, optionally with a whole collection at every allocation.
 fn run_with(program: &str, fuel: u64, memory: usize, fast: bool, stress: bool) -> Run {
-    let mut lua = Lua::new(Limits::default().fuel(fuel).memory(memory).hash_seed(common::TEST_SEED), Libs::ALL);
+    let mut lua =
+        Lua::new(Limits::default().fuel(fuel).memory(memory).hash_seed(common::TEST_SEED), Libs::ALL);
     lua.set_fast_loop(fast);
     lua.set_gc_stress(stress);
     let r = match lua.exec(common::wrap(program), "=wrapper") {
@@ -611,9 +612,35 @@ local STR = {"abc", "aaa", "  hi there  ", "a1b2c3", "(x(y)z)", "", string.rep("
 local r = {}
 "#;
 
-const BINOPS: &[&str] = &["+", "-", "*", "/", "//", "%", "^", "&", "|", "~", "<<", ">>", "..", "==", "~=", "<", "<=", ">", ">=", "and", "or"];
+const BINOPS: &[&str] = &[
+    "+", "-", "*", "/", "//", "%", "^", "&", "|", "~", "<<", ">>", "..", "==", "~=", "<", "<=", ">", ">=",
+    "and", "or",
+];
 const UNOPS: &[&str] = &["-", "not ", "#", "~"];
-const LITS: &[&str] = &["1", "-1", "0", "2", "7", "255", "2.5", "0.0", "-0.0", "1e308", "9223372036854775807", "0x7fffffffffffffff", "\"10\"", "\"x\"", "true", "nil", "3.0", "-7", "63", "64", "1e15", "0.1"];
+const LITS: &[&str] = &[
+    "1",
+    "-1",
+    "0",
+    "2",
+    "7",
+    "255",
+    "2.5",
+    "0.0",
+    "-0.0",
+    "1e308",
+    "9223372036854775807",
+    "0x7fffffffffffffff",
+    "\"10\"",
+    "\"x\"",
+    "true",
+    "nil",
+    "3.0",
+    "-7",
+    "63",
+    "64",
+    "1e15",
+    "0.1",
+];
 
 fn stat(rng: &mut rng::Rng) -> String {
     let nv = 49; // #V (holes included)
@@ -621,41 +648,83 @@ fn stat(rng: &mut rng::Rng) -> String {
     let body = match rng.below(14) {
         0 => {
             let op = rng.pick(BINOPS);
-            format!("local a, b = V[{}], V[{}] local x for _ = 1, 2 do x = a {op} b end return x", v(rng), v(rng))
+            format!(
+                "local a, b = V[{}], V[{}] local x for _ = 1, 2 do x = a {op} b end return x",
+                v(rng),
+                v(rng)
+            )
         }
         1 => {
             let (op, l) = (rng.pick(BINOPS), rng.pick(LITS));
-            if rng.pct(50) { format!("local a = V[{}] return a {op} {l}", v(rng)) } else { format!("local a = V[{}] return {l} {op} a", v(rng)) }
+            if rng.pct(50) {
+                format!("local a = V[{}] return a {op} {l}", v(rng))
+            } else {
+                format!("local a = V[{}] return {l} {op} a", v(rng))
+            }
         }
         2 => format!("local a = V[{}] return {}a", v(rng), rng.pick(UNOPS)),
         3 => {
             let op = rng.pick(&["==", "~=", "<", "<=", ">", ">="]);
-            format!("local a, b = V[{}], V[{}] local n = 0 for i = 1, 3 do if a {op} b then n = n + i else n = n - 1 end end return n", v(rng), v(rng))
+            format!(
+                "local a, b = V[{}], V[{}] local n = 0 for i = 1, 3 do if a {op} b then n = n + i else n = n - 1 end end return n",
+                v(rng),
+                v(rng)
+            )
         }
         4 => {
             let k = rng.range(1, 24);
             match rng.below(4) {
-                0 => format!("local t, k = P({}), K[{k}] local s for _ = 1, 3 do s = t[k] end return s", rng.range(1, 11)),
+                0 => format!(
+                    "local t, k = P({}), K[{k}] local s for _ = 1, 3 do s = t[k] end return s",
+                    rng.range(1, 11)
+                ),
                 1 => format!("local t = P({}) return t.x, t.v, t.y, t.z, t.m, t.id", rng.range(1, 11)),
                 2 => format!("local t = P({}) return t:m({}), t:len()", rng.range(1, 11), rng.pick(LITS)),
-                _ => format!("local t = P({}) local s = 0 for i = 1, 4 do s = s + (t[i] or 0) end return s, #t", rng.range(1, 11)),
+                _ => format!(
+                    "local t = P({}) local s = 0 for i = 1, 4 do s = s + (t[i] or 0) end return s, #t",
+                    rng.range(1, 11)
+                ),
             }
         }
         5 => {
             // (No `#t` after writes: with holes, which border `#` finds differs from C Lua,
             // finding EQ-1.)
             let (t, k) = (rng.range(1, 11), rng.range(1, 24));
-            format!("local t, k = P({t}), K[{k}] for i = 1, 2 do t[k] = V[{}] end t.x = V[{}] t[4] = 9 return t[k], t.x, rawget(t, k), t[4]", v(rng), v(rng))
+            format!(
+                "local t, k = P({t}), K[{k}] for i = 1, 2 do t[k] = V[{}] end t.x = V[{}] t[4] = 9 return t[k], t.x, rawget(t, k), t[4]",
+                v(rng),
+                v(rng)
+            )
         }
         6 => {
             let n = rng.range(2, 5);
-            let ops: Vec<String> = (0..n).map(|_| if rng.pct(70) { format!("V[{}]", v(rng)) } else { (*rng.pick(LITS)).to_owned() }).collect();
+            let ops: Vec<String> = (0..n)
+                .map(|_| if rng.pct(70) { format!("V[{}]", v(rng)) } else { (*rng.pick(LITS)).to_owned() })
+                .collect();
             format!("return {}", ops.join(" .. "))
         }
         7 => {
             let (a, b) = (rng.pick(LITS), rng.pick(LITS));
-            let c = if rng.pct(50) { (*rng.pick(&["1", "-1", "2", "0.5", "-0.25", "0", "math.maxinteger", "math.mininteger", "0.0", "\"2\""])).to_owned() } else { format!("V[{}]", v(rng)) };
-            format!("local n, last = 0 for i = {a}, {b}, {c} do n = n + 1 last = i if n > 4 then break end end return n, last")
+            let c = if rng.pct(50) {
+                (*rng.pick(&[
+                    "1",
+                    "-1",
+                    "2",
+                    "0.5",
+                    "-0.25",
+                    "0",
+                    "math.maxinteger",
+                    "math.mininteger",
+                    "0.0",
+                    "\"2\"",
+                ]))
+                .to_owned()
+            } else {
+                format!("V[{}]", v(rng))
+            };
+            format!(
+                "local n, last = 0 for i = {a}, {b}, {c} do n = n + 1 last = i if n > 4 then break end end return n, last"
+            )
         }
         8 => {
             let f = rng.range(1, 13);
@@ -670,27 +739,59 @@ fn stat(rng: &mut rng::Rng) -> String {
             }
         }
         9 => {
-            let act = rng.pick(&["t[k] = nil", "t[k] = v * 2", "if type(k) == 'number' then t[k] = nil end", "t[k] = v"]);
-            format!("local t = P(10) local n, s = 0, 0 for k, v in pairs(t) do n = n + 1 s = s + v {act} end local m = 0 for k, v in next, t do m = m + v end return n, s, m")
+            let act = rng.pick(&[
+                "t[k] = nil",
+                "t[k] = v * 2",
+                "if type(k) == 'number' then t[k] = nil end",
+                "t[k] = v",
+            ]);
+            format!(
+                "local t = P(10) local n, s = 0, 0 for k, v in pairs(t) do n = n + 1 s = s + v {act} end local m = 0 for k, v in next, t do m = m + v end return n, s, m"
+            )
         }
         // (NaN's text is the C library's.)
-        10 => format!("local x = V[{}] if x ~= x then return 'nan' end return string.format(FMT[{}], x)", v(rng), rng.range(1, 20)),
+        10 => format!(
+            "local x = V[{}] if x ~= x then return 'nan' end return string.format(FMT[{}], x)",
+            v(rng),
+            rng.range(1, 20)
+        ),
         11 => {
             let (s, p) = (rng.range(1, 11), rng.range(1, 20));
             match rng.below(4) {
                 0 => format!("return STR[{s}]:find(PAT[{p}], {})", rng.range(-3, 5)),
                 1 => format!("return STR[{s}]:match(PAT[{p}])"),
-                2 => format!("return STR[{s}]:gsub(PAT[{p}], {})", rng.pick(&["\"<%0>\"", "\"%1\"", "string.upper", "{a = 1, b = false}", "\"%%\"", "function(c) return nil end"])),
-                _ => format!("local o = {{}} for a, b in STR[{s}]:gmatch(PAT[{p}]) do o[#o + 1] = tostring(a) .. tostring(b) if #o > 20 then break end end return table.concat(o, '|')"),
+                2 => format!(
+                    "return STR[{s}]:gsub(PAT[{p}], {})",
+                    rng.pick(&[
+                        "\"<%0>\"",
+                        "\"%1\"",
+                        "string.upper",
+                        "{a = 1, b = false}",
+                        "\"%%\"",
+                        "function(c) return nil end"
+                    ])
+                ),
+                _ => format!(
+                    "local o = {{}} for a, b in STR[{s}]:gmatch(PAT[{p}]) do o[#o + 1] = tostring(a) .. tostring(b) if #o > 20 then break end end return table.concat(o, '|')"
+                ),
             }
         }
         12 => {
             let s = rng.range(1, 11);
-            format!("local s = STR[{s}] .. V[{}] return #s, s:sub({}, {}), s:upper(), s:rep({}, '-'), s:byte(1, 3)", v(rng), rng.range(-50, 50), rng.range(-50, 50), rng.range(-1, 3))
+            format!(
+                "local s = STR[{s}] .. V[{}] return #s, s:sub({}, {}), s:upper(), s:rep({}, '-'), s:byte(1, 3)",
+                v(rng),
+                rng.range(-50, 50),
+                rng.range(-50, 50),
+                rng.range(-1, 3)
+            )
         }
         _ => {
             // A closure over a loop variable and an upvalue written from a nested function.
-            format!("local acc = V[{}] local fs = {{}} for i = 1, 3 do fs[i] = function() acc = acc + i return acc end end return fs[1](), fs[3](), acc", v(rng))
+            format!(
+                "local acc = V[{}] local fs = {{}} for i = 1, 3 do fs[i] = function() acc = acc + i return acc end end return fs[1](), fs[3](), acc",
+                v(rng)
+            )
         }
     };
     format!("r[#r + 1] = show(pcall(function() {body} end))\n")
@@ -716,7 +817,7 @@ fn op_matrix_fuzz() {
         let p = matrix_program(&mut r, 30);
         let full = both(&p, FUEL, 256 << 20);
         {
-        let c = common::oracle(&p, FUEL);
+            let c = common::oracle(&p, FUEL);
             if full.0 != c {
                 let dir = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR"));
                 std::fs::write(dir.join("sweep2-matrix-fail.lua"), &p).unwrap();
@@ -725,7 +826,11 @@ fn op_matrix_fuzz() {
                 let (la, lb): (Vec<&str>, Vec<&str>) = (a.lines().collect(), b.lines().collect());
                 let d = (0..la.len().max(lb.len())).find(|&j| la.get(j) != lb.get(j)).unwrap_or(0);
                 let stat = p.lines().nth(PRELUDE.lines().count() + d).unwrap_or("");
-                panic!("program {i} (seed {seed}) differs from C Lua at result {d}:\n{stat}\nours: {:?}\nC:    {:?}", la.get(d), lb.get(d));
+                panic!(
+                    "program {i} (seed {seed}) differs from C Lua at result {d}:\n{stat}\nours: {:?}\nC:    {:?}",
+                    la.get(d),
+                    lb.get(d)
+                );
             }
         }
         for k in 0..40 {
@@ -736,7 +841,8 @@ fn op_matrix_fuzz() {
         }
         // A collection at every allocation changes no result, either way.
         if i % 8 == 0 {
-            let (f, s) = (run_with(&p, FUEL, 256 << 20, true, true), run_with(&p, FUEL, 256 << 20, false, true));
+            let (f, s) =
+                (run_with(&p, FUEL, 256 << 20, true, true), run_with(&p, FUEL, 256 << 20, false, true));
             assert_eq!(f, s, "program {i} under collector stress: fast loop and full path differ");
             assert_eq!(f.0, full.0, "program {i} under collector stress: result changed");
         }
@@ -867,7 +973,9 @@ fn coroutines_and_mixed_widths() {
     for i in 0..270 {
         decl.push_str(&format!("local w{i} = {i} "));
     }
-    let wide = format!("local function wide(...) {decl} local n = select('#', ...) local a, b = ... return n, a, b, w269 + w0, ... end");
+    let wide = format!(
+        "local function wide(...) {decl} local n = select('#', ...) local a, b = ... return n, a, b, w269 + w0, ... end"
+    );
     let prog = format!(
         r#"{wide}
         local function narrow(...) return wide(...) end

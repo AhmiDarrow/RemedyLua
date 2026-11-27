@@ -21,8 +21,8 @@ use crate::value::Value;
 type CResult<T> = Result<T, Diagnostic>;
 
 use crate::compiler::{
-    BREAK, BlockScope, CONTINUE, LIST_FLUSH, LabelDesc, Want, arith_op, block_ends_in_jump, decided_by_constant,
-    specialize,
+    BREAK, BlockScope, CONTINUE, LIST_FLUSH, LabelDesc, Want, arith_op, block_ends_in_jump,
+    decided_by_constant, specialize,
 };
 
 #[derive(Clone)]
@@ -441,7 +441,9 @@ impl<'h> Compiler<'h> {
     fn label_stat(&mut self, name: &str, pos: Pos, at_end: bool, report: u32) -> CResult<()> {
         if let Some(l) = self.fsr().labels.iter().find(|l| l.name == name) {
             let line = l.line;
-            return Err(self.err(pos, format!("label '{name}' already defined on line {line}")).lua_line(report));
+            return Err(self
+                .err(pos, format!("label '{name}' already defined on line {line}"))
+                .lua_line(report));
         }
         let bl_nact = self.fsr().blocks.last().map_or(0, |b| b.nactvar);
         let first_goto = self.fsr().blocks.last().map_or(0, |b| b.first_goto);
@@ -466,7 +468,14 @@ impl<'h> Compiler<'h> {
         Ok(j)
     }
 
-    fn create_label(&mut self, name: &str, line: u32, at_end: Option<usize>, first_goto: usize, report: Option<u32>) -> CResult<()> {
+    fn create_label(
+        &mut self,
+        name: &str,
+        line: u32,
+        at_end: Option<usize>,
+        first_goto: usize,
+        report: Option<u32>,
+    ) -> CResult<()> {
         let pc = self.pc();
         let nactvar = at_end.unwrap_or(self.fsr().actives.len());
         let mut i = first_goto;
@@ -480,11 +489,12 @@ impl<'h> Compiler<'h> {
             if g.nactvar < nactvar {
                 let var = self.fsr().actives.get(g.nactvar).map(|v| v.name.to_string()).unwrap_or_default();
                 let what = if name == CONTINUE { "continue".to_owned() } else { format!("goto {name}") };
-                return Err(self.err(
-                    Pos { line: g.line, col: 1 },
-                    format!("<{what}> at line {} jumps into the scope of local '{var}'", g.line),
-                )
-                .lua_line(report.unwrap_or(g.line)));
+                return Err(self
+                    .err(
+                        Pos { line: g.line, col: 1 },
+                        format!("<{what}> at line {} jumps into the scope of local '{var}'", g.line),
+                    )
+                    .lua_line(report.unwrap_or(g.line)));
             }
             self.patch_jump(g.pc, pc, g.close);
         }
@@ -620,7 +630,8 @@ impl<'h> Compiler<'h> {
             }
             // A label is "at the end" when only labels follow it (and the block is not a
             // repeat body, whose condition still sees its locals).
-            let at_end = !repeat_body && b.stats.iter().skip(i + 1).all(|s| matches!(s.kind, StatKind::Label(_)));
+            let at_end =
+                !repeat_body && b.stats.iter().skip(i + 1).all(|s| matches!(s.kind, StatKind::Label(_)));
             self.statement(s, at_end && i < n)?;
             // Temporaries never outlive a statement.
             let lvl = self.fsr().nvarstack();
@@ -678,9 +689,15 @@ impl<'h> Compiler<'h> {
                 self.leave_block(body.end)?;
             }
             StatKind::If(conds, els) => self.if_stat(conds, els.as_ref())?,
-            StatKind::NumFor(f) => self.num_for(&f.var, &f.start, &f.limit, f.step.as_ref(), &f.body, s.pos, f.do_line)?,
-            StatKind::GenFor { names, exprs, body, line, do_line } => self.gen_for(names, exprs, body, s.pos, *line, *do_line)?,
-            StatKind::Function { path, method, body } => self.func_stat(path, method.as_deref(), body, s.pos)?,
+            StatKind::NumFor(f) => {
+                self.num_for(&f.var, &f.start, &f.limit, f.step.as_ref(), &f.body, s.pos, f.do_line)?
+            }
+            StatKind::GenFor { names, exprs, body, line, do_line } => {
+                self.gen_for(names, exprs, body, s.pos, *line, *do_line)?
+            }
+            StatKind::Function { path, method, body } => {
+                self.func_stat(path, method.as_deref(), body, s.pos)?
+            }
             StatKind::LocalFunction(name, body) => {
                 let r = self.alloc_reg(s.pos)?;
                 self.add_local(&name.name, VarKind::Reg(r), Attrib::None);
@@ -789,7 +806,9 @@ impl<'h> Compiler<'h> {
                     _ => return Ok(None),
                 },
                 Step::Un(op) => {
-                    let Some(v) = vals.pop().and_then(|v| crate::ast::fold_un(op, v)) else { return Ok(None) };
+                    let Some(v) = vals.pop().and_then(|v| crate::ast::fold_un(op, v)) else {
+                        return Ok(None);
+                    };
                     vals.push(v);
                 }
                 Step::Bin(op) => {
@@ -856,7 +875,6 @@ impl<'h> Compiler<'h> {
         }
         Ok(())
     }
-
 
     /// C Lua's `check_conflict`, when a target has just been read (the last of `places`):
     /// a local or upvalue that an earlier target's table (or key register) is gets copied
@@ -963,15 +981,17 @@ impl<'h> Compiler<'h> {
             ExprKind::False => Some(self.num_const(Value::Bool(false), key.pos)?),
             // A `<const>` local, or operators on constants, is the constant it folds to, as
             // in C Lua (`t[k]` with `k <const> = 5` is `t[5]`; S5COR-13).
-            ExprKind::Name(_) | ExprKind::Paren(_) | ExprKind::Un(..) | ExprKind::Bin(..) => match self.const_value(key)? {
-                Some(Value::Str(r)) => {
-                    let bytes = self.heap.str_bytes(r).to_vec();
-                    Some(self.str_const(&bytes, key.pos)?)
+            ExprKind::Name(_) | ExprKind::Paren(_) | ExprKind::Un(..) | ExprKind::Bin(..) => {
+                match self.const_value(key)? {
+                    Some(Value::Str(r)) => {
+                        let bytes = self.heap.str_bytes(r).to_vec();
+                        Some(self.str_const(&bytes, key.pos)?)
+                    }
+                    Some(v @ (Value::Int(_) | Value::Bool(_))) => Some(self.num_const(v, key.pos)?),
+                    Some(Value::Num(f)) if !f.is_nan() => Some(self.num_const(Value::Num(f), key.pos)?),
+                    _ => None,
                 }
-                Some(v @ (Value::Int(_) | Value::Bool(_))) => Some(self.num_const(v, key.pos)?),
-                Some(Value::Num(f)) if !f.is_nan() => Some(self.num_const(Value::Num(f), key.pos)?),
-                _ => None,
-            },
+            }
             _ => None,
         };
         if let Some(k) = k
@@ -1176,7 +1196,15 @@ impl<'h> Compiler<'h> {
         Ok(())
     }
 
-    fn gen_for(&mut self, names: &[LocalName], exprs: &[Expr], body: &Block, pos: Pos, line: u32, do_line: u32) -> CResult<()> {
+    fn gen_for(
+        &mut self,
+        names: &[LocalName],
+        exprs: &[Expr],
+        body: &Block,
+        pos: Pos,
+        line: u32,
+        do_line: u32,
+    ) -> CResult<()> {
         self.enter_block(true);
         let base = self.freereg();
         self.explist(exprs, Want::Fixed(4), pos)?;
@@ -1241,7 +1269,9 @@ impl<'h> Compiler<'h> {
         let mut obj = Expr { kind: ExprKind::Name(first.clone()), pos, end: pos };
         let (last, prefix) = match method {
             Some(m) => (m.to_owned(), path),
-            None => (path.last().cloned().unwrap_or_default(), path.get(..path.len() - 1).unwrap_or_default()),
+            None => {
+                (path.last().cloned().unwrap_or_default(), path.get(..path.len() - 1).unwrap_or_default())
+            }
         };
         for p in prefix.iter().skip(1) {
             let k = Expr { kind: ExprKind::Str(p.clone().into_bytes()), pos, end: pos };
@@ -1577,7 +1607,9 @@ impl<'h> Compiler<'h> {
             ExprKind::Concat(parts) => {
                 // In `dst` itself only when it is a temporary (a local may be read by the
                 // parts).
-                if usize::from(dst) + 1 == usize::from(self.freereg()) && usize::from(dst) >= self.fsr().nvarstack() {
+                if usize::from(dst) + 1 == usize::from(self.freereg())
+                    && usize::from(dst) >= self.fsr().nvarstack()
+                {
                     self.set_freereg(usize::from(dst));
                 }
                 let base = self.freereg();
@@ -1640,14 +1672,16 @@ impl<'h> Compiler<'h> {
         // Built in `dst` itself when it is the newest register (items go right above it).
         // In `dst` itself only when it is the newest temporary: a local may be read by the
         // fields (`x = {x}`).
-        let in_place = usize::from(dst) + 1 == usize::from(self.freereg()) && usize::from(dst) >= self.fsr().nvarstack();
+        let in_place =
+            usize::from(dst) + 1 == usize::from(self.freereg()) && usize::from(dst) >= self.fsr().nvarstack();
         let t = if in_place { dst } else { self.alloc_reg(pos)? };
         let narr = fields.iter().filter(|f| matches!(f, Field::Pos(_))).count();
         let nhash = fields.iter().filter(|f| !matches!(f, Field::Pos(_))).count();
         // A final call or `...` is not counted in Lua's array size (`lastlistfield`): the
         // table is made with room for it, sized as C Lua sizes it (`NEWTABLE_MULTRET`).
         let multret = matches!(fields.last(), Some(Field::Pos(e)) if e.kind.is_multi());
-        let hash = nhash.min(crate::bytecode::NEWTABLE_HASH_MAX as usize) as u16 | if multret { crate::bytecode::NEWTABLE_MULTRET } else { 0 };
+        let hash = nhash.min(crate::bytecode::NEWTABLE_HASH_MAX as usize) as u16
+            | if multret { crate::bytecode::NEWTABLE_MULTRET } else { 0 };
         self.emit(Instr::NewTable { a: t, arr: narr.min(u16::MAX as usize) as u16, hash });
         let mut pending = 0usize;
         let mut stored = 0usize;
@@ -1712,7 +1746,8 @@ impl<'h> Compiler<'h> {
             BinOp::And | BinOp::Or => {
                 let l = fold_logic(l);
                 // Into a temporary when `dst` is a local the right side may read.
-                let target = if usize::from(dst) < self.fsr().nvarstack() { self.alloc_reg(pos)? } else { dst };
+                let target =
+                    if usize::from(dst) < self.fsr().nvarstack() { self.alloc_reg(pos)? } else { dst };
                 let local = match &l.kind {
                     ExprKind::Paren(inner) if matches!(inner.kind, ExprKind::Name(_)) => &**inner,
                     _ => l,
@@ -1740,7 +1775,14 @@ impl<'h> Compiler<'h> {
                 self.move_to(dst, target);
             }
             BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge => {
-                let jumps = self.cond_jump(&Expr { kind: ExprKind::Bin(op, Box::new(l.clone()), Box::new(r.clone())), pos, end: r.end }, true)?;
+                let jumps = self.cond_jump(
+                    &Expr {
+                        kind: ExprKind::Bin(op, Box::new(l.clone()), Box::new(r.clone())),
+                        pos,
+                        end: r.end,
+                    },
+                    true,
+                )?;
                 self.emit(Instr::LoadFalseSkip { a: dst });
                 self.patch_here(&jumps);
                 self.emit(Instr::LoadBool { a: dst, v: true });
@@ -1773,7 +1815,8 @@ impl<'h> Compiler<'h> {
                     return Ok(());
                 }
                 // The running value lives in a temporary (a local `dst` may be read later).
-                let temp = usize::from(dst) >= self.fsr().nvarstack() && usize::from(dst) + 1 == usize::from(self.freereg());
+                let temp = usize::from(dst) >= self.fsr().nvarstack()
+                    && usize::from(dst) + 1 == usize::from(self.freereg());
                 let acc = if temp { dst } else { self.alloc_reg(pos)? };
                 let mut b = self.expr_rk(left)?;
                 while let Some((op, r, pos)) = spine.pop() {
@@ -1827,7 +1870,11 @@ impl<'h> Compiler<'h> {
                 self.patch_here(&skip);
                 return Ok(j);
             }
-            ExprKind::Bin(op @ (BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge), l, r) => {
+            ExprKind::Bin(
+                op @ (BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge),
+                l,
+                r,
+            ) => {
                 let save = self.freereg();
                 let (a, b) = (self.expr_rk(l)?, self.expr_rk(r)?);
                 self.at(r.end); // C Lua numbers a comparison where its right side ends
@@ -1880,8 +1927,9 @@ enum Place {
 /// `a and b` / `a or b` after folding constant left sides away.
 fn fold_logic(e: &Expr) -> &Expr {
     match &e.kind {
-        ExprKind::Bin(op @ (BinOp::And | BinOp::Or), l, r) if decided_by_constant(*op, fold_logic(l)) => fold_logic(r),
+        ExprKind::Bin(op @ (BinOp::And | BinOp::Or), l, r) if decided_by_constant(*op, fold_logic(l)) => {
+            fold_logic(r)
+        }
         _ => e,
     }
 }
-

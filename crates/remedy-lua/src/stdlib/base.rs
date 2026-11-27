@@ -518,7 +518,9 @@ fn load_charged(lua: &mut Lua, a: Args, charged: &mut usize) -> R {
         lua.charge(lua.bytes(mode).len() as u64 / 64)?;
         let b = lua.bytes(mode);
         if !b.contains(&b't') {
-            let shown = String::from_utf8_lossy(b.get(..b.len().min(lua.limits.error_len)).unwrap_or_default()).into_owned();
+            let shown =
+                String::from_utf8_lossy(b.get(..b.len().min(lua.limits.error_len)).unwrap_or_default())
+                    .into_owned();
             let text = format!("attempt to load a text chunk (mode is '{shown}')");
             let m = lua.new_str(text.as_bytes())?;
             return lua.ret(&[Value::Nil, m]);
@@ -684,7 +686,8 @@ fn collectgarbage(lua: &mut Lua, a: Args) -> R {
     let opt = match lua.opt_str(a, 0)? {
         Some(s) => {
             let b = lua.bytes(s);
-            String::from_utf8_lossy(b.get(..b.len().min(lua.limits.error_len)).unwrap_or_default()).into_owned()
+            String::from_utf8_lossy(b.get(..b.len().min(lua.limits.error_len)).unwrap_or_default())
+                .into_owned()
         }
         None => "collect".into(),
     };

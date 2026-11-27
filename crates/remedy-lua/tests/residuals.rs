@@ -28,9 +28,13 @@ fn res_probes_a_host_function_cannot_bill_its_caller() {
         .exec(format!("{setup} return 'return {{' .. string.format(string.rep('%q,', #keep), table.unpack(keep)) .. '}}'"), "=mk")
         .unwrap();
     let src = maker.str_bytes(made[0]).unwrap().to_vec();
-    let plain: Vec<u8> = format!("return {{{}}}", (0..3000).map(|i| format!("'p{i:020}',")).collect::<String>()).into_bytes();
+    let plain: Vec<u8> =
+        format!("return {{{}}}", (0..3000).map(|i| format!("'p{i:020}',")).collect::<String>()).into_bytes();
     let outer_fuel = |source: Vec<u8>, fast: bool| -> u64 {
-        let inner = Arc::new(Mutex::new(state(Limits::default().fuel(1 << 40).memory(1 << 30).hash_seed(seed), fast)));
+        let inner = Arc::new(Mutex::new(state(
+            Limits::default().fuel(1 << 40).memory(1 << 30).hash_seed(seed),
+            fast,
+        )));
         let mut outer = state(Limits::default().fuel(100_000_000), fast);
         outer
             .register("compile", move |_, _| {
@@ -61,7 +65,15 @@ pub(super) fn hostile_sources(bytes: usize) -> Vec<(&'static str, String)> {
         s
     };
     vec![
-        ("locals", fill(&|j| format!("local {}\n", (0..100).map(|i| format!("v{}", j * 100 + i)).collect::<Vec<_>>().join(",")))),
+        (
+            "locals",
+            fill(&|j| {
+                format!(
+                    "local {}\n",
+                    (0..100).map(|i| format!("v{}", j * 100 + i)).collect::<Vec<_>>().join(",")
+                )
+            }),
+        ),
         ("one_local_per_line", fill(&|j| format!("local v{j} = {j}\n"))),
         ("tokens", format!("x = 1{}", "+1".repeat(bytes / 2))),
         ("strings", format!("local t = {{{}}}", fill(&|j| format!("'s{j}',")))),
@@ -81,7 +93,8 @@ pub(super) fn longest_blind_stretch(src: &str) -> (std::time::Duration, std::tim
     let s = lua.create_string(src).unwrap();
     lua.set_global("SRC", s).unwrap();
     let f = lua.load("local f = load(SRC) return f ~= nil", "=probe").unwrap();
-    let rec: Arc<Mutex<(Option<Instant>, Duration, String)>> = Arc::new(Mutex::new((None, Duration::ZERO, String::new())));
+    let rec: Arc<Mutex<(Option<Instant>, Duration, String)>> =
+        Arc::new(Mutex::new((None, Duration::ZERO, String::new())));
     let r2 = Arc::clone(&rec);
     let origin = Instant::now();
     let want_bt = std::env::var("RES_BACKTRACE").is_ok();
@@ -114,7 +127,8 @@ pub(super) fn longest_blind_stretch(src: &str) -> (std::time::Duration, std::tim
     assert_eq!(ok, [remedy_lua::Value::Bool(true)]);
     let g = rec.lock().unwrap();
     let tail = end - g.0.unwrap_or(t);
-    let last = prev.lock().unwrap().as_ref().map(|b| format!("after the last look, at:\n{b}")).unwrap_or_default();
+    let last =
+        prev.lock().unwrap().as_ref().map(|b| format!("after the last look, at:\n{b}")).unwrap_or_default();
     (g.1.max(tail), end - t, if tail > g.1 { last } else { g.2.clone() })
 }
 
@@ -156,8 +170,20 @@ fn res_front_probe_blind_stretches() {
             }
             let keep: Vec<&str> = bt
                 .lines()
-                .filter(|l| (l.contains("remedy_lua::") || l.contains("-----")) && !l.contains("residuals") && !l.contains("Watch") && !l.contains("compile_tick") && !l.contains("LocalKey"))
-                .filter(|l| !l.contains("vm::Lua>::call") && !l.contains("vm::Lua>::enter") && !l.contains("execute") && !l.contains("vm::Lua>::run") && !l.contains("base::load"))
+                .filter(|l| {
+                    (l.contains("remedy_lua::") || l.contains("-----"))
+                        && !l.contains("residuals")
+                        && !l.contains("Watch")
+                        && !l.contains("compile_tick")
+                        && !l.contains("LocalKey")
+                })
+                .filter(|l| {
+                    !l.contains("vm::Lua>::call")
+                        && !l.contains("vm::Lua>::enter")
+                        && !l.contains("execute")
+                        && !l.contains("vm::Lua>::run")
+                        && !l.contains("base::load")
+                })
                 .collect();
             println!("{}", keep.join("\n"));
         }
@@ -253,8 +279,12 @@ fn res_open2_probe_far() {
     for fast in [true, false] {
         for aimed in [true, false] {
             let (setup, _) = far_layout(aimed);
-            for (what, body) in [("chain", "local x = U[k]"), ("direct", "for j = 1, 1999 do local x = T[j][k] end")] {
-                let r = (0..3).map(|_| ns_per_unit(&setup, body, 3_000_000, fast) / baseline(fast)).fold(f64::MAX, f64::min);
+            for (what, body) in
+                [("chain", "local x = U[k]"), ("direct", "for j = 1, 1999 do local x = T[j][k] end")]
+            {
+                let r = (0..3)
+                    .map(|_| ns_per_unit(&setup, body, 3_000_000, fast) / baseline(fast))
+                    .fold(f64::MAX, f64::min);
                 println!("fast {fast} aimed {aimed} {what}: {r:.1}x plain code");
             }
         }
@@ -269,10 +299,18 @@ fn res_open2_probe_far() {
 /// charged): the same fuel and memory on every run, under any seed, on both paths.
 #[test]
 fn res_front_compile_memory_is_the_programs() {
-    let locals: String = (0..400).map(|j| format!("local {}\n", (0..100).map(|i| format!("v{}", j * 100 + i)).collect::<Vec<_>>().join(","))).collect();
+    let locals: String = (0..400)
+        .map(|j| {
+            format!("local {}\n", (0..100).map(|i| format!("v{}", j * 100 + i)).collect::<Vec<_>>().join(","))
+        })
+        .collect();
     let consts = format!("local t = {{{}}}", (0..40_000).map(|i| format!("'c{i}',")).collect::<String>());
     // Names that leave scope (tombstones in the scope map), then a long tail to stop in.
-    let scopes: String = (0..3000).map(|j| format!("do local {} end\n", (0..12).map(|i| format!("s{j}_{i}")).collect::<Vec<_>>().join(","))).collect::<String>()
+    let scopes: String = (0..3000)
+        .map(|j| {
+            format!("do local {} end\n", (0..12).map(|i| format!("s{j}_{i}")).collect::<Vec<_>>().join(","))
+        })
+        .collect::<String>()
         + &(0..20_000).map(|i| format!("local w{i} = {i}\n")).collect::<String>();
     for src in [locals, consts, scopes] {
         let measure = |seed: u64, fast: bool, fuel: u64| {
@@ -467,7 +505,8 @@ fn res_table_stopped_resize_leaves_the_table_unchanged() {
     use std::sync::atomic::{AtomicUsize, Ordering};
     let _heavy = super::common::memory_heavy();
     let fresh = |setup: &str, fast: bool| {
-        let mut lua = state(Limits::default().memory(1 << 30).fuel(1 << 40).hash_seed(super::common::TEST_SEED), fast);
+        let mut lua =
+            state(Limits::default().memory(1 << 30).fuel(1 << 40).hash_seed(super::common::TEST_SEED), fast);
         lua.exec(setup, "=setup").unwrap();
         lua
     };
@@ -486,7 +525,8 @@ fn res_table_stopped_resize_leaves_the_table_unchanged() {
             remedy_lua::Value::Str(_) => format!("{:?}", lua.str_bytes(*v)),
             v => format!("{v:?}"),
         };
-        let pairs: Vec<String> = lua.table_pairs(t).iter().map(|(k, v)| format!("{}={}", show(lua, k), show(lua, v))).collect();
+        let pairs: Vec<String> =
+            lua.table_pairs(t).iter().map(|(k, v)| format!("{}={}", show(lua, k), show(lua, v))).collect();
         (pairs, lua.table_len(t), lua.memory_used())
     };
     for (name, setup, write) in one_short_of_a_resize() {
@@ -535,7 +575,10 @@ fn res_table_stopped_resize_leaves_the_table_unchanged() {
             let mut again = None;
             for at in [Some(2), Some(total / 2), last].into_iter().flatten() {
                 let (mut lua, f, r) = stop_at(at);
-                assert!(matches!(r, Err(remedy_lua::Error::Limit(remedy_lua::LimitKind::Time))), "{name} at {at}: {r:?}");
+                assert!(
+                    matches!(r, Err(remedy_lua::Error::Limit(remedy_lua::LimitKind::Time))),
+                    "{name} at {at}: {r:?}"
+                );
                 let stopped = (1u64 << 40) - lua.fuel_left();
                 let again = *again.get_or_insert(stopped);
                 lua.set_time_limit(None);
@@ -543,10 +586,25 @@ fn res_table_stopped_resize_leaves_the_table_unchanged() {
                 // twin holds only when nothing was written.)
                 let now = snapshot(&mut lua);
                 if !matches!(name, "nodes" | "move") {
-                    assert_eq!((now.0.len(), now.1), (before.0.len(), before.1), "{name} fast {fast}: stopped at read {at} of {total}, the table changed");
-                    assert!((before.2..=before.2 + after.2).contains(&now.2), "{name} fast {fast}: stopped at read {at} of {total}, memory {} (before {}, done {})", now.2, before.2, after.2);
+                    assert_eq!(
+                        (now.0.len(), now.1),
+                        (before.0.len(), before.1),
+                        "{name} fast {fast}: stopped at read {at} of {total}, the table changed"
+                    );
+                    assert!(
+                        (before.2..=before.2 + after.2).contains(&now.2),
+                        "{name} fast {fast}: stopped at read {at} of {total}, memory {} (before {}, done {})",
+                        now.2,
+                        before.2,
+                        after.2
+                    );
                     let diff = now.0.iter().zip(&before.0).position(|(a, b)| a != b);
-                    assert!(now.0 == before.0, "{name} fast {fast}: stopped at read {at} of {total}, the entries changed at {diff:?}: {:?} vs {:?}", diff.map(|d| &now.0[d]), diff.map(|d| &before.0[d]));
+                    assert!(
+                        now.0 == before.0,
+                        "{name} fast {fast}: stopped at read {at} of {total}, the entries changed at {diff:?}: {:?} vs {:?}",
+                        diff.map(|d| &now.0[d]),
+                        diff.map(|d| &before.0[d])
+                    );
                 }
                 // Done again, unstopped: the twin's table and fuel.
                 if !matches!(name, "nodes" | "move") {
@@ -554,8 +612,16 @@ fn res_table_stopped_resize_leaves_the_table_unchanged() {
                     lua.call(f.value(), &[]).unwrap();
                     // The work charged once in all: what the stopped call did, the rest when
                     // it is done (LR-29d).
-                    assert_eq!(stopped + (1u64 << 40) - lua.fuel_left(), fuel + again, "{name} fast {fast}: fuel after a stopped resize at read {at}");
-                    assert_eq!(snapshot(&mut lua), after, "{name} fast {fast}: the table after a stopped resize");
+                    assert_eq!(
+                        stopped + (1u64 << 40) - lua.fuel_left(),
+                        fuel + again,
+                        "{name} fast {fast}: fuel after a stopped resize at read {at}"
+                    );
+                    assert_eq!(
+                        snapshot(&mut lua),
+                        after,
+                        "{name} fast {fast}: the table after a stopped resize"
+                    );
                 }
             }
         }
@@ -601,7 +667,8 @@ fn res_table_resize_progresses_in_short_slices() {
                 tries += 1;
                 let reads = Arc::new(AtomicU64::new(0));
                 let r = Arc::clone(&reads);
-                let clock: remedy_lua::Clock = Arc::new(move || std::time::Duration::from_nanos(r.fetch_add(1, Ordering::Relaxed)));
+                let clock: remedy_lua::Clock =
+                    Arc::new(move || std::time::Duration::from_nanos(r.fetch_add(1, Ordering::Relaxed)));
                 lua.set_time_limit(Some((clock, std::time::Duration::from_nanos(3))));
                 if lua.call(f.value(), &[]).is_ok() {
                     break;
@@ -630,10 +697,16 @@ fn res_table_key_move_fuel_is_the_programs() {
             lua.exec(setup, "=setup").unwrap();
             lua.set_limits(lua.limits().fuel(100_000));
             let r = lua.exec("T.zz = 1", "=toggle");
-            assert!(matches!(r, Err(remedy_lua::Error::Limit(remedy_lua::LimitKind::Fuel))), "seed {seed} fast {fast}: {r:?}");
+            assert!(
+                matches!(r, Err(remedy_lua::Error::Limit(remedy_lua::LimitKind::Fuel))),
+                "seed {seed} fast {fast}: {r:?}"
+            );
             lua.set_limits(lua.limits().fuel(1 << 30));
             let left = lua.exec("return rawget(T, 'zz'), #T", "=check").unwrap();
-            assert!(matches!(left[0], remedy_lua::Value::Nil), "seed {seed} fast {fast}: the key went in past the fuel");
+            assert!(
+                matches!(left[0], remedy_lua::Value::Nil),
+                "seed {seed} fast {fast}: the key went in past the fuel"
+            );
             // With the fuel for it, the move is done and costs the same everywhere.
             lua.set_limits(lua.limits().fuel(1_000_000));
             lua.exec("T.zz = 1", "=toggle").unwrap();
@@ -656,7 +729,12 @@ fn res_table_resize_resumes_in_1ms_slices() {
         for fast in [true, false] {
             let mut lua = state(Limits::default().memory(1 << 30).fuel(1 << 40), fast);
             lua.exec(setup, "=setup").unwrap();
-            let want = lua.exec(format!("{setup} {write} local n = 0 for _ in pairs(T) do n = n + 1 end return n, #T"), "=want").unwrap();
+            let want = lua
+                .exec(
+                    format!("{setup} {write} local n = 0 for _ in pairs(T) do n = n + 1 end return n, #T"),
+                    "=want",
+                )
+                .unwrap();
             lua.exec(setup, "=setup").unwrap();
             let f = lua.load(format!("{write} DONE = true"), "=write").unwrap();
             let clock: remedy_lua::Clock = {
@@ -682,7 +760,11 @@ fn res_table_resize_resumes_in_1ms_slices() {
             let got = lua.exec("local n = 0 for _ in pairs(T) do n = n + 1 end return n, #T", "=n").unwrap();
             assert_eq!(got, want, "{name} fast {fast}");
             // (A piece is about 0.2 to 2.8 ms here; up to 64 ms before.)
-            assert!(longest < 12_000_000, "{name} fast {fast}: a slice of {} ms ({calls} calls)", longest as f64 / 1e6);
+            assert!(
+                longest < 12_000_000,
+                "{name} fast {fast}: a slice of {} ms ({calls} calls)",
+                longest as f64 / 1e6
+            );
         }
     }
 }
@@ -722,7 +804,10 @@ fn sec7_n5_an_in_place_find_does_not_search_twice() {
 /// before).
 #[test]
 fn sec7_h3_a_full_collection_trims_between_looks() {
-    let (live, dead) = ("K = {} for i = 1, 200000 do K[i] = {} end", "local d = {} for i = 1, 60000 do d[i] = {} end d = nil");
+    let (live, dead) = (
+        "K = {} for i = 1, 200000 do K[i] = {} end",
+        "local d = {} for i = 1, 60000 do d[i] = {} end d = nil",
+    );
     let tail = clock_reads(&format!("collectgarbage('stop') {live} {dead}"), "collectgarbage()");
     let front = clock_reads(&format!("collectgarbage('stop') {dead} {live}"), "collectgarbage()");
     assert!(tail >= front + 10, "{tail} reads with a dead tail, {front} with the dead at the front");
@@ -742,18 +827,47 @@ fn sec7_t2_a_written_table_resumes_its_resize() {
     // and the border after. `L[i]`: call `i` got to its write.
     let cases = [
         // (32 keys fill the hash part: the resizing write rehashes.)
-        ("T = {x = 0} for i = 1, 31 do T['f' .. i] = 0 end for i = 1, 1 << 21 do T[i] = 0 end", "for i = 1, 31 do T['f' .. i] = C end T.x = C T[C] = C", "T[(1 << 21) + 1] = 1", "i", (1 << 21) + 33, (1 << 21) + 1),
+        (
+            "T = {x = 0} for i = 1, 31 do T['f' .. i] = 0 end for i = 1, 1 << 21 do T[i] = 0 end",
+            "for i = 1, 31 do T['f' .. i] = C end T.x = C T[C] = C",
+            "T[(1 << 21) + 1] = 1",
+            "i",
+            (1 << 21) + 33,
+            (1 << 21) + 1,
+        ),
         // (A 16 MiB array buffer, copied a piece at a time.)
-        ("T = {} for i = 1, 1 << 20 do T[i] = 0 end", "T[C] = C", "T[(1 << 20) + 1] = 1", "i", (1 << 20) + 1, (1 << 20) + 1),
+        (
+            "T = {} for i = 1, 1 << 20 do T[i] = 0 end",
+            "T[C] = C",
+            "T[(1 << 20) + 1] = 1",
+            "i",
+            (1 << 20) + 1,
+            (1 << 20) + 1,
+        ),
         // (Odd keys: the integer part rebuilt a piece at a time.)
-        ("T = {} for i = 1, 1 << 20 do T[2 * i + 1] = 0 end", "T[2 * C + 1] = C", "T[-1] = 1", "2 * i + 1", (1 << 20) + 1, 0),
+        (
+            "T = {} for i = 1, 1 << 20 do T[2 * i + 1] = 0 end",
+            "T[2 * C + 1] = C",
+            "T[-1] = 1",
+            "2 * i + 1",
+            (1 << 20) + 1,
+            0,
+        ),
         // (`nodes` at 3/4 of 2^20 slots, Lua's node array not full: rebuilt a piece at a time.)
-        ("T = {} for i = 1, 3 << 18 do T['k' .. i] = 0 end", "T['k' .. C] = C", "T.new = 1", "'k' .. i", (3 << 18) + 1, 0),
+        (
+            "T = {} for i = 1, 3 << 18 do T['k' .. i] = 0 end",
+            "T['k' .. C] = C",
+            "T.new = 1",
+            "'k' .. i",
+            (3 << 18) + 1,
+            0,
+        ),
     ];
     for (setup, first, grow, check, n, border) in cases {
         for fast in [true, false] {
             let mut lua = state(Limits::default().memory(1 << 30).fuel(1 << 40), fast);
-            lua.exec(format!("C = 0 L = {{}} for i = 1, 1000 do L[i] = false end {setup}"), "=setup").unwrap();
+            lua.exec(format!("C = 0 L = {{}} for i = 1, 1000 do L[i] = false end {setup}"), "=setup")
+                .unwrap();
             // (`L[C]` set once its writes are done: a call can be stopped before them, at a
             // collector step's look.)
             let f = lua.load(format!("C = C + 1 {first} L[C] = true {grow} DONE = true"), "=write").unwrap();
@@ -775,9 +889,14 @@ fn sec7_t2_a_written_table_resumes_its_resize() {
             lua.set_time_limit(None);
             assert!(calls > 3, "{first} fast {fast}: {calls} calls (no resize given up)");
             // The last call's writes are what the table holds, not an earlier call's.
-            let check = format!("(function() for i = 1, C do if L[i] and T[{check}] ~= i then return false end end return true end)()");
-            let got = lua.exec(format!("local n = 0 for _ in pairs(T) do n = n + 1 end return n, #T, {check}"), "=n").unwrap();
-            let want = [remedy_lua::Value::Int(n), remedy_lua::Value::Int(border), remedy_lua::Value::Bool(true)];
+            let check = format!(
+                "(function() for i = 1, C do if L[i] and T[{check}] ~= i then return false end end return true end)()"
+            );
+            let got = lua
+                .exec(format!("local n = 0 for _ in pairs(T) do n = n + 1 end return n, #T, {check}"), "=n")
+                .unwrap();
+            let want =
+                [remedy_lua::Value::Int(n), remedy_lua::Value::Int(border), remedy_lua::Value::Bool(true)];
             assert_eq!(got, want, "{first} fast {fast} ({calls} calls)");
         }
     }
@@ -870,7 +989,12 @@ fn lr29d_a_resize_is_charged_once_however_the_call_is_sliced() {
                 let fuel = run(every);
                 let total: u64 = fuel.iter().sum();
                 assert!(fuel.len() > 3, "seed {seed} fast {fast} every {every}: {} calls", fuel.len());
-                assert_eq!(total, whole + again * (fuel.len() as u64 - 1), "seed {seed} fast {fast} every {every}: {} calls", fuel.len());
+                assert_eq!(
+                    total,
+                    whole + again * (fuel.len() as u64 - 1),
+                    "seed {seed} fast {fast} every {every}: {} calls",
+                    fuel.len()
+                );
             }
         }
     }
@@ -894,17 +1018,42 @@ fn lr29d_a_table_grows_only_with_the_fuel_for_it() {
     let cases = [
         // (`kept`: made a piece at a time within each call's fuel and kept between calls,
         // SEC8-F4; else refused whole.)
-        ("nodes", "T = {} for i = 1, 3 << 18 do T[i + 0.5] = i end", "T[-0.5] = 1", "return rawget(T, -0.5)", true),
-        ("room", "T = {x = 1} for i = 1, 1 << 20 do T[i] = i end for i = 1, (1 << 20) - 4096 do T[i] = nil end", "for i = 1, 64 do T['s' .. i] = i end", "return rawget(T, 's64'), #T", true),
-        ("to_counting", "T = {} for i = 1, 1 << 17 do T[i * 7] = i end", "T.s = 1", "return rawget(T, 's')", true),
+        (
+            "nodes",
+            "T = {} for i = 1, 3 << 18 do T[i + 0.5] = i end",
+            "T[-0.5] = 1",
+            "return rawget(T, -0.5)",
+            true,
+        ),
+        (
+            "room",
+            "T = {x = 1} for i = 1, 1 << 20 do T[i] = i end for i = 1, (1 << 20) - 4096 do T[i] = nil end",
+            "for i = 1, 64 do T['s' .. i] = i end",
+            "return rawget(T, 's64'), #T",
+            true,
+        ),
+        (
+            "to_counting",
+            "T = {} for i = 1, 1 << 17 do T[i * 7] = i end",
+            "T.s = 1",
+            "return rawget(T, 's')",
+            true,
+        ),
         ("set_list", "L = {} for i = 1, 1 << 20 do L[i] = i end", "T = {table.unpack(L)}", "return T", false),
-        ("marking", "T = {} for i = 1, 1 << 20 do T[i] = i end collectgarbage() collectgarbage('step', 1)", "T[(1 << 20) + 1] = 1", "return rawget(T, (1 << 20) + 1)", true),
+        (
+            "marking",
+            "T = {} for i = 1, 1 << 20 do T[i] = i end collectgarbage() collectgarbage('step', 1)",
+            "T[(1 << 20) + 1] = 1",
+            "return rawget(T, (1 << 20) + 1)",
+            true,
+        ),
     ];
     for (name, setup, write, look, kept) in cases {
         for seed in [1, 7, 0xdead_beef] {
             for fast in [true, false] {
                 let fresh = || {
-                    let mut lua = state(Limits::default().memory(1 << 30).fuel(1 << 40).hash_seed(seed), fast);
+                    let mut lua =
+                        state(Limits::default().memory(1 << 30).fuel(1 << 40).hash_seed(seed), fast);
                     lua.exec(setup, "=setup").unwrap();
                     let f = lua.load(write, "=write").unwrap();
                     (lua, f)
@@ -915,24 +1064,42 @@ fn lr29d_a_table_grows_only_with_the_fuel_for_it() {
                 let (mut lua, f) = fresh();
                 let before = lua.exec(look, "=look").unwrap();
                 let mut paid = 0;
-                for (call, budget) in [whole / 8, whole / 4, whole / 2, whole * 7 / 8].into_iter().enumerate() {
+                for (call, budget) in [whole / 8, whole / 4, whole / 2, whole * 7 / 8].into_iter().enumerate()
+                {
                     lua.set_limits(lua.limits().fuel(budget));
                     let r = lua.call(f.value(), &[]);
                     paid += budget - lua.fuel_left();
                     // Kept, it gets past once the calls together have paid for it, and in that
                     // call: their fuel the growth's and a piece a call at most.
                     if kept && paid >= whole {
-                        assert!(r.is_ok(), "{name} seed {seed} fast {fast}: {paid} paid of {whole}, still refused");
-                        assert!(paid <= whole + (call as u64 + 1) * LR29D_SLACK, "{name} seed {seed} fast {fast}: {paid} paid for {whole}");
+                        assert!(
+                            r.is_ok(),
+                            "{name} seed {seed} fast {fast}: {paid} paid of {whole}, still refused"
+                        );
+                        assert!(
+                            paid <= whole + (call as u64 + 1) * LR29D_SLACK,
+                            "{name} seed {seed} fast {fast}: {paid} paid for {whole}"
+                        );
                         break;
                     }
-                    assert!(r.is_err(), "{name} seed {seed} fast {fast}: a call of {budget} got past a growth of {whole}, {paid} paid");
+                    assert!(
+                        r.is_err(),
+                        "{name} seed {seed} fast {fast}: a call of {budget} got past a growth of {whole}, {paid} paid"
+                    );
                     lua.set_limits(lua.limits().fuel(1 << 40));
-                    assert_eq!(lua.exec(look, "=look").unwrap(), before, "{name} seed {seed} fast {fast}: the table changed at {budget} of {whole}");
+                    assert_eq!(
+                        lua.exec(look, "=look").unwrap(),
+                        before,
+                        "{name} seed {seed} fast {fast}: the table changed at {budget} of {whole}"
+                    );
                 }
                 if !kept {
                     lua.set_limits(lua.limits().fuel(whole * 2));
-                    assert!(lua.call(f.value(), &[]).is_ok(), "{name} seed {seed} fast {fast}: refused at {} for {whole}", whole * 2);
+                    assert!(
+                        lua.call(f.value(), &[]).is_ok(),
+                        "{name} seed {seed} fast {fast}: refused at {} for {whole}",
+                        whole * 2
+                    );
                 }
             }
         }
@@ -955,13 +1122,18 @@ fn lr29d_a_reseed_waits_for_an_insert_that_can_pay_for_it() {
         // A pair of homes no plain key has, and keys aimed at it: the last makes a chain of
         // `CHAIN_FREE + 2`.
         let home = (0..mask / 2)
-            .find(|h| (1..=n).all(|i| {
-                let (a, b) = homes(i as f64 + 0.25, ts[0], bits);
-                ![a, b].contains(h) && ![a, b].contains(&(h ^ mask))
-            }))
+            .find(|h| {
+                (1..=n).all(|i| {
+                    let (a, b) = homes(i as f64 + 0.25, ts[0], bits);
+                    ![a, b].contains(h) && ![a, b].contains(&(h ^ mask))
+                })
+            })
             .unwrap();
         let aimed = aimed_floats(&ts, bits, home, PAIR_FULL + 1);
-        let setup = format!("T = {{}} for i = 1, {n} do T[i + 0.25] = i end for _, f in ipairs({{{}}}) do T[f] = f end", list(&aimed));
+        let setup = format!(
+            "T = {{}} for i = 1, {n} do T[i + 0.25] = i end for _, f in ipairs({{{}}}) do T[f] = f end",
+            list(&aimed)
+        );
         for fast in [true, false] {
             let fresh = || {
                 let mut lua = state(Limits::default().memory(1 << 30).fuel(1 << 40).hash_seed(seed), fast);
@@ -976,19 +1148,36 @@ fn lr29d_a_reseed_waits_for_an_insert_that_can_pay_for_it() {
             lua.call(g.value(), &[]).unwrap();
             let plain = (1u64 << 40) - lua.fuel_left();
             // (Its placements at least: a slot of the part a unit of `resized`.)
-            assert!(whole >= plain + (1 << bits) / 16, "seed {seed} fast {fast}: the insert after the aimed keys cost {whole}, a plain one {plain}");
+            assert!(
+                whole >= plain + (1 << bits) / 16,
+                "seed {seed} fast {fast}: the insert after the aimed keys cost {whole}, a plain one {plain}"
+            );
             let (mut lua, f) = fresh();
             let before = lua.exec(look, "=look").unwrap();
             for budget in [whole / 8, whole / 4, whole / 2, whole * 7 / 8] {
                 lua.set_limits(lua.limits().fuel(budget));
-                assert!(lua.call(f.value(), &[]).is_err(), "seed {seed} fast {fast}: a call of {budget} reseeded for {whole}");
+                assert!(
+                    lua.call(f.value(), &[]).is_err(),
+                    "seed {seed} fast {fast}: a call of {budget} reseeded for {whole}"
+                );
                 lua.set_limits(lua.limits().fuel(1 << 40));
-                assert_eq!(lua.exec(look, "=look").unwrap(), before, "seed {seed} fast {fast}: the table changed at {budget} of {whole}");
+                assert_eq!(
+                    lua.exec(look, "=look").unwrap(),
+                    before,
+                    "seed {seed} fast {fast}: the table changed at {budget} of {whole}"
+                );
             }
             lua.set_limits(lua.limits().fuel(whole * 2));
-            assert!(lua.call(f.value(), &[]).is_ok(), "seed {seed} fast {fast}: refused at {} for {whole}", whole * 2);
+            assert!(
+                lua.call(f.value(), &[]).is_ok(),
+                "seed {seed} fast {fast}: refused at {} for {whole}",
+                whole * 2
+            );
             let after = lua.exec(look, "=look").unwrap();
-            assert!(matches!(after[..], [remedy_lua::Value::Bool(false), remedy_lua::Value::Int(1)]), "seed {seed} fast {fast}: not reseeded");
+            assert!(
+                matches!(after[..], [remedy_lua::Value::Bool(false), remedy_lua::Value::Int(1)]),
+                "seed {seed} fast {fast}: not reseeded"
+            );
         }
     }
 }
@@ -1011,7 +1200,8 @@ fn lr29d_a_resize_thrown_away_stays_paid() {
         for seed in [1, 7, 0xdead_beef] {
             for fast in [true, false] {
                 let fresh = |stop: usize| {
-                    let mut lua = state(Limits::default().memory(1 << 30).fuel(1 << 40).hash_seed(seed), fast);
+                    let mut lua =
+                        state(Limits::default().memory(1 << 30).fuel(1 << 40).hash_seed(seed), fast);
                     lua.exec(setup, "=setup").unwrap();
                     let reads = Arc::new(AtomicUsize::new(0));
                     let r = Arc::clone(&reads);
@@ -1039,7 +1229,10 @@ fn lr29d_a_resize_thrown_away_stays_paid() {
                     let (w, r) = (cost(&mut lua, write).0, cost(&mut lua, grow));
                     let at = format!("{grow} seed {seed} fast {fast} stopped at {stop}");
                     assert!(!done && r.1, "{at}");
-                    assert!(s > again + 1 && s - again <= r0, "{at}: the stopped call cost {s}, the chunk's dispatch {again}, the resize {r0}");
+                    assert!(
+                        s > again + 1 && s - again <= r0,
+                        "{at}: the stopped call cost {s}, the chunk's dispatch {again}, the resize {r0}"
+                    );
                     assert_eq!((w, r.0), (w0, r0), "{at}: the write and the redo");
                 }
             }
@@ -1067,7 +1260,13 @@ fn res_table_a_growth_given_up_goes_on_in_place() {
                 let reads = Arc::new(AtomicUsize::new(0));
                 let r = Arc::clone(&reads);
                 lua.set_time_limit(Some((
-                    Arc::new(move || std::time::Duration::from_secs(if r.fetch_add(1, Relaxed) + 1 >= every { 7200 } else { 0 })),
+                    Arc::new(move || {
+                        std::time::Duration::from_secs(if r.fetch_add(1, Relaxed) + 1 >= every {
+                            7200
+                        } else {
+                            0
+                        })
+                    }),
                     std::time::Duration::from_secs(3600),
                 )));
                 let f = lua.load(&format!("T[{n} + 1] = 1"), "=grow").unwrap();
@@ -1083,7 +1282,11 @@ fn res_table_a_growth_given_up_goes_on_in_place() {
                         break;
                     }
                     // (Stopped: the new tail made so far is in the account, hidden or not.)
-                    assert!(lua.memory_used() >= held + made as usize * 16, "seed {seed} fast {fast}: {} bytes held, {held} before, {made} slots made", lua.memory_used());
+                    assert!(
+                        lua.memory_used() >= held + made as usize * 16,
+                        "seed {seed} fast {fast}: {} bytes held, {held} before, {made} slots made",
+                        lua.memory_used()
+                    );
                     assert!(calls < 10_000, "seed {seed} fast {fast} every {every}: no end");
                 }
                 let at = format!("seed {seed} fast {fast} every {every} ({calls} calls)");
@@ -1091,7 +1294,9 @@ fn res_table_a_growth_given_up_goes_on_in_place() {
                 assert_eq!(made, n as u64, "{at}: slots of the new tail made");
                 lua.set_time_limit(None);
                 let got = lua.exec(&format!("local c, s = 0, 0 for k, v in pairs(T) do c = c + 1 s = s + v end return c, s, #T, T[{n} + 1]"), "=look").unwrap();
-                let want = lua.exec(&format!("return {n} + 1, {n} * ({n} + 1) // 2 + 1, {n} + 1, 1"), "=want").unwrap();
+                let want = lua
+                    .exec(&format!("return {n} + 1, {n} * ({n} + 1) // 2 + 1, {n} + 1, 1"), "=want")
+                    .unwrap();
                 assert_eq!(got, want, "{at}: each key once");
                 fuels.push((every, fuel));
             }
@@ -1118,7 +1323,10 @@ fn res_table_stopped_resizes_match_c_lua() {
     let shapes = [
         ("ints", format!("T = {{}} for i = 1, {n} do T[i] = i end {evens}")),
         ("string", format!("T = {{x = 'x'}} for i = 1, {n} do T[i] = i end {evens}")),
-        ("holes", format!("T = {{}} for i = 1, {n} do T[i] = i end for i = 1, {n}, 7 do T[i] = nil end {evens}")),
+        (
+            "holes",
+            format!("T = {{}} for i = 1, {n} do T[i] = i end for i = 1, {n}, 7 do T[i] = nil end {evens}"),
+        ),
     ];
     // (Gone on with from where the call stopped: `P`.) Its resizes include the array part
     // doubling to 2n, which takes in the keys above.
@@ -1145,12 +1353,19 @@ fn res_table_stopped_resizes_match_c_lua() {
             for at in 2..=total {
                 for fast in [true, false] {
                     let seed = [1, 7, 0xdead_beef][at % 3];
-                    let mut lua = state(Limits::default().memory(1 << 30).fuel(1 << 40).hash_seed(seed), fast);
+                    let mut lua =
+                        state(Limits::default().memory(1 << 30).fuel(1 << 40).hash_seed(seed), fast);
                     lua.exec(setup, "=setup").unwrap();
                     let reads = Arc::new(AtomicUsize::new(0));
                     let r = Arc::clone(&reads);
                     lua.set_time_limit(Some((
-                        Arc::new(move || std::time::Duration::from_secs(if r.fetch_add(1, Relaxed) + 1 >= at { 7200 } else { 0 })),
+                        Arc::new(move || {
+                            std::time::Duration::from_secs(if r.fetch_add(1, Relaxed) + 1 >= at {
+                                7200
+                            } else {
+                                0
+                            })
+                        }),
                         std::time::Duration::from_secs(3600),
                     )));
                     let f = lua.load(grow.as_str(), "=grow").unwrap();
@@ -1159,9 +1374,15 @@ fn res_table_stopped_resizes_match_c_lua() {
                     lua.exec(w.as_str(), "=host").unwrap();
                     lua.call(f.value(), &[]).unwrap();
                     let ours = lua.exec(digest.as_str(), "=digest").unwrap();
-                    let ours = lua.str_bytes(ours[0]).map(|b| String::from_utf8_lossy(b).into_owned()).unwrap_or_default();
+                    let ours = lua
+                        .str_bytes(ours[0])
+                        .map(|b| String::from_utf8_lossy(b).into_owned())
+                        .unwrap_or_default();
                     assert!(stopped, "{name} at {at}");
-                    assert_eq!(ours, c, "{name} {act}, stopped at read {at} of {total}, seed {seed} fast {fast}");
+                    assert_eq!(
+                        ours, c,
+                        "{name} {act}, stopped at read {at} of {total}, seed {seed} fast {fast}"
+                    );
                 }
             }
         }
@@ -1183,57 +1404,66 @@ fn res_table_growth_measures() {
     let _alone = super::common::measuring();
     let kib = |key: &str| {
         let s = std::fs::read_to_string("/proc/self/status").unwrap_or_default();
-        s.lines().find(|l| l.starts_with(key)).and_then(|l| l.split_whitespace().nth(1)).and_then(|v| v.parse::<u64>().ok()).unwrap_or(0)
+        s.lines()
+            .find(|l| l.starts_with(key))
+            .and_then(|l| l.split_whitespace().nth(1))
+            .and_then(|v| v.parse::<u64>().ok())
+            .unwrap_or(0)
     };
     for n in [1usize << 20, 1 << 21] {
-    for every in [0, 2, 9] {
-        for fast in [true, false] {
-            let mut lua = state(Limits::default().memory(1 << 30).fuel(1 << 40), fast);
-            lua.exec(&format!("T = {{}} for i = 1, {n} do T[i] = i end"), "=setup").unwrap();
-            let held = lua.memory_used();
-            let t0 = std::time::Instant::now();
-            lua.gc_trace(Some(Arc::new(move || t0.elapsed())), 1 << 16);
-            let reads = Arc::new(AtomicUsize::new(0));
-            let r = Arc::clone(&reads);
-            lua.set_time_limit(Some((
-                Arc::new(move || std::time::Duration::from_secs(if every != 0 && r.fetch_add(1, Relaxed) + 1 >= every { 7200 } else { 0 })),
-                std::time::Duration::from_secs(3600),
-            )));
-            let f = lua.load(&format!("T[{n} + 1] = 1"), "=grow").unwrap();
-            let _ = std::fs::write("/proc/self/clear_refs", "5");
-            let rss0 = kib("VmRSS:");
-            let (mut calls, mut peak) = (0, held);
-            loop {
-                calls += 1;
-                reads.store(0, Relaxed);
-                let r = lua.call(f.value(), &[]);
-                peak = peak.max(lua.memory_used());
-                if r.is_ok() {
-                    break;
+        for every in [0, 2, 9] {
+            for fast in [true, false] {
+                let mut lua = state(Limits::default().memory(1 << 30).fuel(1 << 40), fast);
+                lua.exec(&format!("T = {{}} for i = 1, {n} do T[i] = i end"), "=setup").unwrap();
+                let held = lua.memory_used();
+                let t0 = std::time::Instant::now();
+                lua.gc_trace(Some(Arc::new(move || t0.elapsed())), 1 << 16);
+                let reads = Arc::new(AtomicUsize::new(0));
+                let r = Arc::clone(&reads);
+                lua.set_time_limit(Some((
+                    Arc::new(move || {
+                        std::time::Duration::from_secs(
+                            if every != 0 && r.fetch_add(1, Relaxed) + 1 >= every { 7200 } else { 0 },
+                        )
+                    }),
+                    std::time::Duration::from_secs(3600),
+                )));
+                let f = lua.load(&format!("T[{n} + 1] = 1"), "=grow").unwrap();
+                let _ = std::fs::write("/proc/self/clear_refs", "5");
+                let rss0 = kib("VmRSS:");
+                let (mut calls, mut peak) = (0, held);
+                loop {
+                    calls += 1;
+                    reads.store(0, Relaxed);
+                    let r = lua.call(f.value(), &[]);
+                    peak = peak.max(lua.memory_used());
+                    if r.is_ok() {
+                        break;
+                    }
+                    assert!(calls < 10_000);
                 }
-                assert!(calls < 10_000);
+                let hwm = kib("VmHWM:");
+                let (recs, dropped) = lua.gc_trace_take();
+                let of = |op: remedy_lua::TraceOp| recs.iter().filter(move |r| r.op == op);
+                let reserve: std::time::Duration = of(remedy_lua::TraceOp::Reserve).map(|r| r.wall()).sum();
+                let reserve_max =
+                    of(remedy_lua::TraceOp::Reserve).map(|r| r.wall()).max().unwrap_or_default();
+                let pieces = of(remedy_lua::TraceOp::Resize).count();
+                let piece_max = of(remedy_lua::TraceOp::Resize).map(|r| r.wall()).max().unwrap_or_default();
+                println!(
+                    "2^{} every {every:>2} fast {fast:>5}: {calls:>3} calls | peak RSS +{} MiB (VmHWM {} MiB from RSS {} MiB) | peak accounted +{} MiB | reserve {:.2} ms in all, {:.2} ms at most ({} records) | tail {pieces} pieces, longest {:.3} ms | dropped {dropped}",
+                    n.trailing_zeros(),
+                    hwm.saturating_sub(rss0) / 1024,
+                    hwm / 1024,
+                    rss0 / 1024,
+                    (peak - held) >> 20,
+                    reserve.as_secs_f64() * 1e3,
+                    reserve_max.as_secs_f64() * 1e3,
+                    of(remedy_lua::TraceOp::Reserve).count(),
+                    piece_max.as_secs_f64() * 1e3,
+                );
             }
-            let hwm = kib("VmHWM:");
-            let (recs, dropped) = lua.gc_trace_take();
-            let of = |op: remedy_lua::TraceOp| recs.iter().filter(move |r| r.op == op);
-            let reserve: std::time::Duration = of(remedy_lua::TraceOp::Reserve).map(|r| r.wall()).sum();
-            let reserve_max = of(remedy_lua::TraceOp::Reserve).map(|r| r.wall()).max().unwrap_or_default();
-            let pieces = of(remedy_lua::TraceOp::Resize).count();
-            let piece_max = of(remedy_lua::TraceOp::Resize).map(|r| r.wall()).max().unwrap_or_default();
-            println!(
-                "2^{} every {every:>2} fast {fast:>5}: {calls:>3} calls | peak RSS +{} MiB (VmHWM {} MiB from RSS {} MiB) | peak accounted +{} MiB | reserve {:.2} ms in all, {:.2} ms at most ({} records) | tail {pieces} pieces, longest {:.3} ms | dropped {dropped}",
-                n.trailing_zeros(),
-                hwm.saturating_sub(rss0) / 1024,
-                hwm / 1024,
-                rss0 / 1024,
-                (peak - held) >> 20,
-                reserve.as_secs_f64() * 1e3,
-                reserve_max.as_secs_f64() * 1e3,
-                of(remedy_lua::TraceOp::Reserve).count(),
-                piece_max.as_secs_f64() * 1e3,
-            );
         }
-    }
     }
 }
 
@@ -1250,7 +1480,13 @@ fn lr29f_a_copied_array_part_counts_its_old_buffer() {
         for fast in [true, false] {
             for (room, fits) in [(24usize, false), (40, true)] {
                 let mut lua = state(Limits::default().memory(1 << 30).fuel(1 << 40).hash_seed(seed), fast);
-                lua.exec(&format!("T = {{}} for i = 1, {n} do T[i] = i end collectgarbage() collectgarbage('stop')"), "=setup").unwrap();
+                lua.exec(
+                    &format!(
+                        "T = {{}} for i = 1, {n} do T[i] = i end collectgarbage() collectgarbage('stop')"
+                    ),
+                    "=setup",
+                )
+                .unwrap();
                 let used = lua.memory_used();
                 lua.set_limits(lua.limits().memory(used + (room << 20)));
                 lua.table_slots_copied();
@@ -1264,9 +1500,22 @@ fn lr29f_a_copied_array_part_counts_its_old_buffer() {
                 }
                 lua.set_limits(lua.limits().memory(1 << 30));
                 let want = if fits { n + 1 } else { n };
-                let got = lua.exec("local c, s = 0, 0 for k, v in pairs(T) do c = c + 1 s = s + v end return c, s, #T", "=look").unwrap();
+                let got = lua
+                    .exec(
+                        "local c, s = 0, 0 for k, v in pairs(T) do c = c + 1 s = s + v end return c, s, #T",
+                        "=look",
+                    )
+                    .unwrap();
                 let s = (n * (n + 1) / 2 + usize::from(fits)) as i64;
-                assert_eq!(got, vec![remedy_lua::Value::Int(want as i64), remedy_lua::Value::Int(s), remedy_lua::Value::Int(want as i64)], "{at}: every key kept");
+                assert_eq!(
+                    got,
+                    vec![
+                        remedy_lua::Value::Int(want as i64),
+                        remedy_lua::Value::Int(s),
+                        remedy_lua::Value::Int(want as i64)
+                    ],
+                    "{at}: every key kept"
+                );
             }
         }
     }
@@ -1285,11 +1534,23 @@ fn res_table_fuel_matrix_is_the_same_on_both_storages() {
     use std::sync::atomic::{AtomicUsize, Ordering::Relaxed};
     let shapes = [
         ("grow", "T = {}", "local i = P or 1 while i <= 300000 do T[i] = i i = i + 1 P = i end"),
-        ("mixed", "T = {x = 'x'} for i = 70002, 70002 + 2 * 8192, 2 do T[i] = -i end", "local i = P or 1 while i <= 140001 do T[i] = i i = i + 1 P = i end"),
+        (
+            "mixed",
+            "T = {x = 'x'} for i = 70002, 70002 + 2 * 8192, 2 do T[i] = -i end",
+            "local i = P or 1 while i <= 140001 do T[i] = i i = i + 1 P = i end",
+        ),
         ("ctor", "L = {} for i = 1, 120000 do L[i] = i end", "T = {table.unpack(L)}"),
-        ("shrink", "T = {} for i = 1, 1 << 17 do T[i] = i end", "local i = P or 1 while i <= 1 << 17 do if i % 3 ~= 0 then T[i] = nil end i = i + 1 P = i end for k = 1, 3000 do T['s' .. k] = k end"),
+        (
+            "shrink",
+            "T = {} for i = 1, 1 << 17 do T[i] = i end",
+            "local i = P or 1 while i <= 1 << 17 do if i % 3 ~= 0 then T[i] = nil end i = i + 1 P = i end for k = 1, 3000 do T['s' .. k] = k end",
+        ),
         // (Done once whatever the stops: `#T`.)
-        ("insert", "T = {}", "local i = P or 1 while i <= 200000 do if #T < i then table.insert(T, i) end i = i + 1 P = i end"),
+        (
+            "insert",
+            "T = {}",
+            "local i = P or 1 while i <= 200000 do if #T < i then table.insert(T, i) end i = i + 1 P = i end",
+        ),
     ];
     let digest = "local c, s = 0, 0 for k, v in pairs(T) do c = c + 1 if math.type(v) == 'integer' then s = (s + v) % 1000000007 end end return c .. ' ' .. s .. ' ' .. #T";
     let (mut lines, mut unstopped) = (Vec::new(), Vec::new());
@@ -1299,12 +1560,17 @@ fn res_table_fuel_matrix_is_the_same_on_both_storages() {
             for fast in [true, false] {
                 let mut seen: Option<(u64, String)> = None;
                 for seed in [1, 7, 0xdead_beef] {
-                    let mut lua = state(Limits::default().memory(1 << 30).fuel(1 << 40).hash_seed(seed), fast);
+                    let mut lua =
+                        state(Limits::default().memory(1 << 30).fuel(1 << 40).hash_seed(seed), fast);
                     lua.exec(setup, "=setup").unwrap();
                     let reads = Arc::new(AtomicUsize::new(0));
                     let r = Arc::clone(&reads);
                     lua.set_time_limit(Some((
-                        Arc::new(move || std::time::Duration::from_secs(if every != 0 && r.fetch_add(1, Relaxed) + 1 >= every { 7200 } else { 0 })),
+                        Arc::new(move || {
+                            std::time::Duration::from_secs(
+                                if every != 0 && r.fetch_add(1, Relaxed) + 1 >= every { 7200 } else { 0 },
+                            )
+                        }),
                         std::time::Duration::from_secs(3600),
                     )));
                     let f = lua.load(chunk, "=chunk").unwrap();
@@ -1321,9 +1587,16 @@ fn res_table_fuel_matrix_is_the_same_on_both_storages() {
                     }
                     lua.set_time_limit(None);
                     let d = lua.exec(digest, "=digest").unwrap();
-                    let d = lua.str_bytes(d[0]).map(|b| String::from_utf8_lossy(b).into_owned()).unwrap_or_default();
+                    let d = lua
+                        .str_bytes(d[0])
+                        .map(|b| String::from_utf8_lossy(b).into_owned())
+                        .unwrap_or_default();
                     let got = (fuel, format!("{calls} calls, {d}"));
-                    assert_eq!(*seen.get_or_insert_with(|| got.clone()), got, "{name} every {every}: seed {seed} fast {fast}");
+                    assert_eq!(
+                        *seen.get_or_insert_with(|| got.clone()),
+                        got,
+                        "{name} every {every}: seed {seed} fast {fast}"
+                    );
                 }
                 let (fuel, rest) = seen.unwrap_or_default();
                 let table = rest.split_once(", ").map(|x| x.1.to_string()).unwrap_or_default();
@@ -1331,7 +1604,10 @@ fn res_table_fuel_matrix_is_the_same_on_both_storages() {
                     lines.push(format!("{name} fast {fast}: fuel {fuel}, {rest}"));
                     unstopped.push((name, fast, table));
                 } else {
-                    assert!(unstopped.contains(&(name, fast, table.clone())), "{name} every {every} fast {fast}: ended with {table}");
+                    assert!(
+                        unstopped.contains(&(name, fast, table.clone())),
+                        "{name} every {every} fast {fast}: ended with {table}"
+                    );
                 }
             }
         }
@@ -1364,12 +1640,18 @@ fn seg_a_segmented_array_part_grows_without_copying() {
                 let reads = Arc::new(AtomicUsize::new(0));
                 let r = Arc::clone(&reads);
                 lua.set_time_limit(Some((
-                    Arc::new(move || std::time::Duration::from_secs(if every != 0 && r.fetch_add(1, Relaxed) + 1 >= every { 7200 } else { 0 })),
+                    Arc::new(move || {
+                        std::time::Duration::from_secs(
+                            if every != 0 && r.fetch_add(1, Relaxed) + 1 >= every { 7200 } else { 0 },
+                        )
+                    }),
                     std::time::Duration::from_secs(3600),
                 )));
                 lua.table_slots_copied();
                 lua.table_slots_staged();
-                let f = lua.load("local i = P or 4097 while i <= 1 << 19 do T[i] = i i = i + 1 P = i end", "=grow").unwrap();
+                let f = lua
+                    .load("local i = P or 4097 while i <= 1 << 19 do T[i] = i i = i + 1 P = i end", "=grow")
+                    .unwrap();
                 let (mut calls, mut made) = (0, 0u64);
                 loop {
                     calls += 1;
@@ -1379,15 +1661,32 @@ fn seg_a_segmented_array_part_grows_without_copying() {
                     if r.is_ok() {
                         break;
                     }
-                    assert!(lua.memory_used() >= held + made as usize * 16, "seed {seed} fast {fast}: {} held, {held} before, {made} slots made", lua.memory_used());
+                    assert!(
+                        lua.memory_used() >= held + made as usize * 16,
+                        "seed {seed} fast {fast}: {} held, {held} before, {made} slots made",
+                        lua.memory_used()
+                    );
                     assert!(calls < 100_000);
                 }
                 let at = format!("seed {seed} fast {fast} every {every} ({calls} calls)");
-                assert_eq!(lua.table_slots_copied(), (0, 1), "{at}: slots copied, array parts made segmented");
+                assert_eq!(
+                    lua.table_slots_copied(),
+                    (0, 1),
+                    "{at}: slots copied, array parts made segmented"
+                );
                 lua.set_time_limit(None);
                 let got = lua.exec("local c, s = 0, 0 for k, v in pairs(T) do c = c + 1 s = s + v end local ok = true for i = 1, #T do ok = ok and T[i] == i end return c, s, #T, ok", "=look").unwrap();
                 let n = 1i64 << 19;
-                assert_eq!(got, vec![remedy_lua::Value::Int(n), remedy_lua::Value::Int(n * (n + 1) / 2), remedy_lua::Value::Int(n), remedy_lua::Value::Bool(true)], "{at}");
+                assert_eq!(
+                    got,
+                    vec![
+                        remedy_lua::Value::Int(n),
+                        remedy_lua::Value::Int(n * (n + 1) / 2),
+                        remedy_lua::Value::Int(n),
+                        remedy_lua::Value::Bool(true)
+                    ],
+                    "{at}"
+                );
             }
         }
     }
@@ -1420,7 +1719,8 @@ fn res_table_regrowth_matches_c_lua() {
         for fast in [true, false] {
             let mut lua = state(Limits::default().memory(1 << 30).fuel(1 << 40), fast);
             let ours = lua.exec(&src, "=regrow").unwrap();
-            let ours = lua.str_bytes(ours[0]).map(|b| String::from_utf8_lossy(b).into_owned()).unwrap_or_default();
+            let ours =
+                lua.str_bytes(ours[0]).map(|b| String::from_utf8_lossy(b).into_owned()).unwrap_or_default();
             assert_eq!(ours, c, "{setup} fast {fast}");
         }
     }
@@ -1438,8 +1738,12 @@ fn sec8_f1_a_call_stopped_at_its_deadline_reports_its_fuel_left() {
         lua.exec("T = {} for i = 1, 1 << 17 do T[i] = i end", "=setup").unwrap();
         let reads = Arc::new(AtomicU64::new(0));
         let r = Arc::clone(&reads);
-        lua.set_time_limit(Some((Arc::new(move || std::time::Duration::from_secs(r.fetch_add(1, Relaxed))), std::time::Duration::from_secs(2))));
-        let body = "local i = P or 1 while i <= 1 << 17 do if i % 3 ~= 0 then T[i] = nil end i = i + 1 P = i end
+        lua.set_time_limit(Some((
+            Arc::new(move || std::time::Duration::from_secs(r.fetch_add(1, Relaxed))),
+            std::time::Duration::from_secs(2),
+        )));
+        let body =
+            "local i = P or 1 while i <= 1 << 17 do if i % 3 ~= 0 then T[i] = nil end i = i + 1 P = i end
             for k = 1, 3000 do T['s' .. k] = k end";
         let (mut stops, mut zero) = (0, Vec::new());
         for call in 0.. {
@@ -1457,7 +1761,10 @@ fn sec8_f1_a_call_stopped_at_its_deadline_reports_its_fuel_left() {
             }
         }
         assert!(stops > 10, "fast {fast}: {stops} stops");
-        assert!(zero.is_empty(), "fast {fast}: calls stopped at the deadline with no fuel left: {zero:?} of {stops}");
+        assert!(
+            zero.is_empty(),
+            "fast {fast}: calls stopped at the deadline with no fuel left: {zero:?} of {stops}"
+        );
     }
 }
 
@@ -1481,7 +1788,8 @@ fn sec8_f4_a_rehash_bigger_than_a_call_is_made_across_calls() {
         for seed in [1u64, 7, 0xdead_beef] {
             for fast in [true, false] {
                 let fresh = || {
-                    let mut lua = state(Limits::default().memory(1 << 30).fuel(1 << 40).hash_seed(seed), fast);
+                    let mut lua =
+                        state(Limits::default().memory(1 << 30).fuel(1 << 40).hash_seed(seed), fast);
                     lua.exec(&setup, "=setup").unwrap();
                     let f = lua.load("T.new = 1", "=add").unwrap();
                     (lua, f)
@@ -1499,21 +1807,33 @@ fn sec8_f4_a_rehash_bigger_than_a_call_is_made_across_calls() {
                 let _ = lua.table_slots_watched();
                 let mut used = Vec::new();
                 loop {
-                    assert!((used.len() as u64) < whole / FUEL + 2, "2^{bits} seed {seed} fast {fast}: not in after {used:?} of {whole}");
+                    assert!(
+                        (used.len() as u64) < whole / FUEL + 2,
+                        "2^{bits} seed {seed} fast {fast}: not in after {used:?} of {whole}"
+                    );
                     let r = lua.call(f.value(), &[]);
                     used.push(FUEL - lua.fuel_left());
                     if r.is_ok() {
                         break;
                     }
                     assert!(matches!(r, Err(remedy_lua::Error::Limit(remedy_lua::LimitKind::Fuel))), "{r:?}");
-                    assert!(lua.table_get(t, key).is_nil(), "2^{bits} seed {seed} fast {fast}: in before the growth was paid");
+                    assert!(
+                        lua.table_get(t, key).is_nil(),
+                        "2^{bits} seed {seed} fast {fast}: in before the growth was paid"
+                    );
                 }
                 assert!(!lua.table_get(t, key).is_nil());
                 let (calls, total) = (used.len() as u64, used.iter().sum::<u64>());
-                assert!((whole..=whole + calls * SLACK).contains(&total), "2^{bits} seed {seed} fast {fast}: {total} in {used:?} for {whole}");
+                assert!(
+                    (whole..=whole + calls * SLACK).contains(&total),
+                    "2^{bits} seed {seed} fast {fast}: {total} in {used:?} for {whole}"
+                );
                 // The census and the scan, each part once, and a piece of each a call.
                 let read = lua.table_slots_watched();
-                assert!(read <= 2 * slots + calls * 2 * 512, "2^{bits} seed {seed} fast {fast}: {read} slots read of {slots}");
+                assert!(
+                    read <= 2 * slots + calls * 2 * 512,
+                    "2^{bits} seed {seed} fast {fast}: {read} slots read of {slots}"
+                );
                 match &seen {
                     None => seen = Some(used.clone()),
                     Some(s) => assert_eq!(s, &used, "2^{bits} seed {seed} fast {fast}: the calls' fuel"),
@@ -1526,7 +1846,8 @@ fn sec8_f4_a_rehash_bigger_than_a_call_is_made_across_calls() {
     for fast in [true, false] {
         let fresh = |removed: bool| {
             let mut lua = state(Limits::default().memory(1 << 30).fuel(1 << 40).hash_seed(1), fast);
-            lua.exec("collectgarbage('stop') T = {} for i = 1, 1 << 18 do T['k' .. i] = i end", "=setup").unwrap();
+            lua.exec("collectgarbage('stop') T = {} for i = 1, 1 << 18 do T['k' .. i] = i end", "=setup")
+                .unwrap();
             if removed {
                 lua.exec("T.k1 = nil", "=remove").unwrap();
             }
@@ -1550,7 +1871,10 @@ fn sec8_f4_a_rehash_bigger_than_a_call_is_made_across_calls() {
         }
         used.push(FUEL - lua.fuel_left());
         let (calls, total) = (used.len() as u64, used.iter().sum::<u64>());
-        assert!((again..=again + calls * SLACK).contains(&total), "fast {fast}: made again for {total} in {used:?}, whole {again}");
+        assert!(
+            (again..=again + calls * SLACK).contains(&total),
+            "fast {fast}: made again for {total} in {used:?}, whole {again}"
+        );
     }
 }
 
@@ -1585,18 +1909,31 @@ fn sec8_f4_a_nodes_growth_bigger_than_a_call_is_made_across_calls() {
             let _ = lua.table_slots_watched();
             let mut used = Vec::new();
             loop {
-                assert!((used.len() as u64) < whole / FUEL + 2, "seed {seed} fast {fast}: not in after {used:?} of {whole}");
+                assert!(
+                    (used.len() as u64) < whole / FUEL + 2,
+                    "seed {seed} fast {fast}: not in after {used:?} of {whole}"
+                );
                 let r = lua.call(f.value(), &[]);
                 used.push(FUEL - lua.fuel_left());
                 if r.is_ok() {
                     break;
                 }
                 assert!(matches!(r, Err(remedy_lua::Error::Limit(remedy_lua::LimitKind::Fuel))), "{r:?}");
-                assert!(lua.table_get(t, remedy_lua::Value::Num(-0.5)).is_nil(), "seed {seed} fast {fast}: in before the growth was paid");
-                assert!(lua.memory_used() >= landed, "seed {seed} fast {fast}: {} counted while kept, {landed} once in", lua.memory_used());
+                assert!(
+                    lua.table_get(t, remedy_lua::Value::Num(-0.5)).is_nil(),
+                    "seed {seed} fast {fast}: in before the growth was paid"
+                );
+                assert!(
+                    lua.memory_used() >= landed,
+                    "seed {seed} fast {fast}: {} counted while kept, {landed} once in",
+                    lua.memory_used()
+                );
             }
             let (calls, total) = (used.len() as u64, used.iter().sum::<u64>());
-            assert!((whole..=whole + calls * SLACK).contains(&total), "seed {seed} fast {fast}: {total} in {used:?} for {whole}");
+            assert!(
+                (whole..=whole + calls * SLACK).contains(&total),
+                "seed {seed} fast {fast}: {total} in {used:?} for {whole}"
+            );
             // The old part's keys placed once, and a piece a call.
             let read = lua.table_slots_watched();
             assert!(read <= (4u64 << 15) + calls * 512, "seed {seed} fast {fast}: {read} slots placed");
@@ -1640,18 +1977,31 @@ fn sec8_f4_a_key_move_bigger_than_a_call_is_made_across_calls() {
             let _ = lua.table_slots_watched();
             let mut used = Vec::new();
             loop {
-                assert!((used.len() as u64) < whole / FUEL + 2, "seed {seed} fast {fast}: not in after {used:?} of {whole}");
+                assert!(
+                    (used.len() as u64) < whole / FUEL + 2,
+                    "seed {seed} fast {fast}: not in after {used:?} of {whole}"
+                );
                 let r = lua.call(f.value(), &[]);
                 used.push(FUEL - lua.fuel_left());
                 if r.is_ok() {
                     break;
                 }
                 assert!(matches!(r, Err(remedy_lua::Error::Limit(remedy_lua::LimitKind::Fuel))), "{r:?}");
-                assert!(lua.table_get(t, key).is_nil(), "seed {seed} fast {fast}: in before the move was paid");
-                assert_eq!(lua.table_get(t, remedy_lua::Value::Int(7)), remedy_lua::Value::Int(1), "seed {seed} fast {fast}: a key moved early");
+                assert!(
+                    lua.table_get(t, key).is_nil(),
+                    "seed {seed} fast {fast}: in before the move was paid"
+                );
+                assert_eq!(
+                    lua.table_get(t, remedy_lua::Value::Int(7)),
+                    remedy_lua::Value::Int(1),
+                    "seed {seed} fast {fast}: a key moved early"
+                );
             }
             let (calls, total) = (used.len() as u64, used.iter().sum::<u64>());
-            assert!((whole..=whole + calls * SLACK).contains(&total), "seed {seed} fast {fast}: {total} in {used:?} for {whole}");
+            assert!(
+                (whole..=whole + calls * SLACK).contains(&total),
+                "seed {seed} fast {fast}: {total} in {used:?} for {whole}"
+            );
             // Each integer key placed once, and the census of the rehash after it once, a piece
             // a call. (At four units a slot the rehash after the move is watched; its count
             // gets one fixed allowance of 65,536 slots across the whole run, and retrying does
@@ -1678,7 +2028,15 @@ fn sec8_f4_a_growth_while_the_collector_marks_is_made_across_calls() {
     const FUEL: u64 = 20_000;
     const SLACK: u64 = 100;
     let mut seen = None;
-    for (bits, seed, fast) in [(22, 1u64, true), (20, 1, true), (20, 1, false), (20, 7, true), (20, 7, false), (20, 0xdead_beef, true), (20, 0xdead_beef, false)] {
+    for (bits, seed, fast) in [
+        (22, 1u64, true),
+        (20, 1, true),
+        (20, 1, false),
+        (20, 7, true),
+        (20, 7, false),
+        (20, 0xdead_beef, true),
+        (20, 0xdead_beef, false),
+    ] {
         let fresh = || {
             let mut lua = state(Limits::default().memory(1 << 30).fuel(1 << 40).hash_seed(seed), fast);
             lua.exec(&format!("T = {{}} for i = 1, 1 << {bits} do T[i] = i end collectgarbage() collectgarbage('step', 1)"), "=setup").unwrap();
@@ -1693,7 +2051,11 @@ fn sec8_f4_a_growth_while_the_collector_marks_is_made_across_calls() {
         lua.set_limits(lua.limits().fuel(FUEL));
         let mut used = Vec::new();
         loop {
-            assert!((used.len() as u64) < whole / FUEL + 2, "2^{bits} seed {seed} fast {fast}: not in after {} calls of {whole}", used.len());
+            assert!(
+                (used.len() as u64) < whole / FUEL + 2,
+                "2^{bits} seed {seed} fast {fast}: not in after {} calls of {whole}",
+                used.len()
+            );
             let r = lua.call(f.value(), &[]);
             used.push(FUEL - lua.fuel_left());
             if r.is_ok() {
@@ -1703,7 +2065,10 @@ fn sec8_f4_a_growth_while_the_collector_marks_is_made_across_calls() {
         }
         assert_eq!(lua.table_get(t, remedy_lua::Value::Int((1 << bits) + 1)), remedy_lua::Value::Int(1));
         let (calls, total) = (used.len() as u64, used.iter().sum::<u64>());
-        assert!((whole..=whole + calls * SLACK).contains(&total), "2^{bits} seed {seed} fast {fast}: {total} in {calls} calls for {whole}");
+        assert!(
+            (whole..=whole + calls * SLACK).contains(&total),
+            "2^{bits} seed {seed} fast {fast}: {total} in {calls} calls for {whole}"
+        );
         if bits == 20 {
             match &seen {
                 None => seen = Some(used.clone()),
@@ -1727,7 +2092,12 @@ fn sec8_f4_a_resize_thrown_away_by_a_write_is_released_there() {
         let before = lua.memory_used();
         let reads = Arc::new(AtomicUsize::new(0));
         let r = Arc::clone(&reads);
-        lua.set_time_limit(Some((Arc::new(move || std::time::Duration::from_secs(if r.fetch_add(1, Relaxed) + 1 >= 3 { 7200 } else { 0 })), std::time::Duration::from_secs(3600))));
+        lua.set_time_limit(Some((
+            Arc::new(move || {
+                std::time::Duration::from_secs(if r.fetch_add(1, Relaxed) + 1 >= 3 { 7200 } else { 0 })
+            }),
+            std::time::Duration::from_secs(3600),
+        )));
         let mut held = 0;
         for _ in 0..50 {
             reads.store(0, Relaxed);
@@ -1753,9 +2123,15 @@ fn sec8_f4_a_resize_thrown_away_by_a_write_is_released_there() {
 /// the rehash lands within T's traversal, in 4 calls.)
 #[test]
 fn sec8_f4_a_partial_ending_while_its_table_is_traversed_in_chunks() {
-    for (fast, seed) in [(true, 1u64), (false, 1), (true, 7), (false, 7), (true, 0xdead_beef), (false, 0xdead_beef)] {
+    for (fast, seed) in
+        [(true, 1u64), (false, 1), (true, 7), (false, 7), (true, 0xdead_beef), (false, 0xdead_beef)]
+    {
         let mut lua = state(Limits::default().memory(1 << 30).fuel(1 << 40).hash_seed(seed), fast);
-        lua.exec("T = {} for i = 1, 1 << 17 do T['k' .. i] = {i} end collectgarbage() collectgarbage('step', 1)", "=setup").unwrap();
+        lua.exec(
+            "T = {} for i = 1, 1 << 17 do T['k' .. i] = {i} end collectgarbage() collectgarbage('step', 1)",
+            "=setup",
+        )
+        .unwrap();
         let f = lua.load("collectgarbage('step', 0) T.extra = {0}", "=grow").unwrap();
         lua.set_limits(lua.limits().fuel(20_000));
         let mut calls = 0;
@@ -1784,7 +2160,11 @@ fn sec8_f4_a_growth_under_a_piece_a_call_is_charged_whole() {
     for fast in [true, false] {
         let fresh = || {
             let mut lua = state(Limits::default().memory(1 << 30).fuel(1 << 40), fast);
-            lua.exec("T = {} for i = 1, 1 << 16 do T['k' .. i] = i end collectgarbage() collectgarbage('stop')", "=setup").unwrap();
+            lua.exec(
+                "T = {} for i = 1, 1 << 16 do T['k' .. i] = i end collectgarbage() collectgarbage('stop')",
+                "=setup",
+            )
+            .unwrap();
             let f = lua.load("T.extra = 1", "=add").unwrap();
             (lua, f)
         };
@@ -1804,7 +2184,10 @@ fn sec8_f4_a_growth_under_a_piece_a_call_is_charged_whole() {
             }
         }
         // (Each call's instructions before the write, 3 fuel at most, again in each.)
-        assert!((whole..=whole + calls * 3).contains(&total), "fast {fast}: {total} in {calls} calls for {whole}");
+        assert!(
+            (whole..=whole + calls * 3).contains(&total),
+            "fast {fast}: {total} in {calls} calls for {whole}"
+        );
         lua.set_limits(lua.limits().fuel(1 << 40));
         let ok = lua.exec("if T.extra ~= 1 then return false end for i = 1, 1 << 16 do if T['k' .. i] ~= i then return false end end return true", "=check").unwrap();
         assert_eq!(ok.first(), Some(&remedy_lua::Value::Bool(true)), "fast {fast}");
@@ -1821,7 +2204,11 @@ fn sec8_f4_a_growth_paid_ahead_in_one_cycle_lands_in_the_next() {
     for (fast, seed) in [(true, 1u64), (false, 1), (true, 7), (false, 7)] {
         let fresh = || {
             let mut lua = state(Limits::default().memory(1 << 30).fuel(1 << 40).hash_seed(seed), fast);
-            lua.exec("T = {} for i = 1, 1 << 20 do T[i] = i end collectgarbage() collectgarbage('step', 1)", "=setup").unwrap();
+            lua.exec(
+                "T = {} for i = 1, 1 << 20 do T[i] = i end collectgarbage() collectgarbage('step', 1)",
+                "=setup",
+            )
+            .unwrap();
             let f = lua.load("T[(1 << 20) + 1] = 1", "=add").unwrap();
             (lua, f)
         };
@@ -1849,9 +2236,18 @@ fn sec8_f4_a_growth_paid_ahead_in_one_cycle_lands_in_the_next() {
             assert!(n < 100, "seed {seed} fast {fast}: not in");
         }
         let total: u64 = used.iter().sum();
-        assert!(total <= whole + used.len() as u64 * 100, "seed {seed} fast {fast}: {total} in {} calls for {whole}", used.len());
+        assert!(
+            total <= whole + used.len() as u64 * 100,
+            "seed {seed} fast {fast}: {total} in {} calls for {whole}",
+            used.len()
+        );
         lua.set_limits(lua.limits().fuel(1 << 40));
-        let ok = lua.exec("for i = 1, 1 << 20 do if T[i] ~= i then return false end end return T[(1 << 20) + 1] == 1", "=check").unwrap();
+        let ok = lua
+            .exec(
+                "for i = 1, 1 << 20 do if T[i] ~= i then return false end end return T[(1 << 20) + 1] == 1",
+                "=check",
+            )
+            .unwrap();
         assert_eq!(ok.first(), Some(&remedy_lua::Value::Bool(true)), "seed {seed} fast {fast}");
     }
 }
@@ -1873,7 +2269,16 @@ fn sec8_f6_a_dropped_tail_is_not_counted() {
             if stop {
                 let reads = Arc::new(AtomicUsize::new(0));
                 let r = Arc::clone(&reads);
-                lua.set_time_limit(Some((Arc::new(move || std::time::Duration::from_secs(if r.fetch_add(1, Relaxed) + 1 >= 3 { 7200 } else { 0 })), std::time::Duration::from_secs(3600))));
+                lua.set_time_limit(Some((
+                    Arc::new(move || {
+                        std::time::Duration::from_secs(if r.fetch_add(1, Relaxed) + 1 >= 3 {
+                            7200
+                        } else {
+                            0
+                        })
+                    }),
+                    std::time::Duration::from_secs(3600),
+                )));
                 for _ in 0..5 {
                     reads.store(0, Relaxed);
                     assert!(lua.call(f.value(), &[]).is_err(), "fast {fast}: in before its stops");
@@ -1918,7 +2323,10 @@ fn sec8_f4_a_key_move_whose_pieces_are_past_a_call_is_made_across_calls() {
             let (mut calls, mut total) = (0u64, 0u64);
             loop {
                 calls += 1;
-                assert!(calls <= 2 * whole / fuel + 20, "{fuel} a call, fast {fast}: not in after {calls} calls, {total} paid of {whole}");
+                assert!(
+                    calls <= 2 * whole / fuel + 20,
+                    "{fuel} a call, fast {fast}: not in after {calls} calls, {total} paid of {whole}"
+                );
                 let r = lua.call(f.value(), &[]);
                 total += fuel - lua.fuel_left();
                 if r.is_ok() {
@@ -1926,7 +2334,10 @@ fn sec8_f4_a_key_move_whose_pieces_are_past_a_call_is_made_across_calls() {
                 }
                 assert!(matches!(r, Err(remedy_lua::Error::Limit(remedy_lua::LimitKind::Fuel))), "{r:?}");
             }
-            assert!((whole..=whole + 100 * calls).contains(&total), "{fuel} a call, fast {fast}: {total} in {calls} calls for {whole}");
+            assert!(
+                (whole..=whole + 100 * calls).contains(&total),
+                "{fuel} a call, fast {fast}: {total} in {calls} calls for {whole}"
+            );
             lua.set_limits(lua.limits().fuel(1 << 40));
             let ok = lua.exec("if T.s ~= 1 then return false end for i = 1, 1 << 21 do if T[i * 3] ~= i then return false end end return true", "=check").unwrap();
             assert_eq!(ok.first(), Some(&remedy_lua::Value::Bool(true)), "{fuel} a call, fast {fast}");
@@ -1963,14 +2374,20 @@ fn sec8_f4_a_marking_paid_ahead_past_a_call_is_paid_across_calls() {
         let (mut calls, mut total) = (0u64, 0u64);
         loop {
             calls += 1;
-            assert!(calls <= 2 * whole / FUEL + 20, "fast {fast}: not in after {calls} calls, {total} paid of {whole}");
+            assert!(
+                calls <= 2 * whole / FUEL + 20,
+                "fast {fast}: not in after {calls} calls, {total} paid of {whole}"
+            );
             let r = lua.call(f.value(), &[]);
             total += FUEL - lua.fuel_left();
             if r.is_ok() {
                 break;
             }
         }
-        assert!((whole..=whole + 100 * calls).contains(&total), "fast {fast}: {total} in {calls} calls for {whole}");
+        assert!(
+            (whole..=whole + 100 * calls).contains(&total),
+            "fast {fast}: {total} in {calls} calls for {whole}"
+        );
         lua.set_limits(lua.limits().fuel(1 << 40));
         let ok = lua.exec("if T.s ~= 1 then return false end for i = 1, 1 << 17 do if T[i * 3] ~= i then return false end end return true", "=check").unwrap();
         assert_eq!(ok.first(), Some(&remedy_lua::Value::Bool(true)), "fast {fast}");

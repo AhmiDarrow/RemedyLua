@@ -3,7 +3,7 @@
 //! depth, output). Each test checks the result, that nothing panics, and the exact error
 //! when a budget is what stops the program.
 
-use remedy_lua::{Error, LimitKind, Libs, Limits, Lua};
+use remedy_lua::{Error, Libs, LimitKind, Limits, Lua};
 
 fn run(src: &str, limits: Limits) -> Result<Vec<String>, Error> {
     let mut lua = Lua::new(limits, Libs::ALL);
@@ -36,7 +36,8 @@ fn huge_unpack_is_a_memory_limit() {
 #[test]
 fn unpack_and_byte_of_large_counts() {
     for n in [100_000, 999_999] {
-        let src = format!("local t = {{}} for i = 1, {n} do t[i] = i end return select('#', table.unpack(t))");
+        let src =
+            format!("local t = {{}} for i = 1, {n} do t[i] = i end return select('#', table.unpack(t))");
         assert_eq!(run(&src, big()).unwrap(), [n.to_string()]);
     }
     let src = "local s = string.rep('a', 500000) local n = select('#', s:byte(1, -1)) return n, (select(500000, s:byte(1, -1)))";
@@ -76,7 +77,11 @@ fn calls_with_hundreds_of_arguments() {
         assert_eq!(run(&src, big()).unwrap(), [n.to_string(), n.to_string()], "{n} arguments");
         // A fixed-parameter function too.
         let params: Vec<String> = (1..=n).map(|i| format!("p{i}")).collect();
-        let src = format!("local function g({}) return p1 + p{n} end return g({})", params.join(","), args.join(","));
+        let src = format!(
+            "local function g({}) return p1 + p{n} end return g({})",
+            params.join(","),
+            args.join(",")
+        );
         assert_eq!(run(&src, big()).unwrap(), [(n + 1).to_string()], "{n} parameters");
     }
 }
@@ -121,11 +126,25 @@ fn nested(kind: &str, n: usize) -> (String, &'static str) {
         "parens" => (format!("return {}1{}", "(".repeat(n), ")".repeat(n)), "1"),
         "blocks" => (format!("local x = 0 {} x = 7 {} return x", "do ".repeat(n), "end ".repeat(n)), "7"),
         // Nested function expressions (each returns the next).
-        "functions" => (format!("local f = {} 5 {} return type(f)", "function() return ".repeat(n), " end".repeat(n)), "function"),
+        "functions" => (
+            format!("local f = {} 5 {} return type(f)", "function() return ".repeat(n), " end".repeat(n)),
+            "function",
+        ),
         // Each called as it is made: a chain of tail calls.
-        "called functions" => (format!("return {} 5 {}", "(function() return ".repeat(n), "end)()".repeat(n)), "5"),
-        "calls" => (format!("local k = 0 local function f() k = k + 1 return f end f{} return k", "()".repeat(n)), "count"),
-        "methods" => (format!("local o = {{k = 0}} function o:m() self.k = self.k + 1 return self end o{} return o.k", ":m()".repeat(n)), "count"),
+        "called functions" => {
+            (format!("return {} 5 {}", "(function() return ".repeat(n), "end)()".repeat(n)), "5")
+        }
+        "calls" => (
+            format!("local k = 0 local function f() k = k + 1 return f end f{} return k", "()".repeat(n)),
+            "count",
+        ),
+        "methods" => (
+            format!(
+                "local o = {{k = 0}} function o:m() self.k = self.k + 1 return self end o{} return o.k",
+                ":m()".repeat(n)
+            ),
+            "count",
+        ),
         // Left-associative: a left-deep tree.
         "sums" => (format!("local x = 1 return x{}", " + x".repeat(n - 1)), "count"),
         "ands" => (format!("local a = 1 return a{}", " and a".repeat(n)), "1"),
@@ -143,8 +162,19 @@ fn nested(kind: &str, n: usize) -> (String, &'static str) {
     }
 }
 
-const SHAPES: &[&str] =
-    &["parens", "blocks", "functions", "called functions", "calls", "methods", "sums", "ands", "ors", "powers", "elseifs"];
+const SHAPES: &[&str] = &[
+    "parens",
+    "blocks",
+    "functions",
+    "called functions",
+    "calls",
+    "methods",
+    "sums",
+    "ands",
+    "ors",
+    "powers",
+    "elseifs",
+];
 
 fn expect(e: &str, n: usize) -> String {
     match e {
@@ -206,7 +236,13 @@ fn nesting_that_takes_registers() {
         ("concat", |n: usize| format!("local s = 'a' return #(s{})", " .. s".repeat(n - 1)), "count"),
         ("nots", |n: usize| format!("local x = 1 return {}x", "not ".repeat(n)), "true"),
         ("right powers", |n: usize| format!("local x = 1 return x{}", " ^ x".repeat(n - 1)), "1.0"),
-        ("args", |n: usize| format!("local function f(x) return x end return {}1{}", "f(".repeat(n), ")".repeat(n)), "1"),
+        (
+            "args",
+            |n: usize| {
+                format!("local function f(x) return x end return {}1{}", "f(".repeat(n), ")".repeat(n))
+            },
+            "1",
+        ),
         ("fields", |n: usize| format!("local t = {{}} t.t = t return t{} == t", ".t".repeat(n)), "true"),
     ];
     for (kind, make, e) in shapes {
@@ -267,7 +303,11 @@ fn deep_programs_on_a_small_stack() {
             }
             for src in &past_cap {
                 // Runs or stops with a syntax error (the register cap): never a crash.
-                assert!(matches!(lua.load(src, "=deep"), Ok(_) | Err(Error::Syntax(_))), "{}", &src[..60.min(src.len())]);
+                assert!(
+                    matches!(lua.load(src, "=deep"), Ok(_) | Err(Error::Syntax(_))),
+                    "{}",
+                    &src[..60.min(src.len())]
+                );
             }
             for src in &rlua {
                 let r = lua.load(src, "=deep.rlua");
@@ -302,7 +342,12 @@ fn wide_functions_mix_with_narrow_ones() {
     let prog = src.as_str();
     let fast = super::common::remedy_measured(prog, 100_000_000, true);
     assert_eq!(fast, super::common::remedy_measured(prog, 100_000_000, false));
-    assert!(fast.0.as_ref().is_ok_and(|s| s.contains("508725") && s.contains("398") && s.contains("attempt to perform arithmetic")), "{fast:?}");
+    assert!(
+        fast.0.as_ref().is_ok_and(|s| s.contains("508725")
+            && s.contains("398")
+            && s.contains("attempt to perform arithmetic")),
+        "{fast:?}"
+    );
 }
 
 /// Every kind of expression evaluated 40 000 registers up (inside 40 000 nested table

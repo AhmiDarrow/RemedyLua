@@ -54,7 +54,9 @@ fn setlocale(lua: &mut Lua, a: Args) -> R {
     let known = match l {
         None => true,
         // C reads the name up to its first zero byte.
-        Some(l) => matches!(lua.bytes(l).split(|&c| c == 0).next().unwrap_or_default(), b"" | b"C" | b"POSIX"),
+        Some(l) => {
+            matches!(lua.bytes(l).split(|&c| c == 0).next().unwrap_or_default(), b"" | b"C" | b"POSIX")
+        }
     };
     if known { lua.ret_str(b"C") } else { lua.ret1(Value::Nil) }
 }
@@ -148,7 +150,16 @@ fn time(lua: &mut Lua, a: Args) -> R {
     let (ny, nm, nd, nh, nmin, nsec, wday, yday) = broken_down(secs + lua.utc_offset);
     // C's `setallfields`: in its order, through `__newindex` (`lua_setfield`), and
     // `isdst` (false: the normalized time is standard time).
-    for (k, v) in [("year", ny), ("month", nm), ("day", nd), ("hour", nh), ("min", nmin), ("sec", nsec), ("yday", yday), ("wday", wday)] {
+    for (k, v) in [
+        ("year", ny),
+        ("month", nm),
+        ("day", nd),
+        ("hour", nh),
+        ("min", nmin),
+        ("sec", nsec),
+        ("yday", yday),
+        ("wday", wday),
+    ] {
         let key = lua.new_str(k.as_bytes())?;
         lua.set_index_nested(Value::Table(t), key, Value::Int(v))?;
     }
@@ -180,8 +191,20 @@ fn difftime(lua: &mut Lua, a: Args) -> R {
 }
 
 const DAYS: [&str; 7] = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
-const MONTHS: [&str; 12] =
-    ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const MONTHS: [&str; 12] = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+];
 
 fn date(lua: &mut Lua, a: Args) -> R {
     // Calendar arithmetic and formatting: a few dozen instructions' worth.
@@ -214,7 +237,16 @@ fn date(lua: &mut Lua, a: Args) -> R {
     let (y, m, d, h, mi, s, wday, yday) = broken_down(local);
     if f.starts_with(b"*t") {
         let tab = lua.new_table(0, 9)?;
-        for (k, v) in [("year", y), ("month", m), ("day", d), ("hour", h), ("min", mi), ("sec", s), ("wday", wday), ("yday", yday)] {
+        for (k, v) in [
+            ("year", y),
+            ("month", m),
+            ("day", d),
+            ("hour", h),
+            ("min", mi),
+            ("sec", s),
+            ("wday", wday),
+            ("yday", yday),
+        ] {
             let key = lua.new_str(k.as_bytes())?;
             lua.raw_set(tab, key, Value::Int(v))?;
         }

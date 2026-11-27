@@ -203,7 +203,11 @@ fn string_limit_below_short_strings() {
         let mut lua = Lua::new(Limits::default().string_len(10).hash_seed(TEST_SEED), Libs::ALL);
         lua.set_fast_loop(fast);
         let r = lua.exec(src, "=t");
-        assert!(r.is_err(), "fast loop {fast}: a 20-byte result under a 10-byte limit: {:?}", r.map(|v| v.len()));
+        assert!(
+            r.is_err(),
+            "fast loop {fast}: a 20-byte result under a 10-byte limit: {:?}",
+            r.map(|v| v.len())
+        );
     }
 }
 
@@ -354,7 +358,10 @@ fn new_strings_in_place_under_limits() {
             let mut lua = Lua::new(Limits::default().memory(memory).hash_seed(TEST_SEED), Libs::ALL);
             lua.set_fast_loop(fast);
             lua.set_gc_stress(stress);
-            let r = lua.exec(src, "=t").map(|v| v.first().and_then(|x| lua.to_string_lossy(*x))).map_err(|e| e.to_string());
+            let r = lua
+                .exec(src, "=t")
+                .map(|v| v.first().and_then(|x| lua.to_string_lossy(*x)))
+                .map_err(|e| e.to_string());
             (r, lua.fuel_left(), lua.memory_used())
         };
         assert_eq!(run(true), run(false), "memory {memory}, stress {stress}");

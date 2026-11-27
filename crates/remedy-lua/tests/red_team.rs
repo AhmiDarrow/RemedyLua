@@ -5,7 +5,7 @@
 
 use std::time::{Duration, Instant};
 
-use remedy_lua::{Data, DataLimits, Error, LimitKind, Libs, Limits, Lua, Value};
+use remedy_lua::{Data, DataLimits, Error, Libs, LimitKind, Limits, Lua, Value};
 
 fn quick<T>(f: impl FnOnce() -> T) -> T {
     let start = Instant::now();
@@ -50,7 +50,9 @@ fn single_library_calls_cannot_run_forever() {
     let r = quick(|| s.exec("return string.rep('', 1 << 62)", "=t")).unwrap();
     assert_eq!(s.to_string_lossy(r[0]).unwrap(), "");
     assert_eq!(quick(|| s.exec("table.move({}, 1, 1 << 50, 2)", "=t")), FUEL);
-    let m = err_msg(quick(|| s.exec("return string.find(string.rep('a', 40), string.rep('a*', 40) .. 'b')", "=t")));
+    let m = err_msg(quick(|| {
+        s.exec("return string.find(string.rep('a', 40), string.rep('a*', 40) .. 'b')", "=t")
+    }));
     // Stopped by the step limit, or by the fuel first: a match's steps are paid for and
     // capped by the fuel left (sweep 2, SEC2-6), and 1M fuel buys fewer steps than the cap.
     assert!(m.contains("pattern too complex") || m == "Err(Limit(Fuel))", "{m}");
@@ -78,7 +80,8 @@ fn ordinary_table_and_pattern_use_still_works() {
             "=t",
         )
         .unwrap();
-    let text: Vec<String> = r.iter().map(|v| s.to_string_lossy(*v).unwrap_or_else(|| format!("{v:?}"))).collect();
+    let text: Vec<String> =
+        r.iter().map(|v| s.to_string_lossy(*v).unwrap_or_else(|| format!("{v:?}"))).collect();
     assert_eq!(text, ["0,2,0,2", "Int(1)", "hi there", "Int(3)", "ab-ab-ab"]);
 }
 
@@ -106,7 +109,9 @@ fn the_limit_cannot_be_caught() {
 #[test]
 fn shared_tables_cannot_blow_up_on_the_rust_side() {
     let mut s = sb();
-    let shared = s.exec("local s = string.rep('x', 1 << 16) local t = {} for i = 1, 300 do t[i] = s end return t", "=t").unwrap();
+    let shared = s
+        .exec("local s = string.rep('x', 1 << 16) local t = {} for i = 1, 300 do t[i] = s end return t", "=t")
+        .unwrap();
     assert!(s.to_data(shared[0], DataLimits::default()).is_err());
     let doubled = s.exec("local x = {} for _ = 1, 22 do x = {x, x} end return x", "=t").unwrap();
     assert!(quick(|| s.to_data(doubled[0], DataLimits::default())).is_err());
@@ -206,21 +211,45 @@ fn coroutine_tricks() {
     let mut s = Lua::new(Limits::default().fuel(20_000_000), Libs::SAFE);
     let cases = [
         // Resuming itself, a dead one, the main thread.
-        ("local co co = coroutine.create(function() return coroutine.resume(co) end) return coroutine.resume(co)", true),
-        ("local co = coroutine.create(function() end) coroutine.resume(co) return coroutine.resume(co)", true),
+        (
+            "local co co = coroutine.create(function() return coroutine.resume(co) end) return coroutine.resume(co)",
+            true,
+        ),
+        (
+            "local co = coroutine.create(function() end) coroutine.resume(co) return coroutine.resume(co)",
+            true,
+        ),
         ("return coroutine.resume(coroutine.running())", true),
         ("return coroutine.close(coroutine.running())", false),
         // Yielding from places that cannot.
         ("return coroutine.yield()", false),
-        ("return coroutine.wrap(function() table.sort({1, 2, 3}, function() coroutine.yield() end) end)()", false),
-        ("return coroutine.wrap(function() return tostring(setmetatable({}, {__tostring = function() coroutine.yield() end})) end)()", false),
+        (
+            "return coroutine.wrap(function() table.sort({1, 2, 3}, function() coroutine.yield() end) end)()",
+            false,
+        ),
+        (
+            "return coroutine.wrap(function() return tostring(setmetatable({}, {__tostring = function() coroutine.yield() end})) end)()",
+            false,
+        ),
         // Yielding from Lua metamethods works.
-        ("local t = setmetatable({}, {__index = function(_, k) return coroutine.yield(k) end}) local co = coroutine.wrap(function() return t.x end) return co(), co(5)", true),
+        (
+            "local t = setmetatable({}, {__index = function(_, k) return coroutine.yield(k) end}) local co = coroutine.wrap(function() return t.x end) return co(), co(5)",
+            true,
+        ),
         // Chains of coroutines resuming each other.
-        ("local function chain(n) if n == 0 then return 0 end return coroutine.wrap(function() return chain(n - 1) + 1 end)() end return chain(150)", true),
+        (
+            "local function chain(n) if n == 0 then return 0 end return coroutine.wrap(function() return chain(n - 1) + 1 end)() end return chain(150)",
+            true,
+        ),
         // A coroutine left suspended forever, closed, collected.
-        ("for i = 1, 1000 do local co = coroutine.create(function() coroutine.yield() end) coroutine.resume(co) end collectgarbage() return 'ok'", true),
-        ("for i = 1, 100 do local co = coroutine.wrap(function() local x <close> = setmetatable({}, {__close = function() end}) coroutine.yield() end) co() end return 'ok'", true),
+        (
+            "for i = 1, 1000 do local co = coroutine.create(function() coroutine.yield() end) coroutine.resume(co) end collectgarbage() return 'ok'",
+            true,
+        ),
+        (
+            "for i = 1, 100 do local co = coroutine.wrap(function() local x <close> = setmetatable({}, {__close = function() end}) coroutine.yield() end) co() end return 'ok'",
+            true,
+        ),
     ];
     for (c, ok) in cases {
         let mut lua = Lua::new(Limits::default().fuel(20_000_000), Libs::STANDARD);
@@ -277,7 +306,11 @@ fn source_text_attacks() {
     assert!(r[0].is_nil() && r[1].is_nil(), "{r:?}");
     // `load` itself is a capability.
     let mut safe = sb();
-    assert_eq!(safe.exec("return load == nil, dofile == nil, require == nil, io == nil, os.execute == nil", "=t").unwrap(), vec![Value::Bool(true); 5]);
+    assert_eq!(
+        safe.exec("return load == nil, dofile == nil, require == nil, io == nil, os.execute == nil", "=t")
+            .unwrap(),
+        vec![Value::Bool(true); 5]
+    );
 }
 
 #[test]

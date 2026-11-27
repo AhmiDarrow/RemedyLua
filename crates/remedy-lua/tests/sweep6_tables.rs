@@ -3,7 +3,7 @@
 //! each run with the fast loop on and off.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::indexing_slicing, clippy::panic, missing_docs)]
 
-use remedy_lua::{Error, LimitKind, Libs, Limits, Lua};
+use remedy_lua::{Error, Libs, LimitKind, Limits, Lua};
 
 use super::common::{TEST_SEED, small_stack};
 use super::sweep5b_open::{aimed_floats, baseline, list, measured, ns_per_unit, table_seeds};
@@ -89,7 +89,10 @@ fn reseed_storm(rounds: usize) -> String {
 /// `reseed_storm` in a part of 2^`bits` slots holding `n` plain keys.
 fn storm(bits: u32, n: usize, rounds: usize) -> String {
     let seeds = table_seeds(TEST_SEED, rounds);
-    let lists: Vec<String> = seeds.iter().map(|&s| format!("{{{}}}", list(&aimed_floats(&[s], bits, 12345 % (1 << (bits - 1)), 11)))).collect();
+    let lists: Vec<String> = seeds
+        .iter()
+        .map(|&s| format!("{{{}}}", list(&aimed_floats(&[s], bits, 12345 % (1 << (bits - 1)), 11))))
+        .collect();
     format!(
         "t = {{}} for i = 1, {n} do t[i + 0.25] = i end R = {{{}}} J = 0 collectgarbage() collectgarbage('stop')",
         lists.join(",")
@@ -111,7 +114,9 @@ fn probe_sizes() {
             println!("reseed 2^{bits}: {:.1}x", ratio(&setup, body, fuel, fast));
         }
         for bits in [14u32, 16, 18, 19, 20] {
-            let setup = format!("t = {{}} for i = 1, (1 << {bits}) - 1 do t[i * 3] = i end J = 0 collectgarbage() collectgarbage('stop')");
+            let setup = format!(
+                "t = {{}} for i = 1, (1 << {bits}) - 1 do t[i * 3] = i end J = 0 collectgarbage() collectgarbage('stop')"
+            );
             let fuel = (1u64 << bits) * 3;
             println!("rehash 2^{bits}: {:.1}x", ratio(&setup, "J = J + 1 t[-J] = 1 t[-J] = nil", fuel, fast));
         }
@@ -130,7 +135,8 @@ fn probe_sizes() {
 fn s6t_3_reseeding_a_big_part_is_paid() {
     small_stack(|| {
         let setup = reseed_storm(40);
-        let body = "J = J + 1 local a = R[J] for i = 1, 11 do t[a[i]] = i end for i = 1, 11 do t[a[i]] = nil end";
+        let body =
+            "J = J + 1 local a = R[J] for i = 1, 11 do t[a[i]] = i end for i = 1, 11 do t[a[i]] = nil end";
         for fast in [true, false] {
             let r = ratio(&setup, body, 25_000_000, fast);
             println!("fast {fast}: {r:.1}x");
@@ -180,12 +186,16 @@ fn s6t_intern_new_strings_pay_for_regrows() {
             )
         };
         let per_string = |live: usize| {
-            let (a, b) = (measured(&src(live, 0), TEST_SEED, true), measured(&src(live, 300_000), TEST_SEED, true));
+            let (a, b) =
+                (measured(&src(live, 0), TEST_SEED, true), measured(&src(live, 300_000), TEST_SEED, true));
             (b.1 - a.1) as f64 / 300_000.0
         };
         let (small, big) = (per_string(1000), per_string(1_200_000));
         println!("a new string: {small:.2} fuel beside a thousand live strings, {big:.2} beside 1.2 million");
-        assert!(big >= small + 3.0, "a new string beside 1.2 million live ones costs {big:.2}, beside a thousand {small:.2}");
+        assert!(
+            big >= small + 3.0,
+            "a new string beside 1.2 million live ones costs {big:.2}, beside a thousand {small:.2}"
+        );
         // The share follows the count only: the same fuel under every seed, with regrows on
         // the way (and strings dying, whose slots new ones take).
         seed_independent(&src(300_000, 600_000));
@@ -194,7 +204,10 @@ fn s6t_intern_new_strings_pay_for_regrows() {
         for fast in [true, false] {
             let r = ratio(setup, body, 20_000_000, fast);
             println!("fast {fast}: {r:.1}x");
-            assert!(r < 2.5, "fast {fast}: garbage strings beside two million live ones at {r:.1}x plain code per unit");
+            assert!(
+                r < 2.5,
+                "fast {fast}: garbage strings beside two million live ones at {r:.1}x plain code per unit"
+            );
         }
     });
 }
@@ -377,7 +390,10 @@ fn s6t_regrow_moves_do_not_follow_the_seed() {
 fn key_reads(setup: &str, body: &str, seed: u64, fast: bool) -> (usize, u64, String) {
     use std::sync::Arc;
     use std::sync::atomic::{AtomicUsize, Ordering};
-    let mut lua = Lua::new(Limits::default().memory(1 << 30).string_len(64 << 20).fuel(1 << 40).hash_seed(seed), Libs::ALL);
+    let mut lua = Lua::new(
+        Limits::default().memory(1 << 30).string_len(64 << 20).fuel(1 << 40).hash_seed(seed),
+        Libs::ALL,
+    );
     lua.set_fast_loop(fast);
     lua.exec(setup, "=setup").unwrap();
     let f = lua.load(body, "=body").unwrap();
@@ -424,7 +440,12 @@ fn s6t_key_long_keys_look_at_the_deadline_every_megabyte() {
             let first = key_reads(setup, &long, TEST_SEED, true);
             let plain = key_reads(setup, &short, TEST_SEED, true);
             println!("{body}: {} reads ({} with a short key), fuel {}", first.0, plain.0, first.1);
-            assert!(first.0 >= plain.0 + at_least, "{body}: {} deadline reads, {} with a short key", first.0, plain.0);
+            assert!(
+                first.0 >= plain.0 + at_least,
+                "{body}: {} deadline reads, {} with a short key",
+                first.0,
+                plain.0
+            );
             assert_eq!(key_reads(setup, &long, TEST_SEED, true), first, "{body}: a second run");
             let full = key_reads(setup, &long, TEST_SEED, false);
             assert_eq!((full.1, &full.2), (first.1, &first.2), "{body}: fast loop off");

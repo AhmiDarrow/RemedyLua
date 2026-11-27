@@ -28,7 +28,8 @@ const CHILD: &str = "REMEDYLUA_PERF_NUMERIC_CHILD";
 /// `1` or, for a float loop, `1.0`), in one unmetered state (fast loop on, a fixed seed).
 fn run_workload(spec: &str) {
     let mut parts = spec.splitn(4, '\u{1}');
-    let (start, n, setup, body) = (parts.next().unwrap(), parts.next().unwrap(), parts.next().unwrap(), parts.next().unwrap());
+    let (start, n, setup, body) =
+        (parts.next().unwrap(), parts.next().unwrap(), parts.next().unwrap(), parts.next().unwrap());
     let src = format!("{setup}\nfor _i = {start}, {n} do {body} end");
     let mut lua = Lua::new(Limits::unmetered().hash_seed(0x5eed), Libs::ALL);
     lua.set_fast_loop(true);
@@ -56,7 +57,8 @@ fn instructions(start: &str, n: u64, setup: &str, body: &str) -> u64 {
         .unwrap_or_else(|e| panic!("valgrind must be installed for perf_numeric's instruction counts: {e}"));
     let err = String::from_utf8_lossy(&out.stderr);
     assert!(out.status.success(), "child run failed:\n{err}");
-    let refs = err.lines().find(|l| l.contains("I   refs:")).unwrap_or_else(|| panic!("no callgrind total:\n{err}"));
+    let refs =
+        err.lines().find(|l| l.contains("I   refs:")).unwrap_or_else(|| panic!("no callgrind total:\n{err}"));
     refs.rsplit(':').next().unwrap().trim().replace(',', "").parse().unwrap()
 }
 
@@ -65,7 +67,10 @@ fn per_iteration(start: &str, setup: &str, body: &str) -> f64 {
     // Counted in the build the benchmarks use: the tests' profile (opt-level 2, debug
     // assertions) allocates the loop's registers differently, and its counts moved by a
     // dozen instructions with changes that left release's alone.
-    assert!(!cfg!(debug_assertions), "perf_numeric's instruction counts are for release builds: run with --release");
+    assert!(
+        !cfg!(debug_assertions),
+        "perf_numeric's instruction counts are for release builds: run with --release"
+    );
     let (lo, hi) = (20_000, 120_000);
     let a = instructions(start, lo, setup, body);
     let b = instructions(start, hi, setup, body);
@@ -159,7 +164,11 @@ fn constant_key_instructions() {
     let t = "local t = {1, 2, 3, 4, a = 1, b = 2} local z = 0";
     for (what, body, bound) in [
         ("z = t.a", "z = t.a z = t.a z = t.a z = t.a z = t.a z = t.a z = t.a z = t.a z = t.a z = t.a", 82.0),
-        ("z = t[3]", "z = t[3] z = t[3] z = t[3] z = t[3] z = t[3] z = t[3] z = t[3] z = t[3] z = t[3] z = t[3]", 76.0),
+        (
+            "z = t[3]",
+            "z = t[3] z = t[3] z = t[3] z = t[3] z = t[3] z = t[3] z = t[3] z = t[3] z = t[3] z = t[3]",
+            76.0,
+        ),
         ("t.a = z", "t.a = z t.a = z t.a = z t.a = z t.a = z t.a = z t.a = z t.a = z t.a = z t.a = z", 93.0),
     ] {
         let got = (per_iteration("1", t, body) - base) / 10.0;
@@ -295,7 +304,11 @@ fn numeric_ops_stay_in_the_fast_loop() {
             let mut lua = Lua::new(Limits::default().hash_seed(0x5eed), Libs::ALL);
             lua.set_fast_loop(true);
             lua.exec(format!("{setup}\nfor _i = {start}, 20000 do {body} end"), "=guard").unwrap();
-            assert!(lua.full_steps() <= 16, "{body:?} from {start}: {} instructions on the full path", lua.full_steps());
+            assert!(
+                lua.full_steps() <= 16,
+                "{body:?} from {start}: {} instructions on the full path",
+                lua.full_steps()
+            );
         }
     }
 }
@@ -318,7 +331,8 @@ fn field_reads_do_not_stall() {
         lua.call(f.value(), &[]).unwrap();
         remedy_lua_oracle::thread_cpu().saturating_sub(start) as f64 / (fuel - lua.fuel_left()) as f64
     };
-    let fields = "local t = {x = 1.0, y = 2.0} for i = 1, 2000000 do t.x = t.x + t.y * 0.5 t.y = t.y - t.x * 0.25 end";
+    let fields =
+        "local t = {x = 1.0, y = 2.0} for i = 1, 2000000 do t.x = t.x + t.y * 0.5 t.y = t.y - t.x * 0.25 end";
     let regs = "local a, b = 1.0, 2.0 for i = 1, 2000000 do local c = a local d = b a = c + d * 0.5 b = d - c * 0.25 end";
     let (mut f, mut r) = (f64::MAX, f64::MAX);
     for _ in 0..7 {

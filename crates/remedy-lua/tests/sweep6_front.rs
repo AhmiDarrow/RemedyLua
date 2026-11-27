@@ -175,7 +175,9 @@ fn s6_front_6_backtick_escape_errors_point_at_the_escape() {
     let src = format!("local s = \"x\"\n{}return `ab\\q`", "x = 1\n".repeat(100_000));
     let mut lua = Lua::new(Limits::default(), Libs::ALL);
     match lua.load(&src, "=t.rlua") {
-        Err(Error::Syntax(d)) => assert_eq!(d.lua_message(), "t.rlua:100002: invalid escape sequence near '`ab\\q'"),
+        Err(Error::Syntax(d)) => {
+            assert_eq!(d.lua_message(), "t.rlua:100002: invalid escape sequence near '`ab\\q'")
+        }
         other => panic!("{:?}", other.map(|_| ())),
     }
 }
@@ -219,13 +221,17 @@ fn s6_front_7_goto_const_and_escape_messages_match_c_lua() {
         .iter()
         .filter_map(|src| {
             let (ours, theirs) = load_message_bytes(src);
-            (ours != theirs).then(|| format!("{:?}:\n  ours   {ours:?}\n  C Lua  {theirs:?}", String::from_utf8_lossy(src)))
+            (ours != theirs).then(|| {
+                format!("{:?}:\n  ours   {ours:?}\n  C Lua  {theirs:?}", String::from_utf8_lossy(src))
+            })
         })
         .collect();
     assert!(bad.is_empty(), "{}", bad.join("\n"));
     // The host's message is text: the bytes replaced, as before.
     match Lua::new(Limits::default(), Libs::NONE).load(b"x = '\xff\\q'", "=t") {
-        Err(Error::Syntax(d)) => assert_eq!(d.lua_message(), "t:1: invalid escape sequence near ''\u{fffd}\\q'"),
+        Err(Error::Syntax(d)) => {
+            assert_eq!(d.lua_message(), "t:1: invalid escape sequence near ''\u{fffd}\\q'")
+        }
         other => panic!("{:?}", other.map(|_| ())),
     }
 }
@@ -248,7 +254,9 @@ fn s6_front_7_const_function_statement_line_matches_c_lua() {
         .iter()
         .filter_map(|src| {
             let (ours, theirs) = load_message_bytes(src);
-            (ours != theirs).then(|| format!("{:?}:\n  ours   {ours:?}\n  C Lua  {theirs:?}", String::from_utf8_lossy(src)))
+            (ours != theirs).then(|| {
+                format!("{:?}:\n  ours   {ours:?}\n  C Lua  {theirs:?}", String::from_utf8_lossy(src))
+            })
         })
         .collect();
     assert!(bad.is_empty(), "{}", bad.join("\n"));
@@ -301,7 +309,10 @@ fn s6_front_3_compile_memory_is_charged_as_allocated() {
         let r = lua.exec("return load(src)", "=c").map(|_| ());
         assert!(matches!(r, Err(Error::Limit(LimitKind::Memory))), "{kind} x {n} in a call: {r:?}");
         // With room for what it really takes, it loads.
-        assert!(Lua::new(Limits::unmetered().memory(160 << 20), Libs::NONE).load(&src, "=t").is_ok(), "{kind} x {n}");
+        assert!(
+            Lua::new(Limits::unmetered().memory(160 << 20), Libs::NONE).load(&src, "=t").is_ok(),
+            "{kind} x {n}"
+        );
     }
     // Ordinary code: 200 KB of it still loads under 32 MiB, and deep nesting on a small stack.
     let unit = "local function f(a, b)\n  local t = {x = a, y = b, \"s\", [a] = b}\n  for j = 1, #t do\n    \
@@ -430,7 +441,11 @@ fn s6_front_4_huge_hostile_loads_stop_promptly() {
     ];
     for src in &cases {
         let worst = worst_stop(src, 6);
-        assert!(worst < std::time::Duration::from_millis(60), "{}...: stopped {worst:?} after the interrupt", &src[..12]);
+        assert!(
+            worst < std::time::Duration::from_millis(60),
+            "{}...: stopped {worst:?} after the interrupt",
+            &src[..12]
+        );
     }
 }
 
@@ -441,7 +456,10 @@ fn s6_front_4_huge_hostile_loads_stop_promptly() {
 /// as the compile returns, and released as it is freed (at the next call from the host).
 #[test]
 fn s6_front_4_deferred_frees_are_charged_until_freed() {
-    let src = format!("return {{{}}}", (0..200_000).map(|i| format!("\"s{i}\", a{i} = {i}.5,")).collect::<String>());
+    let src = format!(
+        "return {{{}}}",
+        (0..200_000).map(|i| format!("\"s{i}\", a{i} = {i}.5,")).collect::<String>()
+    );
     let mut lua = Lua::new(Limits::unmetered().memory(1 << 30), Libs::NONE);
     lua.exec("return 1", "=warm").unwrap();
     let before = lua.memory_used();
@@ -574,7 +592,11 @@ fn s6_front_lr6_compound_concat_errors_where_its_desugaring_does() {
 fn rss_now() -> usize {
     std::fs::read_to_string("/proc/self/status")
         .ok()
-        .and_then(|s| s.lines().find(|l| l.starts_with("VmRSS")).and_then(|l| l.split_whitespace().nth(1)?.parse::<usize>().ok()))
+        .and_then(|s| {
+            s.lines()
+                .find(|l| l.starts_with("VmRSS"))
+                .and_then(|l| l.split_whitespace().nth(1)?.parse::<usize>().ok())
+        })
         .map_or(0, |kb| kb << 10)
 }
 
@@ -628,25 +650,46 @@ fn s6_front_4_deferred_charge_is_what_is_held() {
     }
     let exe = std::env::current_exe().unwrap();
     let out = std::process::Command::new(exe)
-        .args(["sweep6_front::s6_front_4_exact_child", "--exact", "--ignored", "--nocapture", "--test-threads=1"])
+        .args([
+            "sweep6_front::s6_front_4_exact_child",
+            "--exact",
+            "--ignored",
+            "--nocapture",
+            "--test-threads=1",
+        ])
         .env("S6_FRONT_4_EXACT", "1")
         .output()
         .unwrap();
     let text = String::from_utf8_lossy(&out.stdout).into_owned();
     // (The harness may print the test's name on the same line first.)
-    let line = text.lines().find_map(|l| l.split("S6F4X ").nth(1)).unwrap_or_else(|| panic!("no result: {text}"));
+    let line =
+        text.lines().find_map(|l| l.split("S6F4X ").nth(1)).unwrap_or_else(|| panic!("no result: {text}"));
     let v: Vec<&str> = line.split(' ').collect();
     let n = |i: usize| v[i].parse::<usize>().unwrap();
     let (live0, loaded, resident, after, with_string) = (n(0), n(1), n(2), n(3), n(4));
     let fits = v[5] == "true";
     let leftovers = loaded - after;
     assert!(leftovers > 8 << 20, "{} MB charged for the leftovers", leftovers >> 20);
-    assert!(loaded - live0 <= resident, "charged {} MB after the load, {} MB made resident", (loaded - live0) >> 20, resident >> 20);
-    assert!(fits, "a 4 MB string did not fit under the live and resident bytes plus 8 MB ({} MB charged)", (loaded - live0) >> 20);
+    assert!(
+        loaded - live0 <= resident,
+        "charged {} MB after the load, {} MB made resident",
+        (loaded - live0) >> 20,
+        resident >> 20
+    );
+    assert!(
+        fits,
+        "a 4 MB string did not fit under the live and resident bytes plus 8 MB ({} MB charged)",
+        (loaded - live0) >> 20
+    );
     // Measured, not a fraction of it: at least half of what the load made resident
     // besides what stays live (the rest being the allocator's own overhead and pages).
     let others = resident.saturating_sub(after - live0);
-    assert!(leftovers * 2 >= others, "{} MB charged for leftovers, {} MB resident besides what stays", leftovers >> 20, others >> 20);
+    assert!(
+        leftovers * 2 >= others,
+        "{} MB charged for leftovers, {} MB resident besides what stays",
+        leftovers >> 20,
+        others >> 20
+    );
     let _ = with_string;
 }
 
@@ -661,7 +704,10 @@ fn s6_front_4_deferred_charge_is_what_is_held() {
 #[test]
 fn s6_front_4_deferred_pieces_are_charged_once() {
     let _heavy = super::common::memory_heavy();
-    let src = format!("return {{{}}}", (0..200_000).map(|i| format!("\"s{i}\", a{i} = {i}.5,")).collect::<String>());
+    let src = format!(
+        "return {{{}}}",
+        (0..200_000).map(|i| format!("\"s{i}\", a{i} = {i}.5,")).collect::<String>()
+    );
     // (memory right after, memory once the next host call freed what waited, whether it loaded)
     let run = |fuel: Option<u64>| {
         let mut lua = Lua::new(Limits::default().fuel(1 << 40).memory(1 << 30), Libs::ALL);
@@ -715,7 +761,10 @@ fn s6_front_4_deferred_pieces_are_charged_once() {
         assert!(!ok);
         let left = right - (freed - exec_cost);
         if left > 1 << 20 {
-            assert!(left <= host_left, "a stopped compile charged {left} for its leftovers, the whole host load's are {host_left}");
+            assert!(
+                left <= host_left,
+                "a stopped compile charged {left} for its leftovers, the whole host load's are {host_left}"
+            );
             stopped += 1;
             if stopped == 3 {
                 break;
@@ -749,7 +798,10 @@ fn s6_front_lr6_interp_operand_lines_match_desugaring() {
     ];
     // (`.rlua` statement, its plain-Lua form) with the operand at `@`.
     let shapes = [
-        ("g3 = (string.gsub('a' .. (g1) .. (p6) .. 'b' .. 'c' .. (@), 'x', 'y'))", "g3 = (string.gsub('a' .. (g1) .. (p6) .. 'b' .. 'c' .. (@), 'x', 'y'))"),
+        (
+            "g3 = (string.gsub('a' .. (g1) .. (p6) .. 'b' .. 'c' .. (@), 'x', 'y'))",
+            "g3 = (string.gsub('a' .. (g1) .. (p6) .. 'b' .. 'c' .. (@), 'x', 'y'))",
+        ),
         ("g3 = 'a' .. (p6) .. @", "g3 = 'a' .. (p6) .. @"),
         ("g3 = @ .. (p6)", "g3 = @ .. (p6)"),
         ("g3 = 'a' .. @ .. (p6) .. 'b'", "g3 = 'a' .. @ .. (p6) .. 'b'"),
@@ -827,7 +879,9 @@ fn fx2_3_load_reads_its_reader_as_c_lua_does() {
     let mut bad = Vec::new();
     for src in READ_CASES {
         for step in [1 << 20, 1, 2, 3, 7] {
-            let p = format!("{READER} local f, e = load(reader({src:?}, {step})) return calls, f and select('#', f()) or e");
+            let p = format!(
+                "{READER} local f, e = load(reader({src:?}, {step})) return calls, f and select('#', f()) or e"
+            );
             let (ours, theirs) = (super::common::remedy(&p, 1 << 30), super::common::oracle(&p, 1 << 30));
             if ours != theirs {
                 bad.push(format!("{src:?} step {step}: ours {ours:?}, C Lua {theirs:?}"));
@@ -836,7 +890,8 @@ fn fx2_3_load_reads_its_reader_as_c_lua_does() {
     }
     // Readers that never end: the first syntax error stops them.
     for piece in ["return 7", "x = 1 y ", "local t = {", "--[[ c ]] return"] {
-        let p = format!("local n = 0 local f, e = load(function() n = n + 1 return {piece:?} end) return n, e");
+        let p =
+            format!("local n = 0 local f, e = load(function() n = n + 1 return {piece:?} end) return n, e");
         let (ours, theirs) = (super::common::remedy(&p, 1 << 30), super::common::oracle(&p, 1 << 30));
         if ours != theirs {
             bad.push(format!("endless {piece:?}: ours {ours:?}, C Lua {theirs:?}"));

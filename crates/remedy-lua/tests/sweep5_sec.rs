@@ -78,9 +78,9 @@ fn s5sec_1_nested_interpolations_are_charged_and_capped() {
         assert!(lua.load("return `a{ \u{a0} }`", "=t.rlua").is_err());
     }
     // Fuel: time per unit like plain code at every depth.
-    let setups: Vec<String> =
-        [1000, 3000].iter().map(|n| format!("src = {:?}", nested_interp(*n))).collect();
-    let cases: Vec<(&str, &str)> = setups.iter().map(|s| (s.as_str(), "assert(load(src, '=x.rlua'))")).collect();
+    let setups: Vec<String> = [1000, 3000].iter().map(|n| format!("src = {:?}", nested_interp(*n))).collect();
+    let cases: Vec<(&str, &str)> =
+        setups.iter().map(|s| (s.as_str(), "assert(load(src, '=x.rlua'))")).collect();
     assert_metered_with(&cases, 20_000_000);
     // Memory: 8,000 levels do not fit in 16 MiB, from a script or from the host, and the
     // state works afterwards.
@@ -119,7 +119,12 @@ fn s5sec_2_float_string_arguments_are_charged() {
     let setup = "t = {} for i = 1, 100000 do t[i] = i + 0.123456789 end";
     let cases: Vec<(String, &str)> = ["warn", "string.char"]
         .iter()
-        .map(|f| (format!("{setup} function run(...) while true do pcall({f}, ...) end end"), "run(table.unpack(t))"))
+        .map(|f| {
+            (
+                format!("{setup} function run(...) while true do pcall({f}, ...) end end"),
+                "run(table.unpack(t))",
+            )
+        })
         .collect();
     let refs: Vec<(&str, &str)> = cases.iter().map(|(s, b)| (s.as_str(), *b)).collect();
     assert_metered_with(&refs, 4_000_000);
@@ -141,7 +146,10 @@ fn s5sec_3_output_is_paid_as_it_grows() {
     let cases = [
         (s, format.as_str()),
         (s, pack.as_str()),
-        ("t = {} for i = 1, 4000 do t[i] = i end sep = string.rep(',', 4000)", "local _ = table.concat(t, sep)"),
+        (
+            "t = {} for i = 1, 4000 do t[i] = i end sep = string.rep(',', 4000)",
+            "local _ = table.concat(t, sep)",
+        ),
         (s, "local _ = string.gsub('abcdefghijklmnop', '.', function() return s end)"),
         (s, "local _ = string.gsub('abcdefghijklmnop', '.', {a = s, b = s, c = s, d = s, e = s, f = s})"),
     ];
@@ -164,18 +172,30 @@ fn s5sec_4_deep_data_on_a_small_stack() {
         format!("local t = {{}} for i = 1, {N} do t = setmetatable({{}}, t) end keep = t"),
         format!("local t = {{}} for i = 1, {N} do t = setmetatable({{}}, {{__index = t}}) end keep = t"),
         // Closures through upvalues; native closures (iterators) holding the next.
-        format!("local f = function() end for i = 1, {N} do local g = f f = function() return g end end keep = f"),
-        format!("local f = {{}} for i = 1, {N} do local p = f f = coroutine.wrap(function() return p end) end keep = f"),
-        format!("local f = print for i = 1, {N} do f = select(1, ipairs({{f}})) == f and f or {{f, string.gmatch('a', '.')}} end keep = f"),
+        format!(
+            "local f = function() end for i = 1, {N} do local g = f f = function() return g end end keep = f"
+        ),
+        format!(
+            "local f = {{}} for i = 1, {N} do local p = f f = coroutine.wrap(function() return p end) end keep = f"
+        ),
+        format!(
+            "local f = print for i = 1, {N} do f = select(1, ipairs({{f}})) == f and f or {{f, string.gmatch('a', '.')}} end keep = f"
+        ),
         // Coroutines whose stacks hold the previous one, suspended and dead.
         format!(
             "local c = 1 for i = 1, {} do local p = c c = coroutine.create(function() coroutine.yield(p) end) coroutine.resume(c) end keep = c",
             N / 4
         ),
         // Weak tables over chains: values, keys (ephemerons), both.
-        format!("local w = setmetatable({{}}, {{__mode = 'v'}}) local t = {{}} for i = 1, {N} do t = {{t}} w[i] = t end keep = {{w, t}}"),
-        format!("local w = setmetatable({{}}, {{__mode = 'k'}}) local p = {{}} keep = p for i = 1, {N} do local k = {{}} w[p] = k p = k end keep2 = w"),
-        format!("local w = setmetatable({{}}, {{__mode = 'kv'}}) local t = {{}} for i = 1, {N} do local u = {{t}} w[u] = t t = u end keep = {{w, t}}"),
+        format!(
+            "local w = setmetatable({{}}, {{__mode = 'v'}}) local t = {{}} for i = 1, {N} do t = {{t}} w[i] = t end keep = {{w, t}}"
+        ),
+        format!(
+            "local w = setmetatable({{}}, {{__mode = 'k'}}) local p = {{}} keep = p for i = 1, {N} do local k = {{}} w[p] = k p = k end keep2 = w"
+        ),
+        format!(
+            "local w = setmetatable({{}}, {{__mode = 'kv'}}) local t = {{}} for i = 1, {N} do local u = {{t}} w[u] = t t = u end keep = {{w, t}}"
+        ),
     ];
     let traverse = "collectgarbage() collectgarbage('step', 0) collectgarbage() \
                     local ok, e = pcall(error, keep) assert(not ok) \
@@ -275,7 +295,11 @@ fn built_buffer_charges(text: &str) -> Vec<String> {
     let mut fns: Vec<Vec<(usize, &str)>> = vec![Vec::new()];
     for (i, line) in text.lines().enumerate() {
         let t = line.trim_start();
-        let t = t.strip_prefix("pub(crate) ").or_else(|| t.strip_prefix("pub(super) ")).or_else(|| t.strip_prefix("pub ")).unwrap_or(t);
+        let t = t
+            .strip_prefix("pub(crate) ")
+            .or_else(|| t.strip_prefix("pub(super) "))
+            .or_else(|| t.strip_prefix("pub "))
+            .unwrap_or(t);
         if t.starts_with("fn ") {
             fns.push(Vec::new());
         }
@@ -284,7 +308,9 @@ fn built_buffer_charges(text: &str) -> Vec<String> {
         }
     }
     let is_id = |c: char| c.is_alphanumeric() || c == '_';
-    let ident = |s: &str| s.chars().rev().take_while(|c| is_id(*c)).collect::<String>().chars().rev().collect::<String>();
+    let ident = |s: &str| {
+        s.chars().rev().take_while(|c| is_id(*c)).collect::<String>().chars().rev().collect::<String>()
+    };
     // `let mut name: T = ...` -> `name`.
     let let_name = |code: &str| -> String {
         let Some(at) = code.find("let ") else { return String::new() };
@@ -295,12 +321,20 @@ fn built_buffer_charges(text: &str) -> Vec<String> {
     // `name.len()` as a whole identifier in `arg`.
     let uses_len = |arg: &str, name: &str| {
         let pat = format!("{name}.len()");
-        arg.match_indices(&pat).any(|(i, _)| !arg[..i].chars().next_back().is_some_and(|c| is_id(c) || c == '.'))
+        arg.match_indices(&pat)
+            .any(|(i, _)| !arg[..i].chars().next_back().is_some_and(|c| is_id(c) || c == '.'))
     };
     for f in &fns {
         let mut buffers: Vec<String> = Vec::new();
         for (_, code) in f {
-            for maker in ["Vec::new()", "Vec::with_capacity(", "String::new()", "String::with_capacity(", "vec![", "OutBuf::new("] {
+            for maker in [
+                "Vec::new()",
+                "Vec::with_capacity(",
+                "String::new()",
+                "String::with_capacity(",
+                "vec![",
+                "OutBuf::new(",
+            ] {
                 if code.contains(maker) {
                     buffers.push(let_name(code));
                 }
@@ -313,7 +347,13 @@ fn built_buffer_charges(text: &str) -> Vec<String> {
                 }
             }
             if let Some(at) = code.find("write!(") {
-                let arg = code[at + 7..].split(',').next().unwrap_or("").trim().trim_start_matches("&mut ").trim_start_matches('*');
+                let arg = code[at + 7..]
+                    .split(',')
+                    .next()
+                    .unwrap_or("")
+                    .trim()
+                    .trim_start_matches("&mut ")
+                    .trim_start_matches('*');
                 buffers.push(arg.to_owned());
             }
         }

@@ -98,7 +98,8 @@ impl<K: std::hash::Hash + Eq, V> ShardMap<K, V> {
     }
 
     pub(crate) fn len(&self) -> usize {
-        self.one.len() + self.split.as_ref().map_or(0, |s| s.maps.iter().map(std::collections::HashMap::len).sum())
+        self.one.len()
+            + self.split.as_ref().map_or(0, |s| s.maps.iter().map(std::collections::HashMap::len).sum())
     }
 
     pub(crate) fn get<Q>(&self, k: &Q) -> Option<&V>
@@ -200,7 +201,9 @@ pub(crate) struct ShardPieces<K, V> {
 impl<K: crate::diag::KeyHeap, V> ShardPieces<K, V> {
     /// The bytes it still holds (exact, as measured by `into_pieces` and given back).
     pub(crate) fn held(&self) -> usize {
-        self.tables + self.keys + self.maps.capacity() * std::mem::size_of::<std::collections::HashMap<K, V>>()
+        self.tables
+            + self.keys
+            + self.maps.capacity() * std::mem::size_of::<std::collections::HashMap<K, V>>()
     }
 
     /// Frees up to `n` entries: whether all are freed.
@@ -228,7 +231,6 @@ impl<K: crate::diag::KeyHeap, V> ShardPieces<K, V> {
         self.cur.is_none() && self.maps.is_empty()
     }
 }
-
 
 #[cfg(test)]
 mod tests {
