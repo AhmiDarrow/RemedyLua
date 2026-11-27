@@ -32,16 +32,20 @@ jobs:
       run:
         shell: bash
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Pinned compiler and the Lua 5.4.7 oracle sources
         run: |
           set -euo pipefail
           rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
           curl -fsSLo lua.tar.gz https://www.lua.org/ftp/lua-5.4.7.tar.gz
           echo '9fbf5e28ef86c69858f6d3d34eccc32e911c1a28b4120ff3e84aaa70cfbf1e30  lua.tar.gz' | sha256sum -c -
-          mkdir -p "$RUNNER_TEMP/lua" && tar xf lua.tar.gz -C "$RUNNER_TEMP/lua" && rm lua.tar.gz
+          # Extract from inside the target dir: GNU tar reads "D:\..." as host:path.
+          mkdir -p "$RUNNER_TEMP/lua"
+          mv lua.tar.gz "$RUNNER_TEMP/lua/"
+          (cd "$RUNNER_TEMP/lua" && tar xzf lua.tar.gz && rm lua.tar.gz)
+          test -f "$RUNNER_TEMP/lua/lua-5.4.7/src/lua.h"
           echo "LUA_SRC=$RUNNER_TEMP/lua/lua-5.4.7/src" >> "$GITHUB_ENV"
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         if: contains(matrix.steps, 'W')
         with:
           node-version: 22
@@ -56,7 +60,7 @@ jobs:
         run: tools/gate.sh ci ${{ matrix.steps }}
       - name: Gate logs
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: gate-logs-${{ matrix.os }}
           path: target/gate/ci
@@ -64,7 +68,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - run: rustup toolchain install "$RUSTUP_TOOLCHAIN" --profile minimal
       - uses: Swatinem/rust-cache@v2
       - name: cargo doc
