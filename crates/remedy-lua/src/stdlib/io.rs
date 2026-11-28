@@ -228,6 +228,11 @@ pub(super) fn open(lua: &mut Lua) {
 
 fn new_file(lua: &mut Lua, f: LFile) -> Result<Value, LuaError> {
     let size = std::mem::size_of::<LFile>() + if f.std.is_some() { 0 } else { BUF };
+    // Charged first, as every other allocation is: at the cap that collects and tries
+    // again (`alloc_ud` alone failed where a collection would have made room).
+    let bytes = crate::heap::UD_BASE + size;
+    lua.charge_mem(bytes)?;
+    lua.heap.mem.release(bytes);
     let v = Value::UserData(lua.alloc_ud(Box::new(f), size, lua.io_meta)?);
     lua.hold(v);
     Ok(v)

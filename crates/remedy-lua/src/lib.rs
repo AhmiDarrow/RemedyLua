@@ -2111,7 +2111,10 @@ impl Lua {
     pub fn memory_used(&self) -> usize {
         // (Without the table buffer pool: it counts against the limit, but what it holds
         // depends on when it was last given back, which the two paths may not share.)
-        self.heap.mem.used - self.heap.mem.pool.bytes
+        // (Saturating: release builds have no overflow checks, and this is the host's
+        // reading of the account; it must never wrap to a near-`usize::MAX` count.)
+        debug_assert!(self.heap.mem.pool.bytes <= self.heap.mem.used);
+        self.heap.mem.used.saturating_sub(self.heap.mem.pool.bytes)
     }
 
     /// The limits.

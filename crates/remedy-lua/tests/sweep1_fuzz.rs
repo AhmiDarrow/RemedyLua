@@ -995,8 +995,13 @@ fn harness_known_non_bugs_and_planted_differences() {
         "#1 to 'math.fmod' (number expected, got table)",
     );
     assert!(verdict(fmod, &planted, &t).is_some_and(|s| !s.starts_with("expected:")), "plant hidden: {fmod}");
+    // (The order plant is a value no run prints: values are 1..12 and the length is 27.
+    // `"k5" 6` was flaky. On a line whose tokens vary between runs, each token may be one
+    // some run printed there (LR-10: `next` over two tables on one line), and C Lua's random
+    // seed put key "k5" in one run and value 6 in another at the same line now and then, in
+    // the full run about 1 time in 3.)
     let cases: [(&str, &str, &str, &str); 3] = [
-        (order, "order", "\"k5\" 5", "\"k5\" 6"),
+        (order, "order", "\"k5\" 5", "\"k5\" 99"),
         (limit, "c-limit", "before", "beforehand"),
         ("__emit(string.format('%p', {})) __emit('stable')", "c-nondeterministic", "stable", "unstable"),
     ];
