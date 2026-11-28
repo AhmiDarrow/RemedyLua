@@ -80,6 +80,8 @@ mod heap;
 mod lexer;
 mod number;
 mod parser;
+#[cfg(feature = "serde")]
+mod serde_impl;
 mod shardmap;
 mod stdlib;
 mod table;
@@ -94,6 +96,8 @@ pub use convert::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Variadic};
 pub use diag::{Diagnostic, Pos, Severity};
 #[doc(hidden)]
 pub use gctrace::{FULL_BEGAN_MARK, FULL_BEGAN_PAUSE, FULL_BEGAN_SWEEP, TraceOp, TraceRecord};
+#[cfg(feature = "serde")]
+pub use serde_impl::MAX_SERDE_DEPTH;
 pub use stdlib::io::{IoError, Stream};
 pub use value::{FuncRef, StrRef, TableRef, ThreadRef, UdRef, Value};
 pub use vm::Lua;

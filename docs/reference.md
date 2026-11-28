@@ -1126,6 +1126,16 @@ at most 64 deep. `from_data_with(&Data, DataLimits)` checks depth (64 at most, w
 limit says), values and string bytes before it makes anything. `Data` is
 `#[non_exhaustive]`: match it with a `_` arm.
 
+With the `serde` feature, `Data` is `Serialize` and `Deserialize`, so a JSON, TOML or
+other payload goes straight in (`lua.from_data(&serde_json::from_str(s)?)`) and a
+script's result straight out. A table whose keys are exactly `1..=n` is a sequence, any
+other table a map in entry order; `nil` is a unit (`null`). Reading, `null` values are
+left out of tables (a Lua table cannot hold `nil`, so `[1, null, 3]` has keys 1 and 3),
+an unsigned integer above `i64::MAX` becomes a float, and nesting deeper than
+`MAX_SERDE_DEPTH` (64, the same as `from_data`) is the format's error, so a hostile
+payload cannot exhaust the host's stack. The format bounds the payload's size; use
+`from_data_with` to bound what goes into the state.
+
 ### Output
 
 `print` and `warn` (with `Libs::PRINT`) write to a buffer that `take_output()` drains, or

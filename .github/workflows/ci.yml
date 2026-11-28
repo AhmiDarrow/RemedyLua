@@ -90,6 +90,11 @@ jobs:
       # style warnings in test code are reported, not fatal, for now.
       - name: cargo clippy (all targets, deny lints)
         run: cargo clippy --workspace --all-targets --locked
+      # Optional features: not in the gate's default build.
+      - name: cargo clippy + test (serde)
+        run: |
+          cargo clippy -p remedy-lua --lib --features serde --locked -- -D warnings
+          cargo test -p remedy-lua --lib --features serde --locked
   docs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -100,4 +105,4 @@ jobs:
       - name: cargo doc
         env:
           RUSTDOCFLAGS: -D warnings
-        run: cargo doc -p remedy-lua --no-deps --locked
+        run: cargo doc -p remedy-lua --no-deps --locked --features serde
