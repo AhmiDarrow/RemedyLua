@@ -1115,6 +1115,20 @@ lua.register_typed("fmt.join", |_, (sep, parts): (String, Variadic<String>)| {
   `take_app_data::<T>()`) keeps the host's own state with the Lua state, one value per
   type, for host functions to reach. Values must be `Send`, because a `Lua` is `Send`.
 
+### Compiled chunks
+
+`compile(source, name)` (and `compile_with` for a dialect) compiles as `load` does and
+gives a `CompiledChunk`: the prototypes with no reference into any state, behind an `Arc`
+(cheap to clone, `Send` and `Sync`). `load_compiled(&chunk)` instantiates it in any state
+without compiling again: the chunk's main function, its environment that state's
+globals, with the same results, fuel, errors and `debug.getinfo` as `load` of the same
+source. Instantiating charges the memory the prototypes and constant strings take
+(`CompiledChunk::instance_bytes`); out of memory it collects once and tries again, as
+`load` does. Inside a call (a host function instantiating a chunk) it also charges the
+fuel of copying those bytes. A chunk only comes from source the host compiled: there is no
+way to make one from bytes, so nothing needs verifying, and `load` still refuses binary
+chunks. The compile itself runs in the state `compile` is called on, under its limits.
+
 ### Data in and out
 
 `to_data(v, DataLimits)` copies a value out as owned `Data`, raw: no metamethod runs, so

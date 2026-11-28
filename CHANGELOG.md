@@ -15,6 +15,12 @@
 - `serde` feature: `Serialize` / `Deserialize` for `Data` (sequences for tables keyed
   `1..=n`, maps otherwise; nesting capped at `MAX_SERDE_DEPTH`, 64). The default build
   still has no dependencies.
+- Host-compiled chunks: `Lua::compile` / `compile_with` give a `CompiledChunk` (`Arc`,
+  `Send + Sync`) that `Lua::load_compiled` instantiates in any state without compiling
+  again: the same results, fuel, errors and debug info as `load` of the source, with
+  its memory charged (and, inside a call, the fuel of copying it). A fresh state with a
+  2,000-line prelude starts ~19x faster (`examples/precompiled.rs`). There is no way to
+  make a chunk from bytes, and `load` still refuses binary chunks.
 
 ## [0.1.2] - 2026-11-25
 
