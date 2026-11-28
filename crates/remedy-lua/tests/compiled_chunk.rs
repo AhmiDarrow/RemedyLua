@@ -68,19 +68,26 @@ fn run(lua: &mut Lua, prelude: Value, budget: u64) -> (String, [u64; 2]) {
 
 #[test]
 fn same_results_and_fuel_as_load() {
+    // A fixed hash seed (the default is random per state, and `pairs` order and probe
+    // counts follow it), and a full collection first in both, so the compile's garbage in
+    // the loading state does not shift the collector's pacing: then every unit is equal.
     let budget = 10_000_000;
-    let limits = with(|l| l.fuel = budget);
-    let mut a = new(limits);
-    let f = a.load(prelude(), "=prelude").unwrap();
-    let (want, want_fuel) = run(&mut a, f.value(), budget);
+    let chunk = new(Limits::default()).compile(prelude(), "=prelude").unwrap();
+    for seed in 0..64 {
+        let limits = with(|l| l.fuel = budget).hash_seed(seed);
+        let mut a = new(limits);
+        let f = a.load(prelude(), "=prelude").unwrap();
+        a.collect_garbage().unwrap();
+        let (want, want_fuel) = run(&mut a, f.value(), budget);
 
-    let chunk = new(limits).compile(prelude(), "=prelude").unwrap();
-    let mut b = new(limits);
-    let f = b.load_compiled(&chunk).unwrap();
-    let (got, got_fuel) = run(&mut b, f.value(), budget);
-    assert_eq!(got, want);
-    assert_eq!(got_fuel, want_fuel, "running a compiled chunk costs what running the loaded one does");
-    assert!(got.contains("dyn:hello") && got.contains("3628800") && got.contains("9000!"), "{got}");
+        let mut b = new(limits);
+        let f = b.load_compiled(&chunk).unwrap();
+        b.collect_garbage().unwrap();
+        let (got, got_fuel) = run(&mut b, f.value(), budget);
+        assert_eq!(got, want, "seed {seed}");
+        assert_eq!(got_fuel, want_fuel, "seed {seed}: a compiled chunk runs on the fuel the loaded one does");
+        assert!(got.contains("dyn:hello") && got.contains("3628800") && got.contains("9000!"), "{got}");
+    }
 }
 
 #[test]
