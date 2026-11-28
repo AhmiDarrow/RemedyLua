@@ -1,5 +1,18 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- Typed host functions: `Lua::create_typed`, `create_typed_mut`, `register_typed` and
+  `register_typed_mut` take `Fn(&mut Lua, A) -> Result<R, Error>`, with arguments read
+  through the new `FromLua` / `FromLuaMulti` traits (tuples up to twelve, `Variadic<T>`
+  for the rest) and results made through `IntoLua` / `IntoLuaMulti`. Mismatches give C
+  Lua's `bad argument #n to 'f' (...)` messages. Copying strings and `Data` out of the
+  script is charged fuel. See "Typed host functions" in `docs/reference.md`.
+- `Error::BadArgument { position, message }`, which any host function can return to raise
+  a named argument error.
+
 ## [0.1.2] - 2026-11-25
 
 ### Fixed

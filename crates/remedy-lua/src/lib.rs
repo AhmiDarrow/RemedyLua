@@ -68,6 +68,7 @@ mod ast;
 mod bytecode;
 mod check;
 mod compiler;
+mod convert;
 mod debug;
 mod diag;
 mod fast;
@@ -89,6 +90,7 @@ use std::any::Any;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+pub use convert::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Variadic};
 pub use diag::{Diagnostic, Pos, Severity};
 #[doc(hidden)]
 pub use gctrace::{FULL_BEGAN_MARK, FULL_BEGAN_PAUSE, FULL_BEGAN_SWEEP, TraceOp, TraceRecord};
@@ -428,6 +430,15 @@ pub enum Error {
     /// The host used the API wrongly (a value whose object was collected, a value that
     /// cannot become data).
     Host(String),
+    /// A host function was passed a bad argument: returned from a host function, the
+    /// script sees C Lua's `bad argument #position to 'name' (message)`, the function
+    /// named as its call site names it. [`FromLua`] conversions give it.
+    BadArgument {
+        /// Which argument, from 1.
+        position: usize,
+        /// What is wrong with it (`number expected, got nil`).
+        message: String,
+    },
 }
 
 impl Error {
@@ -446,6 +457,7 @@ impl Error {
             Error::Limit(LimitKind::Interrupted) => "the script was interrupted by the host".into(),
             Error::Limit(LimitKind::Time) => "the script ran past its time limit and was stopped".into(),
             Error::Host(m) => m.clone(),
+            Error::BadArgument { position, message } => format!("bad argument #{position} ({message})"),
         }
     }
 }
@@ -588,6 +600,7 @@ impl Lua {
     fn from_host_error(&mut self, e: Error) -> LuaError {
         match e {
             Error::Limit(k) => LuaError::Limit(k),
+            Error::BadArgument { position, message } => LuaError::Arg(position, message),
             Error::Runtime { message, .. } => {
                 if let Some((text, v)) = self.last_error.take()
                     && text == message
@@ -1580,6 +1593,92 @@ impl Lua {
         let short = name.rsplit('.').next().unwrap_or(name).to_owned();
         let func = self.create_function(&short, f)?;
         self.register_value(name, func)
+    }
+
+    /// A Rust function scripts can call, with typed arguments and results: `A` is read
+    /// from the arguments with [`FromLuaMulti`] (a tuple, one type, `()`, or a tuple ending
+    /// in [`Variadic`]), and `R` becomes the results with [`IntoLuaMulti`]. An argument
+    /// that does not convert is the script's `bad argument #n to 'name' (...)` error, as a
+    /// C library function's would be. Otherwise as [`Lua::create_function`].
+    ///
+    /// ```
+    /// # use remedy_lua::{Lua, Limits, Libs, Value};
+    /// let mut lua = Lua::new(Limits::default(), Libs::SAFE);
+    /// let f = lua.create_typed("add", |_, (a, b): (i64, Option<i64>)| Ok(a + b.unwrap_or(1)))?;
+    /// lua.set_global("add", f)?;
+    /// let r = lua.exec("return add(2, 3), add(2)", "=t")?;
+    /// assert!(matches!(r.as_slice(), [Value::Int(5), Value::Int(3)]));
+    /// # Ok::<(), remedy_lua::Error>(())
+    /// ```
+    pub fn create_typed<A, R>(
+        &mut self,
+        name: &str,
+        f: impl Fn(&mut Lua, A) -> Result<R, Error> + Send + Sync + 'static,
+    ) -> Result<Value, Error>
+    where
+        A: FromLuaMulti + 'static,
+        R: IntoLuaMulti + 'static,
+    {
+        self.create_function(name, move |lua, args| {
+            let a = A::from_lua_multi(args, lua)?;
+            f(lua, a)?.into_lua_multi(lua)
+        })
+    }
+
+    /// [`Lua::create_typed`] for an `FnMut`, as [`Lua::create_function_mut`] is for
+    /// [`Lua::create_function`].
+    pub fn create_typed_mut<A, R>(
+        &mut self,
+        name: &str,
+        mut f: impl FnMut(&mut Lua, A) -> Result<R, Error> + Send + 'static,
+    ) -> Result<Value, Error>
+    where
+        A: FromLuaMulti + 'static,
+        R: IntoLuaMulti + 'static,
+    {
+        self.create_function_mut(name, move |lua, args| {
+            let a = A::from_lua_multi(args, lua)?;
+            f(lua, a)?.into_lua_multi(lua)
+        })
+    }
+
+    /// [`Lua::register`] for a [`Lua::create_typed`] function.
+    pub fn register_typed<A, R>(
+        &mut self,
+        name: &str,
+        f: impl Fn(&mut Lua, A) -> Result<R, Error> + Send + Sync + 'static,
+    ) -> Result<(), Error>
+    where
+        A: FromLuaMulti + 'static,
+        R: IntoLuaMulti + 'static,
+    {
+        let short = name.rsplit('.').next().unwrap_or(name).to_owned();
+        let func = self.create_typed(&short, f)?;
+        self.register_value(name, func)
+    }
+
+    /// [`Lua::register`] for a [`Lua::create_typed_mut`] function.
+    pub fn register_typed_mut<A, R>(
+        &mut self,
+        name: &str,
+        f: impl FnMut(&mut Lua, A) -> Result<R, Error> + Send + 'static,
+    ) -> Result<(), Error>
+    where
+        A: FromLuaMulti + 'static,
+        R: IntoLuaMulti + 'static,
+    {
+        let short = name.rsplit('.').next().unwrap_or(name).to_owned();
+        let func = self.create_typed_mut(&short, f)?;
+        self.register_value(name, func)
+    }
+
+    /// Charges the fuel of copying `n` bytes out of the script, inside a call (a host
+    /// function converting its arguments); outside one there is no call to bill.
+    pub(crate) fn charge_copy(&mut self, n: usize) -> Result<(), Error> {
+        if self.entry == 0 {
+            return Ok(());
+        }
+        self.charge_bytes(n).map_err(|e| to_error(self, e))
     }
 
     /// [`Lua::register`] for a [`Lua::create_function_mut`] function.

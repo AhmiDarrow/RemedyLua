@@ -115,3 +115,5 @@ mod sweep6_tables;
 mod tables;
 #[path = "../test_lists.rs"]
 mod test_lists;
+#[path = "../typed.rs"]
+mod typed;

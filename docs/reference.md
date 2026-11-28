@@ -1044,6 +1044,53 @@ interned, long ones are not. Compare script values with `Lua::raw_equal`, which 
 - `register("a.b", f)` makes the table `a` when the global `a` is missing or not a table
   (replacing it). Both steps are raw, so a script's metatable on `_G` does not run.
 
+### Typed host functions
+
+`create_typed(name, f)` and `register_typed("lib.name", f)` (and `create_typed_mut`,
+`register_typed_mut`) take an `Fn(&mut Lua, A) -> Result<R, Error>`: the arguments are read
+into `A` and the results made from `R`, so the function does not unpack a `&[Value]` by
+hand.
+
+```rust
+lua.register_typed("geo.dist", |_, (x, y, scale): (f64, f64, Option<f64>)| {
+    Ok((x * x + y * y).sqrt() * scale.unwrap_or(1.0))
+})?;
+lua.register_typed("fmt.join", |_, (sep, parts): (String, Variadic<String>)| {
+    Ok(parts.join(&sep))
+})?;
+```
+
+- **Arguments** (`FromLuaMulti`): one `FromLua` type, `()`, a tuple of up to twelve, or a
+  `Variadic<T>` for all the rest (it may end a tuple). Extra arguments are ignored, as a C
+  function ignores them.
+- **Results** (`IntoLuaMulti`): one `IntoLua` value, `()` for none, a tuple of up to
+  twelve, a `Variadic<T>`, or a `Vec<Value>`.
+- **Conversions** (`FromLua` / `IntoLua`), as C Lua's `luaL_check*` do them:
+  - Integers (`i8` to `i64`, `u8` to `u64`, `isize`, `usize`): an integer, a float with an
+    exact integer value, or a string that converts to one. A non-integral number is
+    `number has no integer representation`; one outside the Rust type's range is
+    `value out of range for u8`. As results, a `u64`, `usize` or `isize` past `i64`'s range
+    is an error, not a wrapped value.
+  - `f64`, `f32`: a number or a numeric string.
+  - `String`: a string, which must be UTF-8, or a number as `tostring` writes it. (Bytes
+    that are not UTF-8: take a `Value` and read it with `str_bytes`.) As results, `&str`,
+    `String` and `&[u8]` make strings.
+  - `bool`: Lua's truth (everything but `nil` and `false`).
+  - `Option<T>`: `nil` or a missing argument is `None`.
+  - `Value`, `TableRef`, `FuncRef`, `Root` (results only), and `Data` (through `to_data`
+    under the default `DataLimits`, and `from_data`).
+- **Errors.** A mismatch is `Error::BadArgument { position, message }`, which the script
+  sees as `bad argument #2 to 'dist' (number expected, got no value)`, the function named
+  as its call site names it (`calling 'm' on bad self` for a method's `self`). `pcall`
+  catches it. Untyped host functions may return `Error::BadArgument` too.
+- **Copying out is charged.** Reading a string into a `String`, or a value into `Data`,
+  costs the fuel of the bytes copied, so a script that passes one big string a thousand
+  times to a `Variadic<String>` runs out of fuel instead of making the host copy
+  gigabytes. Outside a call (a host converting values itself) nothing is charged. For the
+  same reason there is no `FromLua` for `Vec<T>` or maps: take a table as a `TableRef`, or
+  as `Data`.
+- Implement `FromLua` / `IntoLua` for your own types to take or return them directly.
+
 ### Userdata, tracked userdata and app data
 
 - `create_userdata(data, meta)` makes a full userdata holding any `T: Any + Send`. Methods
@@ -1160,7 +1207,9 @@ Everything public in `remedy_lua`. The rustdoc has each item's details.
   `create_table`, `create_string`, `str_bytes`, `to_string_lossy`, `raw_equal`,
   `set_metatable`, `root`.
 - **Host functions**: `create_function`, `create_function_mut`, `register`,
-  `register_mut`.
+  `register_mut`; typed: `create_typed`, `create_typed_mut`, `register_typed`,
+  `register_typed_mut`, with `FromLua`, `IntoLua`, `FromLuaMulti`, `IntoLuaMulti`,
+  `Variadic` and `Error::BadArgument`.
 - **Modules** (for `require`, with `Libs::REQUIRE`): `add_module`, `add_module_source`,
   `set_module_loader`.
 - **Userdata**: `create_userdata`, `create_userdata_tracked`, `set_userdata_size`,
