@@ -5,6 +5,8 @@
 #[path = "../common/mod.rs"]
 mod common;
 
+#[path = "../compiled_chunk.rs"]
+mod compiled_chunk;
 #[path = "../conformance.rs"]
 mod conformance;
 #[path = "../differential.rs"]

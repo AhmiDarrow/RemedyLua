@@ -67,6 +67,7 @@ pub mod __front;
 mod ast;
 mod bytecode;
 mod check;
+mod chunk;
 mod compiler;
 mod convert;
 mod debug;
@@ -92,6 +93,7 @@ use std::any::Any;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+pub use chunk::CompiledChunk;
 pub use convert::{FromLua, FromLuaMulti, IntoLua, IntoLuaMulti, Variadic};
 pub use diag::{Diagnostic, Pos, Severity};
 #[doc(hidden)]
