@@ -517,11 +517,15 @@ fn fx2_8_gsub_past_the_string_limit_stops() {
 /// bytes, and each call site's took a stack slot of its own. The default 512 KiB
 /// `stack_bytes` held 59 levels, so any growth of the frame stopped the 60 that
 /// `sweep6_heap::s6_4` nests ("C stack overflow"). The error is one boxed word now: 5 KB a
-/// level, and 90 levels fit (1.5x that), with the same fuel fast and full. (An unoptimized
-/// Windows build's frames are larger, 6.1 KB a level: 86 fit there, 92 optimized.)
+/// level, and 90 levels fit (1.5x that), with the same fuel fast and full.
+///
+/// On Windows that margin was gone (79 levels in a debug build, 89 optimized): Win64 passes
+/// and returns 16-byte values through memory, and each of `run`'s ~40 slow calls (`arith`,
+/// `index` …) kept slots of its own, 1.7 KB of its 3.2 KB frame. They share one set now
+/// (`arith_into` …): 104 levels debug, 126 optimized, so 90 everywhere.
 #[test]
 fn s6_stk_1_ninety_nested_host_levels_fit_the_default_stack() {
-    let levels = if cfg!(all(windows, debug_assertions)) { 85 } else { 90 };
+    let levels = 90;
     let mut fuel = Vec::new();
     for fast in [true, false] {
         let mut lua = state(Limits::default(), fast);
@@ -2114,5 +2118,39 @@ fn sec8_o5_the_collector_status_tells_owed_from_to_come() {
         }
         assert!(floors > 0, "fast {fast}: no floor checked");
         assert!(owed_calls > 0, "fast {fast}: nothing ever owed between calls");
+    }
+}
+
+/// Release review: `io.open` made its file with `alloc_ud`, which never collects. At the
+/// memory cap with garbage that a collection would free, it failed with "not enough
+/// memory" where every other allocation collects and tries again. Charged first now, the
+/// way the rest are.
+#[test]
+fn s6_rel_io_open_collects_at_the_memory_cap() {
+    struct Empty;
+    impl remedy_lua::Stream for Empty {
+        fn read(&mut self, _buf: &mut [u8]) -> Result<usize, remedy_lua::IoError> {
+            Ok(0)
+        }
+    }
+    for fast in [true, false] {
+        let mut lua = Lua::new(Limits::default(), Libs::ALL | Libs::IO);
+        lua.set_fast_loop(fast);
+        lua.set_file_opener(Some(|_: &str, _: &str| Ok(Box::new(Empty) as Box<dyn remedy_lua::Stream>)));
+        lua.exec(
+            "function OPEN() local f, e = io.open('a', 'r') return io.type(f) or e end \
+             collectgarbage() collectgarbage('stop') \
+             local g = {} for i = 1, 200 do g[i] = string.rep('x', 1000) .. i end g = nil",
+            "=setup",
+        )
+        .unwrap();
+        // About 200 KB of garbage, and room for less than the file (4 KB of buffer).
+        let used = lua.memory_used();
+        let full = lua.limits();
+        lua.set_limits(full.memory(used + 1024));
+        let r = lua.call_global("OPEN", &[]);
+        lua.set_limits(full);
+        let r = r.unwrap().unwrap();
+        assert_eq!(lua.to_string_lossy(r[0]).as_deref(), Some("file"), "fast {fast}");
     }
 }

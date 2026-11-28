@@ -358,7 +358,7 @@ impl Mem {
     pub(crate) fn pool_arr(&mut self, cap: usize) -> Vec<Value> {
         let held = self.pool.bytes;
         let v = self.pool.arr(cap);
-        self.slack_out(held - self.pool.bytes);
+        self.slack_out(held.saturating_sub(self.pool.bytes));
         v
     }
 
@@ -367,7 +367,7 @@ impl Mem {
     pub(crate) fn pool_nodes(&mut self, slots: usize) -> Vec<crate::table::Node> {
         let held = self.pool.bytes;
         let v = self.pool.nodes(slots);
-        self.slack_out(held - self.pool.bytes);
+        self.slack_out(held.saturating_sub(self.pool.bytes));
         v
     }
 
@@ -375,7 +375,7 @@ impl Mem {
     pub(crate) fn pool_give(&mut self, t: &mut Table) {
         let held = self.pool.bytes;
         self.pool.give(t, self.cap / 16);
-        self.slack_in(self.pool.bytes - held);
+        self.slack_in(self.pool.bytes.saturating_sub(held));
     }
 
     /// A slot of `n` bytes freed (into the slack) or reused or cut (out of it).
@@ -388,7 +388,10 @@ impl Mem {
 
     #[inline]
     pub(crate) fn slack_out(&mut self, n: usize) {
-        self.slack -= n;
+        // (Saturating like `used`: release builds have no overflow checks, and an account
+        // out of step must not wrap to a near-`usize::MAX` count.)
+        debug_assert!(n <= self.slack, "slack {} < {n}", self.slack);
+        self.slack = self.slack.saturating_sub(n);
         self.used = self.used.saturating_sub(n);
     }
 

@@ -4674,6 +4674,14 @@ impl Lua {
         // instruction it cannot run, so that one runs in full without entering it again
         // for nothing (natives right after a call or return paid two entries).
         let mut fast_tried: Option<bool> = None;
+        // The operands and result of every slow call of an instruction (`arith_into`,
+        // `index_into`, ...): one set of slots for all of them. Passed by value, each of the ~26 call sites kept slots of
+        // its own (Win64 passes and returns 16-byte values through memory, and slots in a
+        // function this size are not shared), 830 bytes of the frame each nested host level
+        // pays (S6-STK-1).
+        let mut slow_xy: [Value; 3];
+        let mut slow_out: Option<Value> = None;
+        let mut slow_cmp: Option<bool> = None;
         'reload: loop {
             if self.cur_ref == bthread && self.cur.frames.len() <= bdepth {
                 return Ok(());
@@ -4819,10 +4827,14 @@ impl Lua {
                     };
                     match fast {
                         Some(v) => setr!($a, v),
-                        None => match ta!(call!(self.arith($op, x, y, Cont::Store(base + usize::from($a)))), $ops) {
-                            Some(v) => setr!($a, v),
-                            None => reload!(),
-                        },
+                        None => {
+                            slow_xy = [x, y, Value::Nil];
+                            ta!(call!(self.arith_into($op, &slow_xy, base + usize::from($a), &mut slow_out)), $ops);
+                            match slow_out.take() {
+                                Some(v) => setr!($a, v),
+                                None => reload!(),
+                            }
+                        }
                     }
                 }};
             }
@@ -4997,12 +5009,16 @@ impl Lua {
                             setr!(a, v);
                             continue;
                         }
-                        match ta!(
-                            call!(self.index(t, key, Cont::Store(base + usize::from(a)))),
-                            [O::Upval(u)]
-                        ) {
-                            Some(v) => setr!(a, v),
-                            None => reload!(),
+                        {
+                            slow_xy = [t, key, Value::Nil];
+                            ta!(
+                                call!(self.index_into(&slow_xy, base + usize::from(a), &mut slow_out)),
+                                [O::Upval(u)]
+                            );
+                            match slow_out.take() {
+                                Some(v) => setr!(a, v),
+                                None => reload!(),
+                            }
                         }
                     }
                     Instr::SetTabUp { u, k, v } => {
@@ -5016,7 +5032,9 @@ impl Lua {
                         {
                             continue;
                         }
-                        if !ta!(call!(self.set_index(t, key, val)), [O::Upval(u)]) {
+                        slow_xy = [t, key, val];
+                        ta!(call!(self.set_index_into(&slow_xy, &mut slow_cmp)), [O::Upval(u)]);
+                        if slow_cmp != Some(true) {
                             reload!();
                         }
                     }
@@ -5033,10 +5051,16 @@ impl Lua {
                                 continue;
                             }
                         }
-                        match ta!(call!(self.index(t, key, Cont::Store(base + usize::from(a)))), [O::Reg(b)])
                         {
-                            Some(v) => setr!(a, v),
-                            None => reload!(),
+                            slow_xy = [t, key, Value::Nil];
+                            ta!(
+                                call!(self.index_into(&slow_xy, base + usize::from(a), &mut slow_out)),
+                                [O::Reg(b)]
+                            );
+                            match slow_out.take() {
+                                Some(v) => setr!(a, v),
+                                None => reload!(),
+                            }
                         }
                     }
                     Instr::GetTableK { a, b, k } => {
@@ -5048,10 +5072,16 @@ impl Lua {
                             setr!(a, v);
                             continue;
                         }
-                        match ta!(call!(self.index(t, key, Cont::Store(base + usize::from(a)))), [O::Reg(b)])
                         {
-                            Some(v) => setr!(a, v),
-                            None => reload!(),
+                            slow_xy = [t, key, Value::Nil];
+                            ta!(
+                                call!(self.index_into(&slow_xy, base + usize::from(a), &mut slow_out)),
+                                [O::Reg(b)]
+                            );
+                            match slow_out.take() {
+                                Some(v) => setr!(a, v),
+                                None => reload!(),
+                            }
                         }
                     }
                     Instr::SelfK { a, b, k } => {
@@ -5060,10 +5090,16 @@ impl Lua {
                         let key = kv!(k);
                         // (The fast loop finds methods; here, the general lookup, which
                         // charges each `__index` link as the fast loop does.)
-                        match ta!(call!(self.index(t, key, Cont::Store(base + usize::from(a)))), [O::Reg(b)])
                         {
-                            Some(v) => setr!(a, v),
-                            None => reload!(),
+                            slow_xy = [t, key, Value::Nil];
+                            ta!(
+                                call!(self.index_into(&slow_xy, base + usize::from(a), &mut slow_out)),
+                                [O::Reg(b)]
+                            );
+                            match slow_out.take() {
+                                Some(v) => setr!(a, v),
+                                None => reload!(),
+                            }
                         }
                     }
                     Instr::SetTable { a, b, c } => {
@@ -5076,7 +5112,9 @@ impl Lua {
                             t!(call!(self.raw_set(tr, key, val)));
                             continue;
                         }
-                        if !ta!(call!(self.set_index(t, key, val)), [O::Reg(a)]) {
+                        slow_xy = [t, key, val];
+                        ta!(call!(self.set_index_into(&slow_xy, &mut slow_cmp)), [O::Reg(a)]);
+                        if slow_cmp != Some(true) {
                             reload!();
                         }
                     }
@@ -5089,7 +5127,9 @@ impl Lua {
                         {
                             continue;
                         }
-                        if !ta!(call!(self.set_index(t, key, val)), [O::Reg(a)]) {
+                        slow_xy = [t, key, val];
+                        ta!(call!(self.set_index_into(&slow_xy, &mut slow_cmp)), [O::Reg(a)]);
+                        if slow_cmp != Some(true) {
                             reload!();
                         }
                     }
@@ -5124,10 +5164,17 @@ impl Lua {
                         match fast {
                             Some(v) => setr!(a, v),
                             None => {
-                                match ta!(
-                                    call!(self.arith(op, x, y, Cont::Store(base + usize::from(a)))),
+                                slow_xy = [x, y, Value::Nil];
+                                ta!(
+                                    call!(self.arith_into(
+                                        op,
+                                        &slow_xy,
+                                        base + usize::from(a),
+                                        &mut slow_out
+                                    )),
                                     [O::Rk(b), O::Rk(c)]
-                                ) {
+                                );
+                                match slow_out.take() {
                                     Some(v) => setr!(a, v),
                                     None => reload!(),
                                 }
@@ -5139,26 +5186,44 @@ impl Lua {
                         match x {
                             Value::Int(i) => setr!(usize::from(a), Value::Int(i.wrapping_neg())),
                             Value::Num(f) => setr!(usize::from(a), Value::Num(-f)),
-                            _ => match ta!(
-                                call!(self.unary(Tm::Unm, x, Cont::Store(base + usize::from(a)))),
-                                [O::Reg(b)]
-                            ) {
-                                Some(v) => setr!(a, v),
-                                None => reload!(),
-                            },
+                            _ => {
+                                slow_xy = [x, Value::Nil, Value::Nil];
+                                ta!(
+                                    call!(self.unary_into(
+                                        Tm::Unm,
+                                        &slow_xy,
+                                        base + usize::from(a),
+                                        &mut slow_out
+                                    )),
+                                    [O::Reg(b)]
+                                );
+                                match slow_out.take() {
+                                    Some(v) => setr!(a, v),
+                                    None => reload!(),
+                                }
+                            }
                         }
                     }
                     Instr::BNot { a, b } => {
                         let x = reg!(usize::from(b));
                         match x {
                             Value::Int(i) => setr!(usize::from(a), Value::Int(!i)),
-                            _ => match ta!(
-                                call!(self.unary(Tm::BNot, x, Cont::Store(base + usize::from(a)))),
-                                [O::Reg(b)]
-                            ) {
-                                Some(v) => setr!(a, v),
-                                None => reload!(),
-                            },
+                            _ => {
+                                slow_xy = [x, Value::Nil, Value::Nil];
+                                ta!(
+                                    call!(self.unary_into(
+                                        Tm::BNot,
+                                        &slow_xy,
+                                        base + usize::from(a),
+                                        &mut slow_out
+                                    )),
+                                    [O::Reg(b)]
+                                );
+                                match slow_out.take() {
+                                    Some(v) => setr!(a, v),
+                                    None => reload!(),
+                                }
+                            }
                         }
                     }
                     Instr::Not { a, b } => setr!(usize::from(a), Value::Bool(!reg!(usize::from(b)).truthy())),
@@ -5245,15 +5310,17 @@ impl Lua {
                                 } else {
                                     (ArithOp::Add, i64::from(i))
                                 };
-                                match ta!(
-                                    call!(self.arith(
+                                slow_xy = [x, Value::Int(y), Value::Nil];
+                                ta!(
+                                    call!(self.arith_into(
                                         op,
-                                        x,
-                                        Value::Int(y),
-                                        Cont::Store(base + usize::from(a))
+                                        &slow_xy,
+                                        base + usize::from(a),
+                                        &mut slow_out
                                     )),
                                     [O::Reg(b)]
-                                ) {
+                                );
+                                match slow_out.take() {
                                     Some(v) => setr!(a, v),
                                     None => reload!(),
                                 }
@@ -5302,10 +5369,14 @@ impl Lua {
                         };
                         let res = match crate::fast::less(x, y, le) {
                             Some(r) => r,
-                            None => match t!(call!(self.order_slow(tm, x, y, Cont::Cond { k }))) {
-                                Some(r) => r,
-                                None => reload!(),
-                            },
+                            None => {
+                                slow_xy = [x, y, Value::Nil];
+                                t!(call!(self.order_into(tm, &slow_xy, k, &mut slow_cmp)));
+                                match slow_cmp.take() {
+                                    Some(r) => r,
+                                    None => reload!(),
+                                }
+                            }
                         };
                         if res != k {
                             pc += 1;
@@ -5321,7 +5392,9 @@ impl Lua {
                                 (Value::Str(sa), Value::Str(sb)) => t!(call!(self.str_eq(sa, sb))),
                                 (Value::Table(_), Value::Table(_))
                                 | (Value::UserData(_), Value::UserData(_)) => {
-                                    match t!(call!(self.eq_slow(x, y, Cont::Cond { k }))) {
+                                    slow_xy = [x, y, Value::Nil];
+                                    t!(call!(self.eq_into(&slow_xy, k, &mut slow_cmp)));
+                                    match slow_cmp.take() {
                                         Some(r) => r,
                                         None => reload!(),
                                     }
@@ -5343,10 +5416,14 @@ impl Lua {
                                 t!(call!(self.charge_bytes(n)));
                                 self.heap.str_bytes(s1) < self.heap.str_bytes(s2)
                             }
-                            _ => match t!(call!(self.order_slow(Tm::Lt, x, y, Cont::Cond { k }))) {
-                                Some(r) => r,
-                                None => reload!(),
-                            },
+                            _ => {
+                                slow_xy = [x, y, Value::Nil];
+                                t!(call!(self.order_into(Tm::Lt, &slow_xy, k, &mut slow_cmp)));
+                                match slow_cmp.take() {
+                                    Some(r) => r,
+                                    None => reload!(),
+                                }
+                            }
                         };
                         if res != k {
                             pc += 1;
@@ -5362,10 +5439,14 @@ impl Lua {
                                 t!(call!(self.charge_bytes(n)));
                                 self.heap.str_bytes(s1) <= self.heap.str_bytes(s2)
                             }
-                            _ => match t!(call!(self.order_slow(Tm::Le, x, y, Cont::Cond { k }))) {
-                                Some(r) => r,
-                                None => reload!(),
-                            },
+                            _ => {
+                                slow_xy = [x, y, Value::Nil];
+                                t!(call!(self.order_into(Tm::Le, &slow_xy, k, &mut slow_cmp)));
+                                match slow_cmp.take() {
+                                    Some(r) => r,
+                                    None => reload!(),
+                                }
+                            }
                         };
                         if res != k {
                             pc += 1;
@@ -6191,6 +6272,74 @@ impl Lua {
     }
 
     /// Arithmetic with coercion and metamethods.
+    /// `arith` for `run`, storing to `dest` on a metamethod's return: its operands and
+    /// result through `run`'s shared slots, and a one-word result (see `slow_xy`).
+    #[inline(never)]
+    fn arith_into(
+        &mut self,
+        op: ArithOp,
+        xy: &[Value; 3],
+        dest: usize,
+        out: &mut Option<Value>,
+    ) -> Result<(), LuaError> {
+        let [x, y, _] = *xy;
+        *out = self.arith(op, x, y, Cont::Store(dest))?;
+        Ok(())
+    }
+
+    /// `index` for `run` (see `arith_into`).
+    #[inline(never)]
+    fn index_into(&mut self, xy: &[Value; 3], dest: usize, out: &mut Option<Value>) -> Result<(), LuaError> {
+        let [t, key, _] = *xy;
+        *out = self.index(t, key, Cont::Store(dest))?;
+        Ok(())
+    }
+
+    /// `set_index` for `run` (see `arith_into`): `Some(true)` when done, else a metamethod
+    /// was called.
+    #[inline(never)]
+    fn set_index_into(&mut self, xy: &[Value; 3], out: &mut Option<bool>) -> Result<(), LuaError> {
+        let [t, key, val] = *xy;
+        *out = Some(self.set_index(t, key, val)?);
+        Ok(())
+    }
+
+    /// `unary` for `run` (see `arith_into`).
+    #[inline(never)]
+    fn unary_into(
+        &mut self,
+        e: Tm,
+        xy: &[Value; 3],
+        dest: usize,
+        out: &mut Option<Value>,
+    ) -> Result<(), LuaError> {
+        let [x, _, _] = *xy;
+        *out = self.unary(e, x, Cont::Store(dest))?;
+        Ok(())
+    }
+
+    /// `order_slow` for `run` (see `arith_into`).
+    #[inline(never)]
+    fn order_into(
+        &mut self,
+        e: Tm,
+        xy: &[Value; 3],
+        k: bool,
+        out: &mut Option<bool>,
+    ) -> Result<(), LuaError> {
+        let [x, y, _] = *xy;
+        *out = self.order_slow(e, x, y, Cont::Cond { k })?;
+        Ok(())
+    }
+
+    /// `eq_slow` for `run` (see `arith_into`).
+    #[inline(never)]
+    fn eq_into(&mut self, xy: &[Value; 3], k: bool, out: &mut Option<bool>) -> Result<(), LuaError> {
+        let [x, y, _] = *xy;
+        *out = self.eq_slow(x, y, Cont::Cond { k })?;
+        Ok(())
+    }
+
     pub(crate) fn arith(
         &mut self,
         op: ArithOp,
