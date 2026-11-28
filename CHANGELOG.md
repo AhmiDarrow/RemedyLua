@@ -12,6 +12,9 @@
   script is charged fuel. See "Typed host functions" in `docs/reference.md`.
 - `Error::BadArgument { position, message }`, which any host function can return to raise
   a named argument error.
+- `serde` feature: `Serialize` / `Deserialize` for `Data` (sequences for tables keyed
+  `1..=n`, maps otherwise; nesting capped at `MAX_SERDE_DEPTH`, 64). The default build
+  still has no dependencies.
 
 ## [0.1.2] - 2026-11-25
 

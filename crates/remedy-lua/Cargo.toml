@@ -21,11 +21,18 @@ segmented-arrays = []
 # A call from the host that pauses at the end of a poll and resumes (`Lua::start_call`):
 # its signature is not settled yet (SEC7-G1).
 unstable-resumable = []
+# `Serialize` / `Deserialize` for `Data`.
+serde = ["dep:serde"]
+
+[package.metadata.docs.rs]
+features = ["serde"]
 
 [dependencies]
+serde = { version = "1", optional = true }
 
 [dev-dependencies]
 remedy-lua-oracle = { path = "../remedy-lua-oracle" }
+serde_json = "1"
 
 
 [lints]
